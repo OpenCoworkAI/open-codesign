@@ -1097,6 +1097,21 @@ describe('registerOnboardingIpc — validate-key passes baseUrl to pingProvider'
     );
   });
 
+  it('forwards LLMTR validation to the provider validator', async () => {
+    const { pingProvider } = await import('@open-codesign/providers');
+    vi.mocked(pingProvider).mockClear();
+    const handler = handlers.get('onboarding:validate-key');
+    expect(handler).toBeDefined();
+
+    await handler?.({} as unknown, {
+      provider: 'llmtr',
+      apiKey: 'llmtr-test',
+      baseUrl: 'https://llmtr.com/v1',
+    });
+
+    expect(pingProvider).toHaveBeenCalledWith('llmtr', 'llmtr-test', 'https://llmtr.com/v1');
+  });
+
   it('allows explicitly keyless Ollama validation with an empty apiKey', async () => {
     const { pingProvider } = await import('@open-codesign/providers');
     vi.mocked(pingProvider).mockClear();

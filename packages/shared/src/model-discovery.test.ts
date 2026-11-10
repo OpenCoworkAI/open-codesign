@@ -171,6 +171,7 @@ describe('import and custom defaults', () => {
     expect(discoveryModeForImport('codex', { baseUrl: 'https://openrouter.ai/api/v1' })).toBe(
       'models',
     );
+    expect(discoveryModeForImport('codex', { baseUrl: 'https://llmtr.com/v1' })).toBe('models');
     expect(discoveryModeForImport('codex', { baseUrl: 'https://api.duckcoding.ai/v1' })).toBe(
       'infer-only',
     );
