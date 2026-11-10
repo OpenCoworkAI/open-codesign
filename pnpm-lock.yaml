@@ -10,6 +10,7 @@ overrides:
   fast-xml-parser@<5.7.0: '>=5.7.0'
   vitepress>vite: 6.4.2
   esbuild@<0.25.0: '>=0.25.0'
+  tar@<7.5.22: 7.5.22
 
 patchedDependencies:
   '@mariozechner/pi-ai@0.72.1':
@@ -100,18 +101,18 @@ importers:
         specifier: ^24.42.0
         version: 24.42.0
       undici:
-        specifier: ^7.29.1
-        version: 7.29.1
+        specifier: ^7.30.1
+        version: 7.30.1
     devDependencies:
       '@mariozechner/pi-agent-core':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(ws@8.22.2)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(ws@8.22.2)(zod@4.4.2)
       '@open-codesign/artifacts':
         specifier: workspace:*
         version: link:../../packages/artifacts
@@ -229,19 +230,19 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/core:
     dependencies:
       '@mariozechner/pi-agent-core':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(ws@8.22.2)(zod@4.4.2)
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.72.1
-        version: 0.72.1(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(ws@8.22.2)(zod@4.4.2)
       '@open-codesign/providers':
         specifier: workspace:*
         version: link:../providers
@@ -257,7 +258,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/exporters:
     dependencies:
@@ -313,13 +314,13 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/providers:
     dependencies:
       '@mariozechner/pi-ai':
         specifier: ^0.72.1
-        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)
+        version: 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)
       '@open-codesign/shared':
         specifier: workspace:*
         version: link:../shared
@@ -329,7 +330,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/runtime:
     dependencies:
@@ -342,7 +343,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/shared:
     dependencies:
@@ -358,7 +359,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/templates:
     dependencies:
@@ -374,7 +375,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/ui:
     dependencies:
@@ -417,19 +418,19 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   website:
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.3
-        version: 4.3.3(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.3.3(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
       vitepress:
         specifier: ^1.6.4
-        version: 1.6.4(@algolia/client-search@5.50.2)(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.32)(search-insights@2.17.3)(tsx@4.22.3)(typescript@6.0.3)(yaml@2.9.0)
+        version: 1.6.4(@algolia/client-search@5.50.2)(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.32)(search-insights@2.17.3)(tsx@4.22.3)(typescript@6.0.3)(yaml@2.9.0)
 
 packages:
 
@@ -2424,8 +2425,8 @@ packages:
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
 
-  '@types/node@26.6.6':
-    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+  '@types/node@26.6.5':
+    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
 
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
@@ -2459,8 +2460,8 @@ packages:
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
 
-  '@types/ws@8.18.2':
-    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -5039,10 +5040,6 @@ packages:
   tar-stream@3.1.8:
     resolution: {integrity: sha512-U6QpVRyCGHva435KoNWy9PRoi2IFYCgtEhq9nmrPPpbRacPs9IH4aJ3gbrFC8dPcXvdSZ4XXfXT5Fshbp2MtlQ==}
 
-  tar@7.5.13:
-    resolution: {integrity: sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng==}
-    engines: {node: '>=18'}
-
   tar@7.5.22:
     resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
     engines: {node: '>=18'}
@@ -5163,8 +5160,8 @@ packages:
     resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
-  undici@7.29.1:
-    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
@@ -5486,8 +5483,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+  ws@8.22.2:
+    resolution: {integrity: sha512-/rEZ2ejown2N5gxVTHUu9bVVC7ttu0/Tgzf5hbTOixR3Fs7mbbXgn2DbdbcKgJOmpQMtrIUWivtYuVMnp/W/yA==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -6504,7 +6501,7 @@ snapshots:
       semver: 7.8.5
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 7.29.1
+      undici: 7.30.1
     transitivePeerDependencies:
       - supports-color
 
@@ -6840,7 +6837,7 @@ snapshots:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.6
-      ws: 8.22.0
+      ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -6971,9 +6968,9 @@ snapshots:
       std-env: 3.10.0
       yoctocolors: 2.1.2
 
-  '@mariozechner/pi-agent-core@0.72.1(ws@8.22.0)(zod@4.4.2)':
+  '@mariozechner/pi-agent-core@0.72.1(ws@8.22.2)(zod@4.4.2)':
     dependencies:
-      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)
+      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)
       typebox: 1.1.37
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -6984,18 +6981,18 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)':
+  '@mariozechner/pi-ai@0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.4.2)
       '@aws-sdk/client-bedrock-runtime': 3.1041.0
       '@google/genai': 1.51.0
       '@mistralai/mistralai': 2.2.1
       chalk: 5.6.2
-      openai: 6.26.0(ws@8.22.0)(zod@4.4.2)
+      openai: 6.26.0(ws@8.22.2)(zod@4.4.2)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
       typebox: 1.1.37
-      undici: 7.29.1
+      undici: 7.30.1
       zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -7006,11 +7003,11 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.72.1(ws@8.22.0)(zod@4.4.2)':
+  '@mariozechner/pi-coding-agent@0.72.1(ws@8.22.2)(zod@4.4.2)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
-      '@mariozechner/pi-agent-core': 0.72.1(ws@8.22.0)(zod@4.4.2)
-      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.0)(zod@4.4.2)
+      '@mariozechner/pi-agent-core': 0.72.1(ws@8.22.2)(zod@4.4.2)
+      '@mariozechner/pi-ai': 0.72.1(patch_hash=aac5f6f7549c467fcf2fc41b1a0e606275121a1c3d4216f4708ba85b143b5a84)(ws@8.22.2)(zod@4.4.2)
       '@mariozechner/pi-tui': 0.72.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -7026,7 +7023,7 @@ snapshots:
       proper-lockfile: 4.1.2
       strip-ansi: 7.2.0
       typebox: 1.1.37
-      undici: 7.29.1
+      undici: 7.30.1
       uuid: 14.0.0
       yaml: 2.8.4
     optionalDependencies:
@@ -7052,7 +7049,7 @@ snapshots:
 
   '@mistralai/mistralai@2.2.1':
     dependencies:
-      ws: 8.22.0
+      ws: 8.20.0
       zod: 4.4.2
       zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
@@ -7715,12 +7712,12 @@ snapshots:
       postcss: 8.5.28
       tailwindcss: 4.3.3
 
-  '@tailwindcss/vite@4.3.3(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))':
+  '@tailwindcss/vite@4.3.3(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))':
     dependencies:
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
-      vite: 8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -7871,7 +7868,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/node@26.6.6':
+  '@types/node@26.6.5':
     dependencies:
       undici-types: 8.9.0
     optional: true
@@ -7907,7 +7904,7 @@ snapshots:
 
   '@types/whatwg-mimetype@3.0.2': {}
 
-  '@types/ws@8.18.2':
+  '@types/ws@8.18.1':
     dependencies:
       '@types/node': 22.20.5
 
@@ -7930,9 +7927,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitejs/plugin-vue@5.2.4(vite@6.4.2(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0))(vue@3.5.32(typescript@6.0.3))':
+  '@vitejs/plugin-vue@5.2.4(vite@6.4.2(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0))(vue@3.5.32(typescript@6.0.3))':
     dependencies:
-      vite: 6.4.2(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 6.4.2(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0)
       vue: 3.5.32(typescript@6.0.3)
 
   '@vitest/expect@4.1.12':
@@ -7960,13 +7957,13 @@ snapshots:
     optionalDependencies:
       vite: 8.0.10(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  '@vitest/mocker@4.1.12(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.12(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.12
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.12':
     dependencies:
@@ -8240,7 +8237,7 @@ snapshots:
       proper-lockfile: 4.1.2
       resedit: 1.7.2
       semver: 7.7.4
-      tar: 7.5.13
+      tar: 7.5.22
       temp-file: 3.4.0
       tiny-async-pool: 1.3.0
       which: 5.0.0
@@ -9340,11 +9337,11 @@ snapshots:
     dependencies:
       '@types/node': 22.20.5
       '@types/whatwg-mimetype': 3.0.2
-      '@types/ws': 8.18.2
+      '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.22.0
+      ws: 8.22.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -10346,9 +10343,9 @@ snapshots:
       regex: 6.1.0
       regex-recursion: 6.0.2
 
-  openai@6.26.0(ws@8.22.0)(zod@4.4.2):
+  openai@6.26.0(ws@8.22.2)(zod@4.4.2):
     optionalDependencies:
-      ws: 8.22.0
+      ws: 8.22.2
       zod: 4.4.2
 
   ora@5.4.1:
@@ -11060,14 +11057,6 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  tar@7.5.13:
-    dependencies:
-      '@isaacs/fs-minipass': 4.0.1
-      chownr: 3.0.0
-      minipass: 7.1.3
-      minizlib: 3.1.0
-      yallist: 5.0.0
-
   tar@7.5.22:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
@@ -11189,7 +11178,7 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@7.29.1: {}
+  undici@7.30.1: {}
 
   unified@11.0.5:
     dependencies:
@@ -11281,7 +11270,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@6.4.2(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0):
+  vite@6.4.2(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.7)
@@ -11290,7 +11279,7 @@ snapshots:
       rollup: 4.63.5
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.5
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.33.0
@@ -11328,7 +11317,7 @@ snapshots:
       tsx: 4.22.3
       yaml: 2.9.0
 
-  vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0):
+  vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -11336,14 +11325,14 @@ snapshots:
       rolldown: 1.0.0-rc.17
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.5
       esbuild: 0.28.2
       fsevents: 2.3.3
       jiti: 2.7.0
       tsx: 4.22.3
       yaml: 2.9.0
 
-  vitepress@1.6.4(@algolia/client-search@5.50.2)(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.32)(search-insights@2.17.3)(tsx@4.22.3)(typescript@6.0.3)(yaml@2.9.0):
+  vitepress@1.6.4(@algolia/client-search@5.50.2)(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.32)(search-insights@2.17.3)(tsx@4.22.3)(typescript@6.0.3)(yaml@2.9.0):
     dependencies:
       '@docsearch/css': 3.8.2
       '@docsearch/js': 3.8.2(@algolia/client-search@5.50.2)(search-insights@2.17.3)
@@ -11352,7 +11341,7 @@ snapshots:
       '@shikijs/transformers': 2.5.0
       '@shikijs/types': 2.5.0
       '@types/markdown-it': 14.1.2
-      '@vitejs/plugin-vue': 5.2.4(vite@6.4.2(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0))(vue@3.5.32(typescript@6.0.3))
+      '@vitejs/plugin-vue': 5.2.4(vite@6.4.2(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0))(vue@3.5.32(typescript@6.0.3))
       '@vue/devtools-api': 7.7.9
       '@vue/shared': 3.5.32
       '@vueuse/core': 12.8.2(typescript@6.0.3)
@@ -11361,7 +11350,7 @@ snapshots:
       mark.js: 8.11.1
       minisearch: 7.2.0
       shiki: 2.5.0
-      vite: 6.4.2(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 6.4.2(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.3)(yaml@2.9.0)
       vue: 3.5.32(typescript@6.0.3)
     optionalDependencies:
       postcss: 8.5.32
@@ -11451,10 +11440,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.12(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)):
+  vitest@4.1.12(@types/node@26.6.5)(happy-dom@21.0.4)(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.12
-      '@vitest/mocker': 4.1.12(vite@8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.12(vite@8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.12
       '@vitest/runner': 4.1.12
       '@vitest/snapshot': 4.1.12
@@ -11471,10 +11460,10 @@ snapshots:
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
       tinyrainbow: 3.2.0
-      vite: 8.0.10(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 8.0.10(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.5
       happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
@@ -11542,7 +11531,7 @@ snapshots:
 
   ws@8.20.0: {}
 
-  ws@8.22.0: {}
+  ws@8.22.2: {}
 
   xmlbuilder@15.1.1: {}
 
