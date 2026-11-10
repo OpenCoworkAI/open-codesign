@@ -37,6 +37,11 @@ const STORAGE_SETTINGS_FILE = 'storage-settings.json';
 
 let bootstrapUserDataDir: string | null = null;
 let activeLocations: StorageLocations = {};
+let recoveryWarnings: string[] = [];
+
+export function getStorageRecoveryWarnings(): string[] {
+  return [...recoveryWarnings];
+}
 
 export function buildAppPaths(configFile: string, logFile: string, dataDir: string): AppPaths {
   return {
@@ -50,6 +55,7 @@ export function buildAppPaths(configFile: string, logFile: string, dataDir: stri
 
 export function initStorageSettings(defaultUserDataDir: string): StorageLocations {
   bootstrapUserDataDir = defaultUserDataDir;
+  recoveryWarnings = [];
   activeLocations = readStorageLocationsSync(defaultUserDataDir);
   return getActiveStorageLocations();
 }
@@ -215,16 +221,46 @@ function applyDir(
 
 function normalizeOptionalDir(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined;
-  return normalizeDir(value);
+  const normalized = normalizeDir(value, true);
+  if (isWindowsDriveRoot(normalized)) {
+    const warning = `Saved storage location ${value} is a Windows drive root. This session uses the default folder. Files at the saved location and storage-settings.json have not been moved or changed. Choose a writable folder in Settings > Storage before restarting.`;
+    if (!recoveryWarnings.includes(warning)) recoveryWarnings.push(warning);
+    return undefined;
+  }
+  return normalized;
 }
 
-function normalizeDir(value: string): string {
+/** True for Windows volume roots like `D:\\` / `D:` that non-admin processes cannot mkdir. */
+export function isWindowsDriveRoot(value: string, platform = process.platform): boolean {
+  return platform === 'win32' && /^[A-Za-z]:[\\/]*$/.test(value.trim());
+}
+
+/**
+ * Windows treats a bare drive letter (`D:`) as "cwd on that drive", not the volume
+ * root. Force `D:\\` so later joins create `D:\\foo` instead of the relative `D:foo`.
+ */
+export function coerceWindowsDriveBase(value: string, platform = process.platform): string {
   const trimmed = value.trim();
+  if (platform === 'win32' && /^[A-Za-z]:$/.test(trimmed)) {
+    return `${trimmed}\\`;
+  }
+  return trimmed;
+}
+
+function normalizeDir(value: string, allowRoot = false): string {
+  const trimmed = coerceWindowsDriveBase(value);
   if (!isAbsolute(trimmed)) {
     throw new CodesignError(
       `Storage directory must be an absolute path: ${value}`,
       ERROR_CODES.STORAGE_SETTINGS_INVALID,
     );
   }
-  return resolve(trimmed);
+  const normalized = resolve(trimmed);
+  if (!allowRoot && isWindowsDriveRoot(normalized)) {
+    throw new CodesignError(
+      `Storage directory cannot be a Windows drive root (${trimmed}). Choose a writable folder such as D:\\codesign\\.config.`,
+      ERROR_CODES.STORAGE_SETTINGS_INVALID,
+    );
+  }
+  return normalized;
 }

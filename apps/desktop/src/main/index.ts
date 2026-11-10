@@ -37,7 +37,7 @@ import {
   registerSnapshotsUnavailableIpc,
   registerWorkspaceIpc,
 } from './snapshots-ipc';
-import { initStorageSettings } from './storage-settings';
+import { getStorageRecoveryWarnings, initStorageSettings } from './storage-settings';
 import { getUpdateErrorMessage, isMissingUpdateMetadataError } from './update-errors';
 import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
 
@@ -199,6 +199,16 @@ if (!IS_VITEST) {
   registerWorkspaceScheme();
 
   void app.whenReady().then(async () => {
+    const storageWarnings = getStorageRecoveryWarnings();
+    if (storageWarnings.length > 0 && !BACKGROUND_DEBUG) {
+      dialog.showMessageBoxSync({
+        type: 'warning',
+        title: 'Storage location needs attention',
+        message: 'Open CoDesign is using default storage folders for this session.',
+        detail: storageWarnings.join('\n\n'),
+        buttons: ['Continue'],
+      });
+    }
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks
     // fire outside this block) can route failures through the same boot-fallback
     // path. Without this, a later createWindow() throw from app.on('activate')

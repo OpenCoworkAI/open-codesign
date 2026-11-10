@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildAppPaths,
   buildAppPathsForLocations,
+  coerceWindowsDriveBase,
+  getStorageRecoveryWarnings,
   initStorageSettings,
+  isWindowsDriveRoot,
   patchForStorageKind,
   readPersistedStorageLocations,
   storageSettingsPath,
@@ -83,5 +86,66 @@ describe('buildAppPaths', () => {
     expect(() => initStorageSettings(root)).toThrow(
       expect.objectContaining({ code: ERROR_CODES.STORAGE_SETTINGS_PARSE_FAILED }),
     );
+  });
+});
+
+describe('Windows storage path guards', () => {
+  it('parses Windows root spellings on every host', () => {
+    for (const root of ['D:', 'D:\\', 'd:/', 'D:\\\\']) {
+      expect(isWindowsDriveRoot(root, 'win32')).toBe(true);
+      expect(isWindowsDriveRoot(root, 'linux')).toBe(false);
+    }
+    expect(isWindowsDriveRoot('D:\\codesign', 'win32')).toBe(false);
+    expect(coerceWindowsDriveBase('D:', 'win32')).toBe('D:\\');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'recovers persisted roots without changing settings or files',
+    async () => {
+      const root = await tempRoot();
+      const raw = JSON.stringify({
+        schemaVersion: 1,
+        configDir: 'D:\\',
+        logsDir: 'D:',
+        dataDir: 'D:\\folder\\..',
+      });
+      await writeFile(storageSettingsPath(root), raw);
+      expect(initStorageSettings(root)).toEqual({});
+      expect(getStorageRecoveryWarnings()).toHaveLength(3);
+      expect(getStorageRecoveryWarnings().join(' ')).toContain('have not been moved or changed');
+      expect(await readFile(storageSettingsPath(root), 'utf8')).toBe(raw);
+      await expect(writeStorageLocations({ configDir: join(root, 'config') })).resolves.toEqual({
+        configDir: join(root, 'config'),
+      });
+      expect(initStorageSettings(root)).toEqual({ configDir: join(root, 'config') });
+      expect(getStorageRecoveryWarnings()).toEqual([]);
+    },
+  );
+  it('detects drive roots and coerces bare drive letters', () => {
+    if (process.platform !== 'win32') {
+      // Helpers are no-ops / false on non-Windows; still exercise the API.
+      expect(isWindowsDriveRoot('D:\\')).toBe(false);
+      expect(coerceWindowsDriveBase('D:')).toBe('D:');
+      return;
+    }
+    expect(isWindowsDriveRoot('D:\\')).toBe(true);
+    expect(isWindowsDriveRoot('D:')).toBe(true);
+    expect(isWindowsDriveRoot('D:\\codesign')).toBe(false);
+    expect(coerceWindowsDriveBase('D:')).toBe('D:\\');
+    expect(coerceWindowsDriveBase('D:\\codesign')).toBe('D:\\codesign');
+  });
+
+  it('rejects Windows drive roots when persisting storage locations', async () => {
+    if (process.platform !== 'win32') return;
+    const root = await tempRoot();
+    initStorageSettings(root);
+    await expect(
+      writeStorageLocations(patchForStorageKind('config', 'D:\\')),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.STORAGE_SETTINGS_INVALID,
+    });
+    await expect(writeStorageLocations(patchForStorageKind('config', 'D:'))).rejects.toMatchObject({
+      code: ERROR_CODES.STORAGE_SETTINGS_INVALID,
+    });
   });
 });
