@@ -935,7 +935,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   });
                   await research.saveNativeSources?.(records, input.signal);
                 },
-                persistMessage: (message: import('@mariozechner/pi-ai').AssistantMessage) => {
+                persistMessage: (message: import('@earendil-works/pi-ai').AssistantMessage) => {
                   const store = chatStoreOptions();
                   if (store) appendSessionNativeSearchMessage(store, designId, message);
                 },

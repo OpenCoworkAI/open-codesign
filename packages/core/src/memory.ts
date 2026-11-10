@@ -8,7 +8,7 @@
  * - DesignSessionBrief is a compact JSONL cache derived from these sources.
  */
 
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { completeWithRetry } from '@open-codesign/providers';
 import type { ChatMessage, ModelRef, ReasoningLevel, WireApi } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';

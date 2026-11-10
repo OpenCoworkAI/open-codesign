@@ -3,7 +3,7 @@ import {
   getModel,
   type SimpleStreamOptions,
   streamSimple,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createNativeSearchStream } from './native-search';
 

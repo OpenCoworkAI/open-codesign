@@ -1,4 +1,4 @@
-import type { AgentTool } from '@mariozechner/pi-agent-core';
+import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { EvidenceInputSchema, type ResearchHost } from '@open-codesign/shared';
 import { type TSchema, Type } from '@sinclair/typebox';
 

@@ -3,7 +3,7 @@ import {
   createAssistantMessageEventStream,
   getModel,
   type SimpleStreamOptions,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createNativeSearchStream,

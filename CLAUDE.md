@@ -31,7 +31,7 @@ These are project-level commitments, not preferences:
 - **Commits**: Conventional Commits, enforced by commitlint.
 - **Versioning**: Changesets. Don't hand-edit `CHANGELOG.md`.
 - **Node**: 22 LTS (pinned via `.nvmrc` + `engines`).
-- **Model layer**: All LLM calls go through `@mariozechner/pi-ai`. Don't import provider SDKs directly in app code; if pi-ai lacks a feature, add it to `packages/providers` as a thin extension.
+- **Model layer**: All LLM calls go through `@earendil-works/pi-ai`. Don't import provider SDKs directly in app code; if pi-ai lacks a feature, add it to `packages/providers` as a thin extension.
 
 ### Frontend stack (locked)
 

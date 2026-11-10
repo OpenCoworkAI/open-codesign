@@ -1,9 +1,9 @@
-import { Agent, type AgentMessage } from '@mariozechner/pi-agent-core';
+import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import {
   type AssistantMessage,
   createAssistantMessageEventStream,
   getModel,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai';
 import type { ActiveRunMessageInputV1, ActiveRunMessageV1 } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 import { describe, expect, it, vi } from 'vitest';

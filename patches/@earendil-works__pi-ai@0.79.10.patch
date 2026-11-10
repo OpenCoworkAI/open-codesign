@@ -1,8 +1,8 @@
 diff --git a/dist/providers/anthropic.js b/dist/providers/anthropic.js
-index 3f0cc9aef9fc12485096f89362fc89884ecf87a9..2adad291bae6bf54d21fd941db650fcd494db7ac 100644
+index fdffa11..05f6568 100644
 --- a/dist/providers/anthropic.js
 +++ b/dist/providers/anthropic.js
-@@ -329,6 +329,7 @@ export const streamAnthropic = (model, context, options) => {
+@@ -342,6 +342,7 @@ export const streamAnthropic = (model, context, options) => {
              stream.push({ type: "start", partial: output });
              const blocks = output.content;
              for await (const event of iterateAnthropicEvents(response, options?.signal)) {
@@ -10,7 +10,7 @@ index 3f0cc9aef9fc12485096f89362fc89884ecf87a9..2adad291bae6bf54d21fd941db650fcd
                  if (event.type === "message_start") {
                      output.responseId = event.message.id;
                      // Capture initial token usage from message_start event
-@@ -797,6 +798,10 @@ function convertMessages(messages, model, isOAuthToken, cacheControl) {
+@@ -813,6 +814,10 @@ function convertMessages(messages, model, isOAuthToken, cacheControl, allowEmpty
              }
          }
          else if (msg.role === "assistant") {
@@ -22,10 +22,10 @@ index 3f0cc9aef9fc12485096f89362fc89884ecf87a9..2adad291bae6bf54d21fd941db650fcd
              for (const block of msg.content) {
                  if (block.type === "text") {
 diff --git a/dist/providers/openai-responses-shared.js b/dist/providers/openai-responses-shared.js
-index 3081455a347db90995fd51f654d0ec48f16cc73d..3d33f7279e83ef3e81133e2ff5e1e90ff66865bf 100644
+index 3d970f3..a86ba4e 100644
 --- a/dist/providers/openai-responses-shared.js
 +++ b/dist/providers/openai-responses-shared.js
-@@ -101,6 +101,10 @@ export function convertResponsesMessages(model, context, allowedToolCallProvider
+@@ -102,6 +102,10 @@ export function convertResponsesMessages(model, context, allowedToolCallProvider
              }
          }
          else if (msg.role === "assistant") {
@@ -37,10 +37,10 @@ index 3081455a347db90995fd51f654d0ec48f16cc73d..3d33f7279e83ef3e81133e2ff5e1e90f
              const assistantMsg = msg;
              const isDifferentModel = assistantMsg.model !== model.id &&
 diff --git a/dist/providers/openai-responses.js b/dist/providers/openai-responses.js
-index 0c7ec025b680f6229f041c1cdcb58d17eb33eabf..a0a6508b2c73449f440af66aaa28c3c36791af1d 100644
+index 2758610..ea0292f 100644
 --- a/dist/providers/openai-responses.js
 +++ b/dist/providers/openai-responses.js
-@@ -73,7 +73,13 @@ export const streamOpenAIResponses = (model, context, options) => {
+@@ -95,7 +95,13 @@ export const streamOpenAIResponses = (model, context, options) => {
              const { data: openaiStream, response } = await client.responses.create(params, requestOptions).withResponse();
              await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
              stream.push({ type: "start", partial: output });
@@ -56,22 +56,22 @@ index 0c7ec025b680f6229f041c1cdcb58d17eb33eabf..a0a6508b2c73449f440af66aaa28c3c3
                  applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
              });
 diff --git a/dist/providers/simple-options.js b/dist/providers/simple-options.js
-index 64c0447b9d0c33454d13bc6697ba67e815721e93..1f7357bb7e9cbd055ca1585a03ecdc8b0e491f17 100644
+index 45d8e55..c57aa7b 100644
 --- a/dist/providers/simple-options.js
 +++ b/dist/providers/simple-options.js
-@@ -10,6 +10,7 @@ export function buildBaseOptions(model, options, apiKey) {
+@@ -10,6 +10,7 @@ export function buildBaseOptions(_model, options, apiKey) {
          headers: options?.headers,
          onPayload: options?.onPayload,
          onResponse: options?.onResponse,
 +        onNativeEvent: options?.onNativeEvent,
          timeoutMs: options?.timeoutMs,
+         websocketConnectTimeoutMs: options?.websocketConnectTimeoutMs,
          maxRetries: options?.maxRetries,
-         maxRetryDelayMs: options?.maxRetryDelayMs,
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index e5bbb051d5d895c6722bfe58225358e335965dd6..1b19467b681bcc9d6d88d36a42b1725d91c7bb35 100644
+index b2a00df..2f7cb6f 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
-@@ -20,7 +20,15 @@ export interface ProviderResponse {
+@@ -31,7 +31,15 @@ export interface ProviderResponse {
      status: number;
      headers: Record<string, string>;
  }
@@ -87,7 +87,7 @@ index e5bbb051d5d895c6722bfe58225358e335965dd6..1b19467b681bcc9d6d88d36a42b1725d
      temperature?: number;
      maxTokens?: number;
      signal?: AbortSignal;
-@@ -141,6 +149,7 @@ export interface UserMessage {
+@@ -209,6 +217,7 @@ export interface UserMessage {
      timestamp: number;
  }
  export interface AssistantMessage {

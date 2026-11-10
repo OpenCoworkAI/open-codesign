@@ -1,6 +1,6 @@
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import type { AssistantMessage } from '@mariozechner/pi-ai';
-import { estimateTokens as estimatePiTokens } from '@mariozechner/pi-coding-agent';
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import type { AssistantMessage } from '@earendil-works/pi-ai';
+import { estimateTokens as estimatePiTokens } from '@earendil-works/pi-coding-agent';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 
 /** pi's estimate for one image (`estimateTokens` counts images in tool results as 1,200 tokens). */

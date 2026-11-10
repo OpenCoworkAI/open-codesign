@@ -14,7 +14,7 @@ export async function getCodexModelOptions(): Promise<CodexModelOptions> {
     (imported?.activeProvider === 'codex-openai' &&
       !imported.providers.some((provider) => provider.id === 'codex-openai'));
   const suggestedModel = usesBuiltinProvider ? (imported?.activeModel ?? null) : null;
-  const { getModels } = await import('@mariozechner/pi-ai');
+  const { getModels } = await import('@earendil-works/pi-ai');
   return {
     suggestedModel,
     models: [

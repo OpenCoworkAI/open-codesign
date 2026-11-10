@@ -303,7 +303,7 @@ v0.2 已经把 Open CoDesign 从一次性生成器升级成一个本地设计 ag
 ## 基于这些技术构建
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- `@mariozechner/pi-ai` 与 `pi-coding-agent`（模型 / provider 与 agent loop 基础能力）
+- `@earendil-works/pi-ai` 与 `pi-coding-agent`（模型 / provider 与 agent loop 基础能力）
 - `electron-builder`
 
 ## 社群
