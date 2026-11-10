@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const electronBuilderPackageJson = require.resolve('electron-builder/package.json');
 const electronBuilderRequire = createRequire(electronBuilderPackageJson);
-const { downloadArtifact } = electronBuilderRequire('app-builder-lib/out/binDownload');
+const { getBinFromUrl } = electronBuilderRequire('app-builder-lib/out/binDownload');
 
 const DMGBUILD_RELEASE = '75c8a6c';
 const DMGBUILD_CHECKSUMS = {
@@ -23,12 +23,13 @@ function dmgbuildArchiveName() {
 }
 
 async function resolveDmgbuild() {
-  const vendorDir = await downloadArtifact({
-    releaseName: 'dmg-builder@1.2.0',
-    filenameWithExt: dmgbuildArchiveName(),
-    checksums: DMGBUILD_CHECKSUMS,
-    githubOrgRepo: 'electron-userland/electron-builder-binaries',
-  });
+  const filename = dmgbuildArchiveName();
+  const vendorDir = await getBinFromUrl(
+    'dmg-builder@1.2.0',
+    filename,
+    DMGBUILD_CHECKSUMS[filename],
+    'electron-userland/electron-builder-binaries',
+  );
   return path.join(vendorDir, 'dmgbuild');
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/desktop",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "description": "Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets.",
   "author": "Open CoDesign Maintainers <maintainers@opencowork.ai>",
@@ -17,7 +17,8 @@
     "build:dir": "electron-vite build && electron-builder --dir",
     "release": "electron-vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:debug-ui": "node scripts/test-background-ui.mjs"
   },
   "dependencies": {
     "@babel/parser": "7.29.2",
@@ -25,7 +26,7 @@
     "ms": "2.1.3",
     "parse5": "8.0.1",
     "puppeteer-core": "^24.42.0",
-    "undici": "8.10.2"
+    "undici": "8.12.4"
   },
   "devDependencies": {
     "@earendil-works/pi-agent-core": "^0.79.0",

@@ -412,7 +412,12 @@
         "createdMemory": "Created memory",
         "updatedMemory": "Updated memory",
         "legacyTool": "Legacy tool",
-        "genericTool": "Tool"
+        "genericTool": "Tool",
+        "nativeSearch": "Native web search",
+        "nativeRequests": "Requests",
+        "actualSearches": "Searches",
+        "searchCost": "Search cost",
+        "unknown": "Unknown"
       }
     },
     "comments": {
@@ -434,12 +439,12 @@
       "advanced": "Advanced"
     },
     "webSearch": {
-      "title": "Tavily Web Search",
-      "description": "Use your own Tavily API key for web search. Search queries are sent to Tavily; task authorization is still required.",
+      "title": "Web search",
+      "description": "Use your model provider credentials for supported web search, or choose Tavily. Web access still requires task authorization.",
       "nextRun": "Enabling, disabling, or saving settings applies to the next run, not active runs.",
       "enabled": "Enable web search",
       "enabledHint": "Controls web search and page fetching. Turning this off preserves your saved key. Enabling does not authorize a task to use the web.",
-      "keyStatus": "Saved API key",
+      "keyStatus": "Search credentials",
       "configured": "Configured",
       "notConfigured": "Not configured",
       "newKey": "Tavily API key",
@@ -452,8 +457,8 @@
       "clearKey": "Clear saved key…",
       "clearConfirm": "Remove the saved Tavily key? You will need to save a key again before searching.",
       "confirmClear": "Clear saved key",
-      "test": "Test saved key",
-      "testHint": "Tests use only the saved key, not unsaved input. Clicking sends one minimal search to Tavily, costing one basic request (1 credit). Tests do not grant or consume task authorization and never run automatically.",
+      "test": "Test search service",
+      "testHint": "Runs one paid search for independent search services (Tavily: 1 credit). Native search configuration is checked locally without a paid model request.",
       "retry": "Retry loading",
       "saved": "Web search settings saved. Changes apply to the next run.",
       "cleared": "Saved key cleared. Changes apply to the next run.",
@@ -463,17 +468,32 @@
       "openFailed": "Could not open the Tavily key page. Visit https://app.tavily.com in your browser.",
       "invalidInput": "Enter a non-empty API key of at most 4096 characters without spaces or control characters.",
       "result": {
-        "ok": "Saved key verified. Tavily search is reachable.",
+        "ok": "Saved key verified. Search service search is reachable.",
         "missingKey": "No saved key. Save a Tavily API key first.",
         "unreadableKey": "The saved key cannot be read on this device. Replace it or clear it and save a new key.",
-        "invalidKey": "Tavily rejected the saved key. Check it and save a replacement.",
-        "quota": "Tavily quota is exhausted. Check your Tavily account or plan.",
-        "rateLimit": "Tavily is rate limiting requests. Wait and try again.",
+        "invalidKey": "Search service rejected the saved key. Check it and save a replacement.",
+        "quota": "Search service quota is exhausted. Check your Search service account or plan.",
+        "rateLimit": "Search service is rate limiting requests. Wait and try again.",
         "timeout": "The test timed out. Check your connection and try again.",
-        "networkError": "Could not reach Tavily. Check your network or proxy and try again.",
-        "serviceError": "Tavily is temporarily unavailable. Try again later.",
-        "unexpectedResponse": "Tavily returned an unexpected response. Try again later."
-      }
+        "networkError": "Could not reach Search service. Check your network or proxy and try again.",
+        "serviceError": "Search service is temporarily unavailable. Try again later.",
+        "unexpectedResponse": "Search service returned an unexpected response. Try again later.",
+        "unsupportedProvider": "The active provider does not offer a web search backend. Choose Tavily or switch to a supported provider.",
+        "unsupportedModel": "This model has not been verified for native web search in CoDesign. Choose a verified model or Tavily.",
+        "nativeDisabled": "Native web search is switched off for this provider. Enable it in web search settings.",
+        "notVerified": "Configuration recognized. Native search has not been tested with a live model request."
+      },
+      "backend": "Search backend",
+      "backendHint": "Automatic selects the current provider when supported, otherwise configured Tavily. Settings apply next turn.",
+      "backendAuto": "Automatic",
+      "backendProvider": "Current model provider",
+      "selectedService": "Search service",
+      "unavailable": "No supported search service configured",
+      "inherited": "Uses your existing model provider credentials",
+      "nativeEnabled": "Allow native model search",
+      "nativeHint": "OpenAI Responses and Claude API keys only. Requires per-run authorization; additional search fees may apply.",
+      "nativeRequests": "Native search model requests",
+      "nativeRequestsHint": "Limit requests that enable native search per run. Each request may perform multiple searches. Independent search and page fetching use their own shared limit."
     },
     "imageGen": {
       "tabTitle": "Image generation",
@@ -554,7 +574,10 @@
         "logoutFailedTitle": "ChatGPT sign-out failed",
         "statusFailedTitle": "ChatGPT status check failed",
         "unknownError": "Unknown error",
-        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory."
+        "unsupportedCountryRegion": "ChatGPT subscription login is not available for this account, country, region, or territory.",
+        "modelsFailedTitle": "ChatGPT model suggestions failed to load",
+        "modelLabel": "ChatGPT model ID",
+        "modelHelp": "Uses your local Codex model when available. Suggestions come from the app’s model catalog; access depends on your ChatGPT account. You can enter another model ID and edit it later in Models."
       },
       "addProvider": "Add provider",
       "addCustom": "Add custom",
@@ -601,6 +624,7 @@
         "discoveryFailed": "Could not auto-discover models",
         "test": "Test connection",
         "testOk": "OK — {{count}} models available",
+        "testOkNoListing": "No model listing — enter a model ID. Inference can still work.",
         "save": "Save & continue",
         "saveEdit": "Save changes"
       },
@@ -695,6 +719,7 @@
         "contextWindowSaved": "Context window saved",
         "contextWindowSaveFailed": "Failed to save context window",
         "connectionOk": "Connection OK",
+        "connectionOkDegraded": "Connected — model listing is unavailable; inference still works",
         "connectionFailed": "Connection failed"
       },
       "litellm": {
@@ -707,6 +732,12 @@
           "notFoundLocal": "Check that the base URL ends with /v1 and that the local LiteLLM proxy is running on port 4000.",
           "unreachable": "Start the LiteLLM proxy and try again."
         }
+      },
+      "discovery": {
+        "manualHint": "Model IDs are entered manually for this provider.",
+        "inferOnlyHint": "This provider does not list models — enter a model ID. Inference can still work.",
+        "staticHint": "Known models for this provider. You can still enter another ID.",
+        "enterModelId": "model-id"
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -819,7 +850,7 @@
       "systemNotifications": "System notifications",
       "systemNotificationsHint": "Notify me when a design finishes, fails, or asks a question while Open CoDesign is in the background. On macOS, notifications stop after you close the last window, until you open it again.",
       "timeout": "Generation timeout",
-      "timeoutHint": "Seconds before a generation request is aborted.",
+      "timeoutHint": "Seconds before a generation request is aborted. Choose No timeout for overnight local-model runs.",
       "timeoutSeconds": "{{value}} s",
       "proxy": "HTTP proxy",
       "proxyHint": "Route outbound network and LLM API requests through this proxy (e.g., http://127.0.0.1:7890). Leave blank to disable. Applied immediately — no restart needed.",
@@ -828,7 +859,8 @@
       "toggleDevtools": "Toggle DevTools",
       "prefsLoadFailed": "Failed to load preferences",
       "prefsSaveFailed": "Failed to save preference",
-      "devtoolsFailed": "Could not toggle DevTools"
+      "devtoolsFailed": "Could not toggle DevTools",
+      "timeoutDisabled": "No timeout"
     }
   },
   "updates": {
@@ -1237,6 +1269,7 @@
       "corsError": "CORS error (should not happen in main process). This is a bug.",
       "sslError": "SSL / certificate error (self-signed or private-CA cert?). Enable Settings → Providers → <provider> → Disable TLS verification to connect to trusted internal endpoints.",
       "endpointNotFound": "The endpoint path exists in the Base URL but the provider did not expose this route.",
+      "modelsListingNotApplicable": "This provider does not expose a model listing endpoint. That is expected — enter a model ID and use inference instead of treating missing /models as a hard failure.",
       "gatewayIncompatible": "The gateway accepted the connection but does not implement this provider's API. Try switching wire (e.g. openai-chat).",
       "gatewayWafBlocked": "The gateway or reverse proxy blocked the generation request before it reached the model. Test Connection can still pass because it only probes the /models endpoint.",
       "openaiResponsesMisconfigured": "The endpoint rejected the request shape. The wire may be wrong — try switching to openai-chat.",
@@ -1436,7 +1469,7 @@
       "recent": "Recent",
       "all": "All designs",
       "examples": "Examples",
-      "resources": "Resources"
+      "resources": "Design systems"
     },
     "recent": {
       "title": "Recent",
@@ -1564,5 +1597,66 @@
     "EXPORTER_ZIP_FAILED": "ZIP export failed.",
     "OPEN_PATH_FAILED": "Could not open the requested folder or file.",
     "RENDERER_ERROR": "An error occurred in the renderer. Details are in the log."
+  },
+  "library": {
+    "details": "Design system details",
+    "livePreview": "Sample preview",
+    "previewHint": "Explore the complete visual system and interact with its components.",
+    "previewZoom": "Preview zoom",
+    "fit": "Fit to canvas",
+    "interactive": "Interactive sample",
+    "specHint": "Design principles, style tokens and usage rules",
+    "readDocument": "Read",
+    "viewSource": "Source",
+    "tokens": "Style tokens",
+    "readyHint": "The specification and runnable preview are ready for a new design.",
+    "checkIssues": "Issues to review · {{count}}",
+    "issuesHint": "Repair specification or preview issues in the editor, then check again to reuse this system.",
+    "source": "Source",
+    "brandReference": "Public brand design reference",
+    "attribution": "License and attribution",
+    "notAffiliated": "Based on public brand materials. Not affiliated with the brand owner.",
+    "checkPreview": "Check preview",
+    "brand": {
+      "ibm": "Structured grids, clear hierarchy and compact data views for professional tools and enterprise products.",
+      "vercel": "Restrained monochrome surfaces, precise borders and generous space for developer tools and digital products.",
+      "stripe": "Expressive typography, layered surfaces and clear actions for brand experiences and business products."
+    },
+    "title": "Design systems",
+    "subtitle": "Choose a foundation, make it yours, and reuse it across designs.",
+    "builtin": "Built-in systems",
+    "mine": "My systems",
+    "new": "New design system",
+    "fromDesign": "Import from a design",
+    "importFile": "Import DESIGN.md",
+    "empty": "Create your own system, import a specification, or start with a built-in system.",
+    "loading": "Loading…",
+    "ready": "Ready",
+    "draft": "Draft",
+    "use": "Use this system",
+    "fork": "Create my own copy",
+    "edit": "Edit system",
+    "validate": "Check and save",
+    "checking": "Checking…",
+    "export": "Export DESIGN.md",
+    "rename": "Edit details",
+    "delete": "Delete",
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "name": "Name",
+    "description": "Description and design requirements",
+    "chooseDesign": "Choose an existing design",
+    "deleteHint": "Delete this system and its editor workspace? Designs already created with it will remain unchanged.",
+    "draftHint": "This is a draft. Edit it and check the specification and runnable preview before using it.",
+    "personalSource": "Personal design system",
+    "preview": "Runnable design system preview",
+    "previewError": "The sample could not be loaded. Open the editor to repair it.",
+    "optional": "Design system (optional)",
+    "none": "No design system",
+    "createFailed": "Could not create the design. Please try again.",
+    "saveFromDesign": "Save as design system",
+    "back": "Back to systems",
+    "createPrompt": "Create a reusable design system in this workspace for the following requirements. Update DESIGN.md and App.jsx together, implement the component and layout rules, retain data-design-system mappings, exercise interactions with preview(), and finish with done(). Reference materials can be attached in the conversation."
   }
 }

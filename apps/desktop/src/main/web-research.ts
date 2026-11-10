@@ -52,6 +52,11 @@ export function createResearchHost(options: ResearchHostOptions): ResearchHost {
       }),
     );
   return {
+    async saveNativeSources(sources, signal) {
+      await transaction(async (store) => {
+        saveSources(store, sources);
+      }, signal);
+    },
     async search(query, count, signal) {
       await options.authorize(signal);
       const sources = await options.network.search(query, count, signal);
@@ -111,7 +116,12 @@ export function createResearchHost(options: ResearchHostOptions): ResearchHost {
 }
 
 export function createWebResearchAuthorization(
-  settings: { enabled: boolean; maxCalls: number },
+  settings: {
+    enabled: boolean;
+    maxCalls: number;
+    service?: string | null;
+    maxNativeRequests?: number;
+  },
   request: (input: AskInput, signal?: AbortSignal) => Promise<AskResult>,
 ): (signal?: AbortSignal) => Promise<void> {
   let decision: Promise<boolean> | undefined;
@@ -120,13 +130,14 @@ export function createWebResearchAuthorization(
     if (!settings.enabled) return;
     decision ??= request(
       {
-        rationale:
-          'Tier 1 network permission. Queries go to Tavily; webpage requests go to public hosts. This decision applies only to the current run.',
+        rationale: `Tier 1 network permission. Searches use ${settings.service ?? 'Tavily'}; webpage requests go to public hosts. Search fees may apply. This decision applies only to the current run.${settings.maxNativeRequests ? ` Up to ${settings.maxNativeRequests} model requests may enable native search; each can execute multiple searches.` : ''}`,
         questions: [
           {
             id: 'web-research-permission',
             type: 'text-options',
-            prompt: `Allow up to ${settings.maxCalls} public web search/page requests for this run?`,
+            prompt: settings.maxNativeRequests
+              ? `Allow up to ${settings.maxNativeRequests} model requests with native search (each may run multiple searches) and ${settings.maxCalls} public page reads for this run?`
+              : `Allow up to ${settings.maxCalls} public web search/page requests for this run?`,
             options: ['Allow this run', 'Deny'],
             multi: false,
           },

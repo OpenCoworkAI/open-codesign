@@ -22,13 +22,8 @@ async function render(body: string) {
 describe.skipIf(!chromePath)('representative native PPTX Beta boundaries', () => {
   it.each([
     [
-      'SVG chart',
-      '<svg width="240" height="140"><rect width="100" height="120" fill="green"/><text x="10" y="40">Local chart</text></svg>',
-      'complex content',
-    ],
-    [
-      'table',
-      '<table style="width:240px;height:140px;border-collapse:collapse"><tbody><tr><th>Local table</th><th>Value</th></tr><tr><td>Metric</td><td>42</td></tr></tbody></table>',
+      'SVG path chart',
+      '<svg width="240" height="140"><path d="M0 120 C40 20 100 90 200 10" fill="none" stroke="green"/><text x="10" y="40">Local chart</text></svg>',
       'complex content',
     ],
     [
@@ -63,6 +58,19 @@ describe.skipIf(!chromePath)('representative native PPTX Beta boundaries', () =>
     },
     30_000,
   );
+
+  it('keeps a regular table and its surrounding text editable', async () => {
+    const model = await render(
+      '<table style="width:240px;height:140px;border-collapse:collapse"><tbody><tr><th>Local table</th><th>Value</th></tr><tr><td>Metric</td><td>42</td></tr></tbody></table>',
+    );
+    expect(model.elements.filter((element) => element.type === 'table')).toHaveLength(1);
+    expect(model.elements.filter((element) => element.type === 'image')).toHaveLength(0);
+    expect(
+      model.elements
+        .filter((element) => element.type === 'text')
+        .flatMap((element) => element.runs.map((run) => run.text)),
+    ).toEqual(['Editable overview', 'Editable caption']);
+  }, 30_000);
 
   it('resolves an unavailable requested font rather than writing its absent name', async () => {
     const missing = 'MissingBetaFixtureFont_7F57';

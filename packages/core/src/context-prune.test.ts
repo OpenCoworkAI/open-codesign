@@ -3,6 +3,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildTransformContext } from './context-prune.js';
 import type { CoreLogger } from './logger.js';
 
+it('drops oversized replay metadata as a whole without modifying archived provider blocks', async () => {
+  const original = {
+    ...assistantText('saved answer'),
+    nativeSearch: {
+      provider: 'anthropic' as const,
+      model: 'claude-sonnet-4-6',
+      output: [{ type: 'text', text: 'x'.repeat(300000) }],
+    },
+  };
+  const result = await buildTransformContext()([original]);
+  expect(result[0]).not.toHaveProperty('nativeSearch');
+  expect(original.nativeSearch.output[0]?.text).toHaveLength(300000);
+});
+
 function mockLogger(): CoreLogger {
   return {
     info: vi.fn(),

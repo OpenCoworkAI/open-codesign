@@ -20,6 +20,7 @@ const drawing = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const presentation = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const relationships = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const contentTypes = 'http://schemas.openxmlformats.org/package/2006/content-types';
+const chart = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 
 function parseXml(xml: string) {
   const errors: string[] = [];
@@ -151,6 +152,378 @@ function shapeNode(model: NativeSlideModel) {
 }
 
 describe('native slide writer', () => {
+  it('preserves horizontal bar direction in a native data chart', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 50,
+        y: 50,
+        width: 600,
+        height: 260,
+        chartType: 'bar',
+        colors: ['19354A'],
+        showLegend: false,
+        showValue: true,
+        barDirection: 'horizontal',
+        labels: ['2023', '2024', '2025'],
+        series: [{ name: '占比', values: [31.6, 40.9, 47.9] }],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const chartParts = [...parts].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      expect(chartParts).toHaveLength(1);
+      const xml = parseXml(chartParts[0]?.[1] ?? '');
+      expect(xml.getElementsByTagNameNS(chart, 'barDir')[0]?.getAttribute('val')).toBe('bar');
+      const categoryAxis = xml.getElementsByTagNameNS(chart, 'catAx')[0];
+      expect(
+        categoryAxis?.getElementsByTagNameNS(chart, 'orientation')[0]?.getAttribute('val'),
+      ).toBe('maxMin');
+      expect(xml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(1);
+    });
+  });
+  it('writes horizontal and vertical SVG lines as native DrawingML lines', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'line',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 0,
+        stroke: { hex: 'CCD4DE', opacity: 1 },
+        strokeWidth: 1,
+      },
+      {
+        type: 'line',
+        x: 300,
+        y: 50,
+        width: 0,
+        height: 250,
+        stroke: { hex: '778899', opacity: 1 },
+        strokeWidth: 1.5,
+        dash: 'dash',
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 'prstGeom')).map((element) =>
+          element.getAttribute('prst'),
+        ),
+      ).toEqual(['line', 'line']);
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 'prstDash')).some(
+          (element) => element.getAttribute('val') === 'dash',
+        ),
+      ).toBe(true);
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(0);
+    });
+  });
+
+  it('writes list markers as editable paragraph properties', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    const first = textNode(model);
+    const run = required(first.runs[0]);
+    model.elements = [
+      { ...first, runs: [{ ...run, text: '项目' }], list: { kind: 'bullet', level: 0 } },
+      {
+        ...first,
+        y: first.y + 50,
+        runs: [{ ...run, text: '第三项' }],
+        list: { kind: 'number', level: 1, start: 3 },
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(drawing, 'buChar')).toHaveLength(1);
+      const numbered = slide.getElementsByTagNameNS(drawing, 'buAutoNum');
+      expect(numbered).toHaveLength(1);
+      expect(numbered[0]?.getAttribute('startAt')).toBe('3');
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 't')).map((el) => el.textContent),
+      ).toEqual(['项目', '第三项']);
+    });
+  });
+
+  it('writes cover cropping in the editable picture XML', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 90,
+        data: png,
+        fit: 'cover',
+        sourceWidth: 1,
+        sourceHeight: 1,
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
+      const crop = slide.getElementsByTagNameNS(drawing, 'srcRect');
+      expect(crop).toHaveLength(1);
+      expect(['l', 'r', 't', 'b'].map((side) => crop[0]?.getAttribute(side))).toEqual([
+        '0',
+        '0',
+        '25000',
+        '25000',
+      ]);
+    });
+  });
+
+  it('writes rectangular inset clipping as editable picture cropping', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'image',
+        x: 50,
+        y: 50,
+        width: 120,
+        height: 80,
+        data: png,
+        crop: { top: 10, right: 20, bottom: 15, left: 25 },
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'pic')).toHaveLength(1);
+      const crop = slide.getElementsByTagNameNS(drawing, 'srcRect')[0];
+      expect(Number(crop?.getAttribute('l'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('r'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('t'))).toBeGreaterThan(0);
+      expect(Number(crop?.getAttribute('b'))).toBeGreaterThan(0);
+    });
+  });
+
+  it('writes a real table on the source slide with editable cell text', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'table',
+        x: 100,
+        y: 100,
+        width: 480,
+        height: 120,
+        columnWidths: [240, 240],
+        rowHeights: [60, 60],
+        rows: [
+          [
+            {
+              text: '指标',
+              bold: true,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'EEEEEE', opacity: 1 },
+              align: 'left',
+              border: { width: 2, color: { hex: 'AB1234', opacity: 1 } },
+            },
+            {
+              text: '数值',
+              bold: true,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'EEEEEE', opacity: 1 },
+              align: 'right',
+              borders: [
+                { width: 2, color: { hex: '123456', opacity: 1 } },
+                { width: 0, color: { hex: '123456', opacity: 1 } },
+                { width: 1, color: { hex: 'CCDDEE', opacity: 1 } },
+                { width: 0, color: { hex: '123456', opacity: 1 } },
+              ],
+            },
+          ],
+          [
+            {
+              text: '收入',
+              bold: false,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'FFFFFF', opacity: 1 },
+              align: 'left',
+            },
+            {
+              text: '42',
+              bold: false,
+              fontFace: 'Arial',
+              fontSize: 20,
+              color: { hex: '112233', opacity: 1 },
+              fill: { hex: 'FFFFFF', opacity: 1 },
+              align: 'right',
+            },
+          ],
+        ],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(drawing, 'tbl')).toHaveLength(1);
+      expect(slide.getElementsByTagNameNS(drawing, 'tr')).toHaveLength(2);
+      const firstCell = slide.getElementsByTagNameNS(drawing, 'tc')[0];
+      expect(firstCell?.getElementsByTagNameNS(drawing, 'lnL')).toHaveLength(1);
+      expect(
+        Array.from(firstCell?.getElementsByTagNameNS(drawing, 'srgbClr') ?? []).some(
+          (color) => color.getAttribute('val') === 'AB1234',
+        ),
+      ).toBe(true);
+      const secondCell = slide.getElementsByTagNameNS(drawing, 'tc')[1];
+      expect(secondCell?.getElementsByTagNameNS(drawing, 'lnT')[0]?.getAttribute('w')).toBe(
+        '19050',
+      );
+      expect(secondCell?.getElementsByTagNameNS(drawing, 'lnB')[0]?.getAttribute('w')).toBe('9525');
+      expect(
+        secondCell
+          ?.getElementsByTagNameNS(drawing, 'lnR')[0]
+          ?.getElementsByTagNameNS(drawing, 'noFill'),
+      ).toHaveLength(1);
+      expect(
+        Array.from(slide.getElementsByTagNameNS(drawing, 't')).map((el) => el.textContent),
+      ).toEqual(['指标', '数值', '收入', '42']);
+      expect(parts.has('ppt/slides/slide2.xml')).toBe(false);
+    });
+  });
+
+  it('writes chart series and flat category labels as editable chart data', async () => {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 100,
+        y: 100,
+        width: 500,
+        height: 300,
+        chartType: 'bar',
+        labels: ['第一季', '第二季'],
+        colors: ['19354A', '9BADB8'],
+        showLegend: false,
+        showValue: true,
+        series: [
+          { name: '收入', values: [12, 18] },
+          { name: '目标', values: [10, 16] },
+        ],
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const slide = parseXml(parts.get('ppt/slides/slide1.xml') ?? '');
+      expect(slide.getElementsByTagNameNS(presentation, 'graphicFrame')).toHaveLength(1);
+      const chartParts = [...parts].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      expect(chartParts).toHaveLength(1);
+      const chartXml = parseXml(chartParts[0]?.[1] ?? '');
+      expect(chartXml.getElementsByTagNameNS(chart, 'legend')).toHaveLength(0);
+      expect(
+        Array.from(chartXml.getElementsByTagNameNS(drawing, 'srgbClr')).map((el) =>
+          el.getAttribute('val'),
+        ),
+      ).toEqual(expect.arrayContaining(['19354A', '9BADB8']));
+      expect(chartXml.getElementsByTagNameNS(chart, 'ser')).toHaveLength(2);
+      expect(
+        Array.from(chartXml.getElementsByTagNameNS(chart, 'v')).map((el) => el.textContent),
+      ).toEqual(
+        expect.arrayContaining(['收入', '目标', '第一季', '第二季', '12', '18', '10', '16']),
+      );
+      const categories = chartXml.getElementsByTagNameNS(chart, 'cat');
+      expect(categories).toHaveLength(2);
+      for (const category of Array.from(categories)) {
+        expect(category.getElementsByTagNameNS(chart, 'strRef')).toHaveLength(1);
+        expect(category.getElementsByTagNameNS(chart, 'multiLvlStrRef')).toHaveLength(0);
+      }
+    });
+  });
+
+  it('rejects invalid chart series before adding any slides', () => {
+    const pres = new PptxGenJS();
+    const addSlide = vi.spyOn(pres, 'addSlide');
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        chartType: 'line',
+        labels: ['A', 'B'],
+        series: [{ name: 'Bad', values: [1] }],
+      },
+    ];
+    expect(() => addNativeSlides(pres, [model])).toThrow('values must match labels');
+    expect(addSlide).not.toHaveBeenCalled();
+  });
+
+  it('writes an editable doughnut with the requested hole and percentage labels', async () => {
+    const pres = new PptxGenJS();
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 300,
+        chartType: 'pie',
+        labels: ['直销', '伙伴'],
+        series: [{ name: '占比', values: [60, 40] }],
+        colors: ['19354A', '9BADB8'],
+        showLegend: false,
+        showValue: true,
+        holeSize: 50,
+      },
+    ];
+    addNativeSlides(pres, [model]);
+    await inspectPresentation(pres, (parts) => {
+      const entry = [...parts].find(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+      const xml = parseXml(entry?.[1] ?? '');
+      expect(xml.getElementsByTagNameNS(chart, 'doughnutChart')).toHaveLength(1);
+      expect(xml.getElementsByTagNameNS(chart, 'holeSize')[0]?.getAttribute('val')).toBe('50');
+      expect(xml.getElementsByTagNameNS(chart, 'showPercent')[0]?.getAttribute('val')).toBe('1');
+    });
+  });
+
+  it('rejects fractional doughnut hole sizes before writing invalid OOXML', () => {
+    const pres = new PptxGenJS();
+    const model = fixture();
+    model.elements = [
+      {
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        chartType: 'pie',
+        labels: ['A', 'B'],
+        series: [{ name: 'Share', values: [60, 40] }],
+        holeSize: 52.5,
+      },
+    ];
+    expect(() => addNativeSlides(pres, [model])).toThrow('integer');
+  });
   it.each([
     ['PNG', png.replace('image/png', 'image/PNG'), 'png', 'image/png'],
     ['JPG', jpeg.replace('image/jpeg', 'image/jpg'), 'jpeg', 'image/jpeg'],

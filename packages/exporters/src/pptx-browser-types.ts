@@ -46,6 +46,7 @@ export type BrowserStyle = Iterable<string> &
     | 'maskImage'
     | 'mixBlendMode'
     | 'objectFit'
+    | 'objectPosition'
     | 'opacity'
     | 'outlineStyle'
     | 'outlineWidth'
@@ -59,6 +60,7 @@ export type BrowserStyle = Iterable<string> &
     | 'rotate'
     | 'scale'
     | 'textDecorationLine'
+    | 'textAlign'
     | 'textOverflow'
     | 'textShadow'
     | 'textTransform'
@@ -86,6 +88,9 @@ export interface BrowserNode {
 
 export interface BrowserElement extends BrowserNode {
   tagName: string;
+  attributes: Iterable<{ name: string }>;
+  outerHTML: string;
+  cloneNode(deep: boolean): BrowserElement;
   childElementCount: number;
   children: Iterable<BrowserElement>;
   parentElement: BrowserHtmlElement | null;
@@ -107,7 +112,12 @@ export interface BrowserStyledElement extends BrowserElement {
   style: BrowserStyle;
 }
 
+export interface BrowserSvgElement extends BrowserStyledElement {
+  getScreenCTM(): { a: number; b: number; c: number; d: number; e: number; f: number } | null;
+}
+
 export interface BrowserHtmlElement extends BrowserStyledElement {
+  click(): void;
   scrollWidth: number;
   scrollHeight: number;
   clientWidth: number;
@@ -117,6 +127,7 @@ export interface BrowserHtmlElement extends BrowserStyledElement {
 export interface BrowserImageElement extends BrowserHtmlElement {
   complete: boolean;
   naturalWidth: number;
+  naturalHeight: number;
   currentSrc: string;
   src: string;
   loading: string;

@@ -1,0 +1,97 @@
+diff --git a/dist/providers/anthropic.js b/dist/providers/anthropic.js
+index fdffa11..05f6568 100644
+--- a/dist/providers/anthropic.js
++++ b/dist/providers/anthropic.js
+@@ -342,6 +342,7 @@ export const streamAnthropic = (model, context, options) => {
+             stream.push({ type: "start", partial: output });
+             const blocks = output.content;
+             for await (const event of iterateAnthropicEvents(response, options?.signal)) {
++                await options?.onNativeEvent?.(event, output);
+                 if (event.type === "message_start") {
+                     output.responseId = event.message.id;
+                     // Capture initial token usage from message_start event
+@@ -813,6 +814,10 @@ function convertMessages(messages, model, isOAuthToken, cacheControl, allowEmpty
+             }
+         }
+         else if (msg.role === "assistant") {
++            if (msg.nativeSearch?.provider === "anthropic" && msg.nativeSearch.model === model.id && msg.provider === model.provider && msg.api === model.api) {
++                params.push({ role: "assistant", content: msg.nativeSearch.output });
++                continue;
++            }
+             const blocks = [];
+             for (const block of msg.content) {
+                 if (block.type === "text") {
+diff --git a/dist/providers/openai-responses-shared.js b/dist/providers/openai-responses-shared.js
+index 3d970f3..a86ba4e 100644
+--- a/dist/providers/openai-responses-shared.js
++++ b/dist/providers/openai-responses-shared.js
+@@ -102,6 +102,10 @@ export function convertResponsesMessages(model, context, allowedToolCallProvider
+             }
+         }
+         else if (msg.role === "assistant") {
++            if (msg.nativeSearch?.provider === "openai" && msg.nativeSearch.model === model.id && msg.provider === model.provider && msg.api === model.api) {
++                messages.push(...msg.nativeSearch.output);
++                continue;
++            }
+             const output = [];
+             const assistantMsg = msg;
+             const isDifferentModel = assistantMsg.model !== model.id &&
+diff --git a/dist/providers/openai-responses.js b/dist/providers/openai-responses.js
+index 2758610..ea0292f 100644
+--- a/dist/providers/openai-responses.js
++++ b/dist/providers/openai-responses.js
+@@ -95,7 +95,13 @@ export const streamOpenAIResponses = (model, context, options) => {
+             const { data: openaiStream, response } = await client.responses.create(params, requestOptions).withResponse();
+             await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
+             stream.push({ type: "start", partial: output });
+-            await processResponsesStream(openaiStream, output, stream, model, {
++            const observedStream = (async function* () {
++                for await (const event of openaiStream) {
++                    await options?.onNativeEvent?.(event, output);
++                    yield event;
++                }
++            })();
++            await processResponsesStream(observedStream, output, stream, model, {
+                 serviceTier: options?.serviceTier,
+                 applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
+             });
+diff --git a/dist/providers/simple-options.js b/dist/providers/simple-options.js
+index 45d8e55..c57aa7b 100644
+--- a/dist/providers/simple-options.js
++++ b/dist/providers/simple-options.js
+@@ -10,6 +10,7 @@ export function buildBaseOptions(_model, options, apiKey) {
+         headers: options?.headers,
+         onPayload: options?.onPayload,
+         onResponse: options?.onResponse,
++        onNativeEvent: options?.onNativeEvent,
+         timeoutMs: options?.timeoutMs,
+         websocketConnectTimeoutMs: options?.websocketConnectTimeoutMs,
+         maxRetries: options?.maxRetries,
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index b2a00df..2f7cb6f 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -31,7 +31,15 @@ export interface ProviderResponse {
+     status: number;
+     headers: Record<string, string>;
+ }
++export interface NativeSearchMessageData {
++    provider: "openai" | "anthropic";
++    model: string;
++    output: unknown[];
++    paused?: boolean;
++}
+ export interface StreamOptions {
++    /** Raw provider events for hosted tool adapters. Awaited before normal parsing. */
++    onNativeEvent?: (event: unknown, output: AssistantMessage) => void | Promise<void>;
+     temperature?: number;
+     maxTokens?: number;
+     signal?: AbortSignal;
+@@ -209,6 +217,7 @@ export interface UserMessage {
+     timestamp: number;
+ }
+ export interface AssistantMessage {
++    nativeSearch?: NativeSearchMessageData;
+     role: "assistant";
+     content: (TextContent | ThinkingContent | ToolCall)[];
+     api: Api;

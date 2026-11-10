@@ -29,6 +29,11 @@ Default to 16:9 (1920×1080px or 1280×720px). Avoid 4:3 — it looks dated. For
 ### Data Slides
 Every chart needs: a headline that states the insight (not just the metric), axis labels in the same font as the slide body, and a clear color key. Never use 3-D charts or pie charts with more than 4 segments. Bar charts and area charts read fastest. Use a single accent color for the data series you want the audience to notice; grey out the rest.
 
+For decks that may be exported as editable PPTX, preserve the data alongside each
+bar, line, or pie chart in a `data-pptx-chart` JSON attribute on its container.
+Follow `skill("chart-rendering")` for the schema, and draw the visible chart from
+the same data so the PPTX chart remains consistent with the preview.
+
 ### Color Discipline
 Limit the palette to 3 colors: background, text, and one accent. If you need a second accent, make it a tint of the first. Every slide in the deck shares the same palette — do not introduce new colors mid-deck.
 

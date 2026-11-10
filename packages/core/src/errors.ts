@@ -107,6 +107,27 @@ export function remapProviderError(
 ): unknown {
   if (!(err instanceof Error)) return err;
   if (err instanceof CodesignError && err.code === ERROR_CODES.PROVIDER_ABORTED) return err;
+  const lowerMessage = err.message.toLowerCase();
+  if (
+    wire === 'openai-codex-responses' &&
+    lowerMessage.includes('model') &&
+    ([
+      'not supported',
+      'not available',
+      'does not exist',
+      'not found',
+      'unsupported model',
+      'unknown model',
+    ].some((phrase) => lowerMessage.includes(phrase)) ||
+      (lowerMessage.includes('access') &&
+        (lowerMessage.includes('do not have') || lowerMessage.includes("don't have"))))
+  ) {
+    return new CodesignError(
+      `${err.message}\nChoose a model available to your ChatGPT account in Settings > Models (Edit model ID), then retry. / 请到 设置 > Models 编辑模型 ID，选择当前 ChatGPT 账号可用的模型后重试。`,
+      err instanceof CodesignError ? err.code : ERROR_CODES.PROVIDER_ERROR,
+      { cause: err },
+    );
+  }
   // Third-party Anthropic relays often reply to POST /v1/messages with 5xx +
   // "not implemented" while their /v1/models endpoint works. Catch that shape
   // before any other classification so the UI can suggest switching wire

@@ -16,6 +16,17 @@ function design(id: string, updatedAt: string): Design {
 }
 
 describe('buildRecentDesigns', () => {
+  it('keeps system editor sessions out of ordinary recent designs', () => {
+    const editor = {
+      ...design('system-editor', '2026-05-06T11:00:00.000Z'),
+      designSystemId: 'system',
+    };
+    expect(
+      buildRecentDesigns([editor, design('normal', '2026-05-05T11:00:00.000Z')], {}).map(
+        (d) => d.id,
+      ),
+    ).toEqual(['normal']);
+  });
   it('uses update time when no design is actively working', () => {
     const designs = [
       design('recent-1', '2026-05-05T11:00:00.000Z'),

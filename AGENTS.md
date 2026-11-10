@@ -155,6 +155,50 @@ examples/            # Public demo reproductions
 - Prefer manifest and switch logic over registries until two real callers need more.
 - Comment only when the reason would surprise the next maintainer.
 
+### Verify UI Changes Without Taking Over the Desktop
+
+After changing Open CoDesign's interface, styles, UI state, or renderer/main interactions,
+prefer the continuous background session to verify the affected flow before delivery.
+Read [Background UI debugging](apps/desktop/BACKGROUND_DEBUG.md) for the supported protocol
+and boundaries. Documentation-only changes do not require a UI session.
+
+From the repository root, build the current code and start an isolated instance:
+
+```powershell
+pnpm --filter @open-codesign/desktop build --mode background-debug
+node --import tsx apps/cli/src/main.ts debug session --output ".Codex/workspace/ui-verification-001"
+```
+
+Ensure `.Codex/workspace` exists and choose a new output directory for every run. Rebuild
+and start a new session after further source edits; do not validate stale build output.
+
+- Keep the same process and stdin/stdout pipes open across tool calls. On Windows, spawn
+  the client with `windowsHide: true`. Wait for `ready`, inspect `data.screenshot` and
+  `data.elements`, then send one JSONL `snapshot` or `act` request at a time with a unique
+  ID. Inspect the response before deciding the next step; re-observe after navigation.
+- Exercise the changed behavior and relevant state transitions, not just app startup.
+  Check screenshots visually and use `assert` steps for expected text, values and visibility.
+  Collect errors throughout the session. A corrected next request does not erase an earlier
+  failed attempt; retain and explain failures in the final report.
+- Save the generated PNGs and `report.json` in the run directory, plus the JSONL transcript
+  when available. Use synthetic inputs: screenshots are not redacted. Keep evidence out of
+  Git and link the relevant screenshots/report in the final response with the tested flow,
+  errors, process exit code, cleanup result, and any unverified behavior.
+- Send `close` and wait for both `closed` and process exit. Verify `cleanup: true`. On Windows,
+  require completed observation, a positive sample count, no overflow, and zero visible-window,
+  foreground/focus, and injected-input counters. Live frames are not final proof. The user's
+  own cursor movement and switching other applications are allowed, not test failures.
+- Do not launch visible Electron windows, focus/restore the app, simulate system mouse or
+  keyboard input, or attach to the user's normal app/profile to complete verification.
+  Do not silently fall back to foreground computer use. If startup, monitoring, or a required
+  operation is blocked/unsupported, preserve available evidence, report the exact blocker
+  and unverified steps, and continue independent checks. Do not bypass the debug host's
+  credential, model, native-dialog, clipboard, external-app, or IPC restrictions.
+- Use `debug ui` for a fixed batch regression when appropriate. Background UI verification
+  complements the relevant unit/integration tests and repository checks; it does not replace
+  them. Run `pnpm --filter @open-codesign/desktop test:debug-ui` when changing the debug host
+  or its protocol; ordinary `pnpm test` skips those real Electron integration cases.
+
 ## Permission Model
 
 Open CoDesign uses one permission model with tiers:

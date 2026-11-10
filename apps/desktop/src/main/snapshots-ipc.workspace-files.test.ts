@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { preparePromptContext } from './prompt-context';
 import { createDesign, getDesign, initInMemoryDb, updateDesignWorkspace } from './snapshots-db';
 import { registerWorkspaceIpc } from './snapshots-ipc';
 
@@ -264,6 +265,38 @@ describe('workspace files IPC legacy workspace fallback', () => {
       expect(getDesign(db, design.id)?.updatedAt).toBe('2026-05-02T00:00:00.000Z');
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['image/jpeg', 'jpg', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00])],
+    ['image/webp', 'webp', Buffer.from('524946460400000057454250', 'hex')],
+  ])('preserves unnamed %s pixels through workspace import and prompt context', async (mediaType, extension, bytes) => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-clipboard-image-chain-'));
+    try {
+      const payload = {
+        blobs: [{ name: '', mediaType, dataBase64: bytes.toString('base64') }],
+      };
+      const db = initInMemoryDb();
+      const design = createDesign(db, 'Clipboard image');
+      updateDesignWorkspace(db, design.id, root);
+      registerWorkspaceIpc(db, () => null);
+      const result = (await getHandler('codesign:files:v1:import-to-workspace')(null, {
+        schemaVersion: 1,
+        designId: design.id,
+        source: 'clipboard',
+        ...payload,
+        timestamp: '2026-05-05T12:34:56.000Z',
+      })) as Array<{ path: string; name: string; size: number }>;
+      expect(result[0]?.path).toBe(`references/pasted-20260505-123456.${extension}`);
+      const context = await preparePromptContext({ workspaceRoot: root, attachments: result });
+      expect(context.attachments[0]).toMatchObject({
+        path: result[0]?.path,
+        mediaType,
+        imageDataUrl: `data:${mediaType};base64,${bytes.toString('base64')}`,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 

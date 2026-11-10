@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WebSearchBackendSchema } from './web-search-routing';
 
 // ── Legacy enum (v1/v2) — kept for backward compat & UI shortlist ─────────────
 
@@ -104,7 +105,12 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 export const ReasoningLevelSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
 
-export const ProviderModelDiscoveryModeSchema = z.enum(['models', 'static-hint', 'manual']);
+export const ProviderModelDiscoveryModeSchema = z.enum([
+  'models',
+  'static-hint',
+  'manual',
+  'infer-only',
+]);
 export type ProviderModelDiscoveryMode = z.infer<typeof ProviderModelDiscoveryModeSchema>;
 
 export const ProviderCapabilitiesSchema = z
@@ -204,7 +210,7 @@ export const ProviderEntrySchema = z
   .strict();
 export type ProviderEntry = z.infer<typeof ProviderEntrySchema>;
 
-interface ProviderCapabilityInput {
+export interface ProviderCapabilityInput {
   wire: WireApi;
   requiresApiKey?: boolean | undefined;
   modelsHint?: string[] | undefined;
@@ -212,33 +218,65 @@ interface ProviderCapabilityInput {
   capabilities?: ProviderCapabilities | undefined;
 }
 
+export interface ResolvedProviderCapabilities {
+  supportsKeyless: boolean;
+  supportsModelsEndpoint: boolean;
+  supportsReasoning: boolean;
+  requiresClaudeCodeIdentity: boolean;
+  modelDiscoveryMode: ProviderModelDiscoveryMode;
+}
+
+export function deriveModelDiscoveryMode(
+  entry: ProviderCapabilityInput,
+): ProviderModelDiscoveryMode {
+  if (entry.wire === 'openai-codex-responses') return 'static-hint';
+  if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) return 'static-hint';
+  return 'models';
+}
+
+function resolveDeclaredDiscoveryMode(
+  defaults: ResolvedProviderCapabilities,
+  explicit: ProviderCapabilities,
+): ProviderModelDiscoveryMode {
+  if (explicit.modelDiscoveryMode !== undefined) return explicit.modelDiscoveryMode;
+  if (explicit.supportsModelsEndpoint === false && defaults.modelDiscoveryMode === 'models') {
+    return 'infer-only';
+  }
+  return defaults.modelDiscoveryMode;
+}
+
 export function defaultProviderCapabilities(
   _providerId: string,
   entry: ProviderCapabilityInput,
-): Required<ProviderCapabilities> {
-  const supportsModelsEndpoint =
-    entry.wire !== 'openai-codex-responses' && entry.modelsHint === undefined;
+): ResolvedProviderCapabilities {
+  const modelDiscoveryMode = deriveModelDiscoveryMode(entry);
   return {
     supportsKeyless: entry.requiresApiKey === false,
-    supportsModelsEndpoint,
+    supportsModelsEndpoint: modelDiscoveryMode === 'models',
     supportsReasoning:
       (entry.reasoningLevel !== undefined && entry.reasoningLevel !== 'off') ||
       entry.wire === 'anthropic' ||
       entry.wire === 'openai-responses' ||
       entry.wire === 'openai-codex-responses',
     requiresClaudeCodeIdentity: false,
-    modelDiscoveryMode:
-      entry.modelsHint !== undefined ? 'static-hint' : supportsModelsEndpoint ? 'models' : 'manual',
+    modelDiscoveryMode,
   };
 }
 
 export function resolveProviderCapabilities(
   providerId: string,
   entry: ProviderCapabilityInput,
-): Required<ProviderCapabilities> {
+): ResolvedProviderCapabilities {
+  const defaults = defaultProviderCapabilities(providerId, entry);
+  const explicit = entry.capabilities ?? {};
+  const modelDiscoveryMode = resolveDeclaredDiscoveryMode(defaults, explicit);
   return {
-    ...defaultProviderCapabilities(providerId, entry),
-    ...(entry.capabilities ?? {}),
+    supportsKeyless: explicit.supportsKeyless ?? defaults.supportsKeyless,
+    supportsModelsEndpoint: modelDiscoveryMode === 'models',
+    supportsReasoning: explicit.supportsReasoning ?? defaults.supportsReasoning,
+    requiresClaudeCodeIdentity:
+      explicit.requiresClaudeCodeIdentity ?? defaults.requiresClaudeCodeIdentity,
+    modelDiscoveryMode,
   };
 }
 
@@ -356,6 +394,17 @@ export const ConfigV3Schema = z
         maxCalls: z.number().int().min(1).max(50).default(12),
         timeoutMs: z.number().int().min(1000).max(60000).default(15000),
         maxChars: z.number().int().min(1000).max(12000).default(10000),
+        /**
+         * Which backend to use. Optional and default-free on purpose: an
+         * absent value must round-trip as absent so configs written before
+         * routing existed keep parsing to their exact old shape. Routing
+         * treats absent-on-existing-webSearch as `tavily`.
+         */
+        backend: WebSearchBackendSchema.optional(),
+        /** Opt-in to provider-native web search tools. Absent means off. */
+        nativeEnabled: z.boolean().optional(),
+        /** Per-turn cap on native tool requests; absent means caller default. */
+        maxNativeRequests: z.number().int().min(1).max(50).optional(),
       })
       .strict()
       .optional(),

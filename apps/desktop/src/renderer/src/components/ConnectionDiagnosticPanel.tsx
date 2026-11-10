@@ -1,6 +1,11 @@
 import { useT } from '@open-codesign/i18n';
-import type { ErrorCode } from '@open-codesign/shared';
-import { type DiagnoseContext, type DiagnosticHypothesis, diagnose } from '@open-codesign/shared';
+import {
+  type DiagnoseContext,
+  type DiagnosticHypothesis,
+  diagnose,
+  type ErrorCode,
+  type ProviderModelDiscoveryMode,
+} from '@open-codesign/shared';
 import { AlertCircle, ExternalLink, FileText, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../store';
@@ -65,6 +70,8 @@ export interface ConnectionDiagnosticPanelProps {
   baseUrl: string;
   /** Provider ID for context */
   provider: string;
+  /** Declared listing strategy so missing /models is not a uniform hard failure. */
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
   /** Called when the user clicks "Apply this fix" with a baseUrl transform */
   onApplyFix: (newBaseUrl: string) => void;
   /** Called when the user clicks "Test again" */
@@ -81,6 +88,7 @@ export function ConnectionDiagnosticPanel({
   attemptedUrl,
   baseUrl,
   provider,
+  modelDiscoveryMode,
   onApplyFix,
   onTestAgain,
   onDismiss,
@@ -90,7 +98,12 @@ export function ConnectionDiagnosticPanel({
   const reportableErrorToast = useCodesignStore((s) => s.reportableErrorToast);
   const [fixApplied, setFixApplied] = useState(false);
 
-  const ctx: DiagnoseContext = { provider, baseUrl };
+  const ctx: DiagnoseContext = {
+    provider,
+    baseUrl,
+    ...(attemptedUrl !== undefined ? { attemptedUrl } : {}),
+    ...(modelDiscoveryMode !== undefined ? { modelDiscoveryMode } : {}),
+  };
   const hypotheses: DiagnosticHypothesis[] = diagnose(errorCode, ctx);
   const primary = hypotheses[0];
   const fix = primary?.suggestedFix;

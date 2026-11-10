@@ -50,8 +50,9 @@ while [ "$attempt" -le "$BUILD_RETRIES" ]; do
   cleanup_open_codesign_volumes
   if run_once "$@"; then
     exit 0
+  else
+    status="$?"
   fi
-  status="$?"
   cleanup_open_codesign_volumes
   if [ "$attempt" -ge "$BUILD_RETRIES" ]; then
     exit "$status"

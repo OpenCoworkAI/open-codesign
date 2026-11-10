@@ -421,6 +421,16 @@ See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%B
 
 ## Contributing
 
+For automation without the desktop window, the [Agent-native CLI](./apps/cli/README.md)
+provides diagnostics, workspace inspection and HTML export. Start with
+`pnpm --silent cli --help` from a source checkout.
+
+To verify Open CoDesign's own interface in an isolated offscreen Electron instance, use
+[`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md). It captures screenshots, runs page
+interactions, collects errors, and checks Windows window/focus/input observations.
+Use `debug session` for a continuous agent screenshot/decision/action loop in the same
+isolated instance, with JSONL requests and automatic cleanup on close or timeout.
+
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 Desktop tests use at most two workers on Windows so concurrent Chromium and
 filesystem integration suites do not exhaust the host during workspace-wide checks.

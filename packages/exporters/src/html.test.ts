@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -92,6 +92,24 @@ describe('buildHtmlDocument', () => {
     const out = readFileSync(dest, 'utf8');
     expect(out).toContain('src="data:image/svg+xml;charset=utf-8,');
     expect(out).not.toContain('src="assets/logo.svg"');
+  });
+
+  it('does not embed files reached through a workspace symlink or junction escape', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'codesign-html-external-'));
+    const link = join(tempDir, 'external-link');
+    try {
+      writeFileSync(join(outside, 'private.svg'), '<svg>EXTERNAL_SECRET</svg>');
+      symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+      const out = await buildInlineHtmlDocument('<img src="external-link/private.svg">', {
+        assetRootPath: tempDir,
+        assetBasePath: tempDir,
+      });
+      expect(out).not.toContain('EXTERNAL_SECRET');
+      expect(out).toContain('external-link/private.svg');
+    } finally {
+      rmSync(link, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it.each([

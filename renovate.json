@@ -1,34 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":semanticCommits",
-    ":semanticCommitTypeAll(chore)",
-    "group:allNonMajor",
-    "schedule:weekly"
-  ],
-  "labels": ["dependencies"],
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["major"],
-      "addLabels": ["dependencies-major"],
-      "automerge": false
-    },
-    {
-      "matchPackageNames": ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent"],
-      "groupName": "pi-ai",
-      "schedule": ["before 5am on monday"]
-    },
-    {
-      "matchPackageNames": ["electron"],
-      "allowedVersions": "!/^41\\./"
-    }
-  ],
-  "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": ["before 5am on the first day of the month"]
-  },
-  "vulnerabilityAlerts": {
-    "labels": ["security"]
-  }
+  "enabled": false
 }

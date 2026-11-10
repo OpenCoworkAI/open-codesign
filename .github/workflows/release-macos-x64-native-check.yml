@@ -4,8 +4,21 @@ on:
   push:
     branches:
       - dev/v0.2
-    tags:
-      - 'v*.*.*'
+  pull_request:
+    branches: [main, dev/v0.2]
+    paths:
+      - '.github/workflows/release-macos-x64-native-check.yml'
+      - '.github/workflows/release.yml'
+      - 'apps/desktop/electron-builder.yml'
+      - 'apps/desktop/scripts/**'
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      upload-artifact:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       ref:
@@ -14,7 +27,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+  group: native-intel-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -23,11 +36,14 @@ permissions:
 jobs:
   macos-x64-native:
     name: Native Intel packaging check
-    runs-on: macos-13
+    runs-on: macos-15-intel
     timeout-minutes: 60
     env:
-      CHECK_REF: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
+      CHECK_REF: ${{ inputs.ref || github.ref }}
     steps:
+      - name: Verify native Intel runner
+        run: test "$(uname -m)" = x86_64
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.CHECK_REF }}
@@ -100,6 +116,8 @@ jobs:
           exit 1
 
       - name: Upload native x64 artifact
+        # A called release check must not add a second DMG to publish's downloads.
+        if: github.workflow == 'Release macOS x64 native check' || inputs.upload-artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-check-macos-x64

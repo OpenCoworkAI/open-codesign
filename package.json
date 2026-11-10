@@ -32,19 +32,22 @@
     "smoke": "tsx scripts/smoke-models.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build && changeset publish"
+    "release": "turbo run build && changeset publish",
+    "cli": "tsx apps/cli/src/main.ts"
   },
   "pnpm": {
     "overrides": {
       "@xmldom/xmldom@<0.8.15": "0.8.15",
       "pptxgenjs@4.0.1>image-size": "-",
-      "undici@>=8.0.0 <8.10.2": "8.10.2",
+      "undici@>=8.0.0 <8.12.4": "8.12.4",
       "fast-xml-parser@<5.7.0": ">=5.7.0",
       "vitepress>vite": "6.4.2",
-      "esbuild@<0.25.0": ">=0.25.0"
+      "esbuild@<0.25.0": ">=0.25.0",
+      "tar@<7.5.22": "7.5.22"
     },
     "patchedDependencies": {
-      "pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch"
+      "pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch",
+      "@earendil-works/pi-ai@0.79.10": "patches/@earendil-works__pi-ai@0.79.10.patch"
     }
   },
   "devDependencies": {

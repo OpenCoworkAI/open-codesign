@@ -12,6 +12,7 @@ vi.mock('./electron-runtime', () => ({
     isEncryptionAvailable: vi.fn(() => true),
     encryptString: vi.fn((s: string) => Buffer.from(`encrypted:${s}`, 'utf8')),
     decryptString: vi.fn(() => ''),
+    getSelectedStorageBackend: vi.fn(() => 'gnome_libsecret'),
   },
 }));
 
@@ -24,6 +25,8 @@ import { decryptSecret, encryptSecret, migrateSecrets } from './keychain';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValue(true);
+  vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue('gnome_libsecret');
 });
 
 function expectKeychainEmpty(fn: () => unknown): void {
@@ -37,18 +40,34 @@ function expectKeychainEmpty(fn: () => unknown): void {
   throw new Error('Expected KEYCHAIN_EMPTY_INPUT');
 }
 
+function expectKeychainUnavailable(fn: () => unknown): void {
+  try {
+    fn();
+  } catch (err) {
+    expect(err).toBeInstanceOf(CodesignError);
+    expect((err as CodesignError).code).toBe(ERROR_CODES.KEYCHAIN_UNAVAILABLE);
+    return;
+  }
+  throw new Error('Expected KEYCHAIN_UNAVAILABLE');
+}
+
 describe('decryptSecret', () => {
   it('encrypts new secrets with safeStorage when available', () => {
     const stored = encryptSecret('sk-test-secret');
     expect(stored).toBe(`safe:${Buffer.from('encrypted:sk-test-secret').toString('base64')}`);
   });
 
-  it('falls back to plaintext rows when encryption is unavailable', () => {
+  it('fails closed instead of writing plaintext when encryption is unavailable', () => {
     vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
-    expect(encryptSecret('sk-test-secret')).toBe('plain:sk-test-secret');
-    expect(loggerMock.warn).toHaveBeenCalledWith(
+    expectKeychainUnavailable(() => encryptSecret('sk-test-secret'));
+    expect(loggerMock.warn).not.toHaveBeenCalledWith(
       'keychain.safeStorage.unavailable_plaintext_fallback',
     );
+  });
+
+  it('fails closed when Linux basic_text backend is selected', () => {
+    vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValueOnce('basic_text');
+    expectKeychainUnavailable(() => encryptSecret('sk-test-secret'));
   });
 
   it('reads existing plaintext secret rows', () => {
@@ -119,7 +138,33 @@ describe('migrateSecrets', () => {
     const migrated = migrateSecrets(cfg);
     expect(migrated.changed).toBe(true);
     expect(migrated.config.secrets['openai']?.ciphertext).toBe('plain:sk-test-secret');
+    expect(migrated.config.secrets['openai']?.mask).toBe('sk-***cret');
     vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValue(true);
+  });
+
+  it('keeps plaintext rows when only basic_text backend is available', () => {
+    vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue('basic_text');
+    const cfg = hydrateConfig({
+      version: 3,
+      activeProvider: 'openai',
+      activeModel: 'gpt-5.4',
+      providers: {
+        openai: {
+          id: 'openai',
+          name: 'OpenAI',
+          builtin: true,
+          wire: 'openai-chat',
+          baseUrl: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-5.4',
+        },
+      },
+      secrets: { openai: { ciphertext: 'plain:sk-test-secret', mask: '' } },
+    });
+
+    const migrated = migrateSecrets(cfg);
+    expect(migrated.changed).toBe(true);
+    expect(migrated.config.secrets['openai']?.ciphertext).toBe('plain:sk-test-secret');
+    expect(migrated.config.secrets['openai']?.mask).toBe('sk-***cret');
   });
 
   it('preserves legacy secret rows that decrypt to an empty string during migration', () => {

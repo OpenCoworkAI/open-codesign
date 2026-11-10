@@ -49,6 +49,36 @@ const mrr = [
 ];
 ```
 
+When a chart belongs to a slide deck that may be exported as an editable PPTX,
+keep its data on the chart's enclosing DOM element as `data-pptx-chart`. The
+attribute contains JSON with `type` (`bar`, `line`, or `pie`), a nonempty array
+of string `labels`, and a nonempty array of named `series`. Every series has a
+`values` array of finite numbers matching the label count. A pie chart has one
+series with nonnegative values. Render the visible chart from the same data.
+For a horizontal bar chart, add `barDirection: 'horizontal'`; bars default to vertical.
+Preserve chart styling with optional `colors` (RGB hex strings, one per series
+or per pie slice), `showLegend`, and `showValue` booleans. Set `showLegend: false`
+when a separate DOM legend is already visible. For a donut use `type: 'pie'`
+with integer `holeSize` between 10 and 90 (percent). Use the same palette and hole ratio
+for the SVG and the metadata. `showValue` enables numeric labels on bars/lines
+and category/percentage labels on pies/donuts.
+
+```jsx
+const chart = {
+  type: 'bar',
+  labels: ['一月', '二月'],
+  series: [{ name: '收入', values: [12, 18] }],
+};
+<div data-pptx-chart={JSON.stringify(chart)} aria-label="月度收入图表">
+  {/* Draw the visible bars from chart.labels and chart.series. */}
+</div>
+```
+
+The editable exporter replaces the marked container with a native PowerPoint
+chart. Without this attribute, supported SVG primitives remain editable shapes
+and text but have no chart data series; unsupported SVG and canvas use a local
+image fallback.
+
 Rules:
 
 - Use plausible uneven values, not perfectly smooth diagonals.

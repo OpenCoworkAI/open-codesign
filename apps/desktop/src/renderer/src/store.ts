@@ -178,6 +178,7 @@ export interface CodesignState {
   designsLoaded: boolean;
   designsViewOpen: boolean;
   newDesignDialogOpen: boolean;
+  selectedLibrarySystemId: string | null;
   designToDelete: Design | null;
   designToRename: Design | null;
   /** Workspace rebind confirmation state: { design, newPath } when user picks a different folder */
@@ -360,9 +361,13 @@ export interface CodesignState {
 
   loadDesigns: () => Promise<void>;
   ensureCurrentDesign: () => Promise<void>;
-  openNewDesignDialog: () => void;
+  openNewDesignDialog: (designSystemId?: string) => void;
   closeNewDesignDialog: () => void;
-  createNewDesign: (workspacePath?: string | null, demoInputId?: string) => Promise<Design | null>;
+  createNewDesign: (
+    workspacePath?: string | null,
+    demoInputId?: string,
+    designSystemId?: string,
+  ) => Promise<Design | null>;
   switchDesign: (id: string) => Promise<void>;
   renameCurrentDesign: (name: string) => Promise<void>;
   renameDesign: (id: string, name: string, options?: RenameDesignOptions) => Promise<void>;
@@ -550,6 +555,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   designsLoaded: false,
   designsViewOpen: false,
   newDesignDialogOpen: false,
+  selectedLibrarySystemId: null,
   designToDelete: null,
   designToRename: null,
   workspaceRebindPending: null,

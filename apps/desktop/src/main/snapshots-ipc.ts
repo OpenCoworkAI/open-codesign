@@ -1300,6 +1300,24 @@ export function registerSnapshotsIpc(db: Database): void {
       const name = (r['name'] as string).trim();
       const requestedWorkspacePath = parseCreateDesignWorkspacePath(r);
       const demoInputId = r['demoInputId'];
+      const designSystemId = r['designSystemId'];
+      if (
+        designSystemId !== undefined &&
+        (typeof designSystemId !== 'string' || !designSystemId.trim() || demoInputId !== undefined)
+      ) {
+        throw new CodesignError(
+          'Invalid designSystemId or conflicting demo inputs',
+          'IPC_BAD_INPUT',
+        );
+      }
+      if (typeof designSystemId === 'string' && requestedWorkspacePath !== undefined) {
+        const existing = await pathExists(path.join(requestedWorkspacePath, 'DESIGN.md'));
+        if (existing)
+          throw new CodesignError(
+            'DESIGN.md already exists. Keep the existing system or choose another folder. / 目录已有 DESIGN.md，请取消系统选择以沿用原规范，或更换目录。',
+            'IPC_CONFLICT',
+          );
+      }
       if (
         demoInputId !== undefined &&
         (!isDemoInputId(demoInputId) || requestedWorkspacePath !== undefined)
@@ -1324,13 +1342,18 @@ export function registerSnapshotsIpc(db: Database): void {
           const { seedDemoInputs } = await import('./demo-inputs');
           await seedDemoInputs(workspacePath, demoInputId);
         }
-        return await bindWorkspace(
+        const bound = await bindWorkspace(
           db,
           design.id,
           workspacePath,
           false,
           requestedWorkspacePath === undefined ? 'blank-canvas' : 'work-on-project',
         );
+        if (typeof designSystemId === 'string') {
+          const { applyLibrarySystem } = await import('./design-system-library-ipc');
+          await applyLibrarySystem(designSystemId, workspacePath);
+        }
+        return bound;
       } catch (err) {
         if (autoWorkspacePath !== null) {
           await cleanupAutoAllocatedWorkspace(autoWorkspacePath, 'create-design');

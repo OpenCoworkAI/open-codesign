@@ -304,6 +304,20 @@ describe('durable ask IPC', () => {
 });
 
 describe('web research consent through the live ask IPC bridge', () => {
+  it('distinguishes native model requests from searches and page reads in consent', async () => {
+    const request = vi.fn<Parameters<typeof createWebResearchAuthorization>[1]>(async () => ({
+      status: 'answered',
+      answers: [{ questionId: 'web-research-permission', value: 'Allow this run' }],
+    }));
+    await createWebResearchAuthorization(
+      { enabled: true, maxCalls: 7, maxNativeRequests: 12, service: 'OpenAI' },
+      request,
+    )();
+    expect(request.mock.calls[0]?.[0].questions[0]?.prompt).toBe(
+      'Allow up to 12 model requests with native search (each may run multiple searches) and 7 public page reads for this run?',
+    );
+  });
+
   it.each([
     'Allow this run',
     'Deny',

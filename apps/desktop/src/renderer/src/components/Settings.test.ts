@@ -5,6 +5,7 @@ import {
   primarySettingsTab,
   resolveTimeoutOptions,
   SETTINGS_TABS,
+  settingsModelPickerState,
   TIMEOUT_OPTION_SECONDS,
 } from './Settings';
 
@@ -137,6 +138,65 @@ describe('computeModelOptions', () => {
   });
 });
 
+describe('settingsModelPickerState', () => {
+  it('shows a select for remote listing while models are loading', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: true,
+        models: null,
+        forceManual: false,
+      }),
+    ).toBe('loading');
+  });
+
+  it('falls back to manual entry when remote listing is empty', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: false,
+        models: [],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+  });
+
+  it('does not force remote discover for static-hint or infer-only', () => {
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'static-hint',
+        loading: false,
+        models: ['gpt-5.5'],
+        forceManual: false,
+      }),
+    ).toBe('select');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'infer-only',
+        loading: false,
+        models: ['glm-4.6'],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'manual',
+        loading: false,
+        models: ['custom'],
+        forceManual: false,
+      }),
+    ).toBe('manual');
+    expect(
+      settingsModelPickerState({
+        discoveryMode: 'models',
+        loading: false,
+        models: ['gpt-4o'],
+        forceManual: true,
+      }),
+    ).toBe('manual');
+  });
+});
+
 describe('settings navigation', () => {
   it('exposes frequently used settings as separate top-level tabs instead of burying them under Advanced', () => {
     expect(SETTINGS_TABS.map((entry) => entry.id)).toEqual([
@@ -163,32 +223,40 @@ describe('settings navigation', () => {
 });
 
 describe('resolveTimeoutOptions', () => {
-  it('covers the default 1200s stored value and long-generation 30m / 1h / 2h choices so users can configure what they need without hitting the old 300s ceiling', () => {
+  it('covers the default 1200s stored value plus long overnight and no-timeout choices', () => {
     expect(TIMEOUT_OPTION_SECONDS).toContain(1200);
     expect(TIMEOUT_OPTION_SECONDS).toContain(1800);
     expect(TIMEOUT_OPTION_SECONDS).toContain(3600);
     expect(TIMEOUT_OPTION_SECONDS).toContain(7200);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(21600);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(43200);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(86400);
+    expect(TIMEOUT_OPTION_SECONDS).toContain(0);
   });
 
   it('returns the canonical options unchanged when the stored value is already present', () => {
     const options = resolveTimeoutOptions(1200);
-    expect(options).toEqual([...TIMEOUT_OPTION_SECONDS]);
+    expect(options).toEqual(
+      [...TIMEOUT_OPTION_SECONDS].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b)),
+    );
   });
 
   it("merges a stored value that is not in the canonical list and keeps the list sorted so the select shows the user's existing choice instead of silently downgrading on save", () => {
     const options = resolveTimeoutOptions(900);
     expect(options).toContain(900);
-    expect(options).toEqual([...options].sort((a, b) => a - b));
+    expect(options).toEqual([...options].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b)));
     // Canonical entries are preserved.
     for (const sec of TIMEOUT_OPTION_SECONDS) {
       expect(options).toContain(sec);
     }
   });
 
-  it('ignores non-positive or non-finite stored values rather than injecting bogus options', () => {
-    expect(resolveTimeoutOptions(0)).toEqual([...TIMEOUT_OPTION_SECONDS]);
-    expect(resolveTimeoutOptions(-1)).toEqual([...TIMEOUT_OPTION_SECONDS]);
-    expect(resolveTimeoutOptions(Number.NaN)).toEqual([...TIMEOUT_OPTION_SECONDS]);
-    expect(resolveTimeoutOptions(Number.POSITIVE_INFINITY)).toEqual([...TIMEOUT_OPTION_SECONDS]);
+  it('keeps 0 (no timeout) last in the list and ignores negative / non-finite values', () => {
+    const canonical = resolveTimeoutOptions(1200);
+    expect(resolveTimeoutOptions(0)).toEqual(canonical);
+    expect(canonical[canonical.length - 1]).toBe(0);
+    expect(resolveTimeoutOptions(-1)).toEqual(canonical);
+    expect(resolveTimeoutOptions(Number.NaN)).toEqual(canonical);
+    expect(resolveTimeoutOptions(Number.POSITIVE_INFINITY)).toEqual(canonical);
   });
 });

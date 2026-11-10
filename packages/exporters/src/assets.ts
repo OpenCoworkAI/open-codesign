@@ -289,6 +289,12 @@ async function readReferenceAsDataUri(
   const ref = resolveAssetReference(raw, root, contextDir);
   if (ref === null) return null;
   try {
+    // Lexical containment alone does not constrain workspace symlinks/junctions.
+    const [realRoot, realAsset] = await Promise.all([
+      fs.realpath(root.rootPath),
+      fs.realpath(ref.absolutePath),
+    ]);
+    if (!isInsideRoot(realAsset, realRoot)) return null;
     const ext = path.extname(ref.absolutePath).toLowerCase();
     let content = await fs.readFile(ref.absolutePath);
     if (ext === '.css' && !seen.has(ref.absolutePath)) {

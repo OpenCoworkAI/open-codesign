@@ -424,11 +424,36 @@ describe('armGenerationTimeout', () => {
     const logger = { warn: vi.fn() };
 
     const clear = await armGenerationTimeout('gen-1', controller, async () => 0, logger);
-    vi.advanceTimersByTime(60_000);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(7 * 24 * 60 * 60 * 1000);
     clear();
 
     expect(controller.signal.aborted).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    21600, 43200, 86400,
+  ])('waits the full %s seconds before aborting an overnight generation', async (timeoutSec) => {
+    const controller = new AbortController();
+    const logger = { warn: vi.fn() };
+    const clear = await armGenerationTimeout(
+      'gen-overnight',
+      controller,
+      async () => timeoutSec,
+      logger,
+    );
+
+    vi.advanceTimersByTime(timeoutSec * 1000 - 1);
+    expect(controller.signal.aborted).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ code: 'GENERATION_TIMEOUT' });
+    expect(logger.warn).toHaveBeenCalledWith('generate.timeout.fired', {
+      id: 'gen-overnight',
+      timeoutSec,
+    });
+    clear();
   });
 
   it('clamps very large timeout values to Node setTimeout int32 cap so the abort does not fire immediately', async () => {

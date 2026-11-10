@@ -118,6 +118,15 @@ describe('readPersisted()', () => {
     });
   });
 
+  it.each([
+    0, 21600, 43200, 86400,
+  ])('preserves a persisted generation timeout of %s seconds', async (generationTimeoutSec) => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 10, updateChannel: 'stable', generationTimeoutSec }),
+    );
+    await expect(readPersisted()).resolves.toMatchObject({ generationTimeoutSec });
+  });
+
   it('ignores unknown fields in persisted preferences from stale local builds', async () => {
     readFileMock.mockResolvedValueOnce(
       JSON.stringify({
@@ -255,6 +264,9 @@ describe('preferences memory schema fields', () => {
   const handlers: Record<string, (...args: any[]) => unknown> = {};
 
   beforeEach(async () => {
+    readFileMock.mockReset();
+    writeFileMock.mockReset();
+    writeFileMock.mockImplementation(async () => {});
     for (const key of Object.keys(handlers)) delete handlers[key];
     const { ipcMain } = await import('electron');
     vi.mocked(ipcMain.handle).mockImplementation((channel, handler) => {
@@ -291,6 +303,39 @@ describe('preferences memory schema fields', () => {
     ).rejects.toThrow(/unsupported field/);
     expect(readFileMock).toHaveBeenCalledTimes(readCalls);
     expect(writeFileMock).toHaveBeenCalledTimes(writeCalls);
+  });
+
+  it.each([
+    0, 21600, 43200, 86400,
+  ])('round-trips a generation timeout of %s seconds through preferences:v1:update', async (generationTimeoutSec) => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 10, generationTimeoutSec: 1200 }),
+    );
+    const updated = await (
+      handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>
+    )(null, { generationTimeoutSec });
+    expect(updated).toMatchObject({ generationTimeoutSec });
+
+    const lastCall = writeFileMock.mock.calls.at(-1);
+    if (!lastCall) throw new Error('writeFile was not called');
+    expect(JSON.parse(lastCall[1])).toMatchObject({ schemaVersion: 10, generationTimeoutSec });
+    readFileMock.mockResolvedValueOnce(lastCall[1]);
+    await expect(readPersisted()).resolves.toMatchObject({ generationTimeoutSec });
+  });
+
+  it.each([
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ])('rejects an invalid generation timeout of %s before accessing preferences', async (generationTimeoutSec) => {
+    await expect(
+      (handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>)(null, {
+        generationTimeoutSec,
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.IPC_BAD_INPUT });
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(writeFileMock).not.toHaveBeenCalled();
   });
 
   it('round-trips dismissedUpdateVersion through preferences:v1:update', async () => {

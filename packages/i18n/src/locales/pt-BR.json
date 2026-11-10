@@ -379,7 +379,10 @@
         "logoutFailedTitle": "Falha ao sair do ChatGPT",
         "statusFailedTitle": "Falha ao verificar status do ChatGPT",
         "unknownError": "Erro desconhecido",
-        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território."
+        "unsupportedCountryRegion": "O login com assinatura do ChatGPT não está disponível para esta conta, país, região ou território.",
+        "modelsFailedTitle": "Falha ao carregar as sugestões de modelos do ChatGPT",
+        "modelLabel": "ID do modelo do ChatGPT",
+        "modelHelp": "Usa o modelo local do Codex quando disponível. As sugestões vêm do catálogo do aplicativo; o acesso depende da sua conta do ChatGPT. Você pode inserir outro ID e editá-lo depois em Modelos."
       },
       "addProvider": "Adicionar provedor",
       "addCustom": "Adicionar personalizado",
@@ -418,6 +421,7 @@
         "compatibilityHintBody": "Alguns coding plans, relays e gateways compatíveis com OpenAI só permitem clientes específicos, como Claude Code, openclaw ou Hermes. Mesmo que a API pareça compatível, o Open CoDesign ainda pode ser bloqueado por uma lista de apps permitidos.",
         "test": "Testar conexão",
         "testOk": "OK — {{count}} modelos disponíveis",
+        "testOkNoListing": "Sem listagem de modelos — informe um ID. A inferência ainda pode funcionar.",
         "save": "Salvar e continuar",
         "saveEdit": "Salvar alterações",
         "switchToDropdown": "Escolher da lista",
@@ -513,8 +517,15 @@
         "contextWindowSaved": "Janela de contexto salva",
         "contextWindowSaveFailed": "Falha ao salvar a janela de contexto",
         "connectionOk": "Conexão OK",
+        "connectionOkDegraded": "Conectado — sem listagem de modelos; a inferência ainda funciona",
         "connectionFailed": "Falha na conexão",
         "saveFailed": "Falha ao salvar o provedor"
+      },
+      "discovery": {
+        "manualHint": "Os IDs de modelo são informados manualmente neste provedor.",
+        "inferOnlyHint": "Este provedor não lista modelos — informe um ID. A inferência ainda pode funcionar.",
+        "staticHint": "Modelos conhecidos deste provedor. Você ainda pode informar outro ID.",
+        "enterModelId": "model-id"
       },
       "reasoning": {
         "label": "Profundidade de raciocínio",
@@ -637,7 +648,7 @@
       "systemNotifications": "Notificações do sistema",
       "systemNotificationsHint": "Avisar quando um design terminar, falhar ou fizer uma pergunta enquanto o Open CoDesign estiver em segundo plano. No macOS, os avisos param depois que você fecha a última janela, até abri-la de novo.",
       "timeout": "Tempo limite de geração",
-      "timeoutHint": "Segundos antes de uma geração ser abortada.",
+      "timeoutHint": "Segundos antes de uma geração ser abortada. Escolha Sem limite para execuções locais noturnas.",
       "timeoutSeconds": "{{value}} s",
       "proxy": "Proxy HTTP",
       "proxyHint": "Encaminha o tráfego de rede e as chamadas à API do LLM por este proxy (ex.: http://127.0.0.1:7890). Deixe em branco para desativar. Aplicado imediatamente, sem reinício.",
@@ -646,7 +657,8 @@
       "toggleDevtools": "Alternar DevTools",
       "prefsLoadFailed": "Falha ao carregar preferências",
       "prefsSaveFailed": "Falha ao salvar preferência",
-      "devtoolsFailed": "Não foi possível alternar o DevTools"
+      "devtoolsFailed": "Não foi possível alternar o DevTools",
+      "timeoutDisabled": "Sem limite"
     }
   },
   "updates": {
@@ -1050,6 +1062,7 @@
       "corsError": "Erro de CORS (não deveria acontecer no processo principal). Isso é um bug.",
       "sslError": "Erro de SSL / certificado (certificado autoassinado ou CA privada?). Ative em Configurações → Provedores → este provedor → Desativar verificação TLS para conectar a endpoints internos confiáveis.",
       "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
+      "modelsListingNotApplicable": "Este provedor não expõe um endpoint de listagem de modelos. Isso é esperado — informe um ID e use a inferência em vez de tratar a ausência de /models como falha grave.",
       "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
       "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo. Test Connection ainda pode passar porque só verifica o endpoint /models.",
       "openaiResponsesMisconfigured": "O endpoint rejeitou o formato da requisição. O wire pode estar errado; tente openai-chat.",
@@ -1250,7 +1263,7 @@
       "all": "Todos",
       "your": "Seus designs",
       "examples": "Exemplos",
-      "resources": "Recursos",
+      "resources": "Sistemas de design",
       "designSystems": "Design systems"
     },
     "recent": {
@@ -1379,5 +1392,66 @@
     "RENDERER_ERROR": "Ocorreu um erro no renderer. Detalhes estão no log.",
     "CODEX_TOKEN_NOT_LOGGED_IN": "Você não fez login na assinatura do ChatGPT. Faça login em Configurações.",
     "CODEX_TOKEN_PARSE_FAILED": "O login local do ChatGPT está corrompido. Faça login novamente em Configurações."
+  },
+  "library": {
+    "details": "Detalhes do sistema de design",
+    "livePreview": "Prévia do exemplo",
+    "previewHint": "Explore o sistema visual completo e interaja com seus componentes.",
+    "previewZoom": "Zoom da prévia",
+    "fit": "Ajustar à tela",
+    "interactive": "Exemplo interativo",
+    "specHint": "Princípios, variáveis de estilo e regras de uso",
+    "readDocument": "Ler",
+    "viewSource": "Código-fonte",
+    "tokens": "Variáveis de estilo",
+    "readyHint": "A especificação e a prévia estão prontas para um novo design.",
+    "checkIssues": "Problemas para revisar · {{count}}",
+    "issuesHint": "Corrija os problemas no editor e verifique novamente para reutilizar o sistema.",
+    "source": "Origem",
+    "brandReference": "Referência pública de design da marca",
+    "attribution": "Licença e atribuição",
+    "notAffiliated": "Baseado em materiais públicos. Sem vínculo com a marca.",
+    "checkPreview": "Verificar prévia",
+    "brand": {
+      "ibm": "Grades estruturadas, hierarquia clara e dados compactos para ferramentas profissionais e produtos empresariais.",
+      "vercel": "Superfícies monocromáticas, bordas precisas e espaço generoso para ferramentas de desenvolvimento.",
+      "stripe": "Tipografia expressiva, superfícies em camadas e ações claras para marcas e produtos de negócios."
+    },
+    "title": "Design systems",
+    "subtitle": "Choose a foundation, make it yours, and reuse it across designs.",
+    "builtin": "Built-in systems",
+    "mine": "My systems",
+    "new": "New design system",
+    "fromDesign": "Import from a design",
+    "importFile": "Import DESIGN.md",
+    "empty": "Create your own system, import a specification, or start with a built-in system.",
+    "loading": "Loading…",
+    "ready": "Ready",
+    "draft": "Draft",
+    "use": "Use this system",
+    "fork": "Create my own copy",
+    "edit": "Edit system",
+    "validate": "Check and save",
+    "checking": "Checking…",
+    "export": "Export DESIGN.md",
+    "rename": "Edit details",
+    "delete": "Delete",
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "name": "Name",
+    "description": "Description and design requirements",
+    "chooseDesign": "Choose an existing design",
+    "deleteHint": "Delete this system and its editor workspace? Designs already created with it will remain unchanged.",
+    "draftHint": "This is a draft. Edit it and check the specification and runnable preview before using it.",
+    "personalSource": "Personal design system",
+    "preview": "Runnable design system preview",
+    "previewError": "The sample could not be loaded. Open the editor to repair it.",
+    "optional": "Design system (optional)",
+    "none": "No design system",
+    "createFailed": "Could not create the design. Please try again.",
+    "saveFromDesign": "Save as design system",
+    "back": "Back to systems",
+    "createPrompt": "Create a reusable design system in this workspace for the following requirements. Update DESIGN.md and App.jsx together, implement the component and layout rules, retain data-design-system mappings, exercise interactions with preview(), and finish with done(). Reference materials can be attached in the conversation."
   }
 }

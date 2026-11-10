@@ -162,7 +162,7 @@
       "empty": "还没有文件。发送一个 prompt 让 AI 生成设计后，文件会出现在这里。"
     },
     "newDesignDialog": {
-      "title": "新建项目",
+      "title": "新建设计",
       "subtitle": "可选择一个本地文件夹，用于同步设计文件。",
       "noWorkspace": "未选择文件夹",
       "skip": "跳过",
@@ -412,7 +412,12 @@
         "createdMemory": "已创建记忆",
         "updatedMemory": "已更新记忆",
         "legacyTool": "旧工具",
-        "genericTool": "工具"
+        "genericTool": "工具",
+        "nativeSearch": "模型原生搜索",
+        "nativeRequests": "联网请求",
+        "actualSearches": "实际搜索",
+        "searchCost": "搜索费用",
+        "unknown": "未知"
       }
     },
     "comments": {
@@ -434,12 +439,12 @@
       "advanced": "高级"
     },
     "webSearch": {
-      "title": "Tavily 联网搜索",
-      "description": "使用你自己的 Tavily API Key 进行联网搜索。搜索查询会发送给 Tavily；仍需获得任务授权。",
+      "title": "联网搜索",
+      "description": "复用当前模型供应商凭据进行联网搜索，或使用 Tavily。联网仍需本轮任务授权。",
       "nextRun": "启用、停用或保存设置仅对下一次运行生效，不影响正在进行的运行。",
       "enabled": "启用联网搜索",
       "enabledHint": "控制联网搜索和网页抓取。关闭后仍保留已保存的 Key。启用不代表已授权任务访问网络。",
-      "keyStatus": "已保存的 API Key",
+      "keyStatus": "搜索凭据",
       "configured": "已配置",
       "notConfigured": "未配置",
       "newKey": "Tavily API Key",
@@ -452,8 +457,8 @@
       "clearKey": "清除已保存的 Key…",
       "clearConfirm": "确定移除已保存的 Tavily Key？再次搜索前需要重新保存 Key。",
       "confirmClear": "清除已保存的 Key",
-      "test": "测试已保存的 Key",
-      "testHint": "测试仅使用已保存的 Key，不使用尚未保存的输入。点击后会向 Tavily 发送一次最小搜索，消耗一次基础请求（1 credit）。测试不会授予或消耗任务授权，也不会自动运行。",
+      "test": "测试搜索服务",
+      "testHint": "独立搜索服务测试将执行一次可能收费的搜索（Tavily 为 1 credit）。原生搜索仅本地检查配置，不发起付费模型请求。",
       "retry": "重新加载",
       "saved": "联网搜索设置已保存，将在下一次运行生效。",
       "cleared": "已保存的 Key 已清除，将在下一次运行生效。",
@@ -463,17 +468,32 @@
       "openFailed": "无法打开 Tavily Key 页面，请在浏览器中访问 https://app.tavily.com。",
       "invalidInput": "请输入非空且不超过 4096 个字符的 API Key，不可包含空格或控制字符。",
       "result": {
-        "ok": "已保存的 Key 验证成功，可以连接 Tavily 搜索。",
+        "ok": "已保存的 Key 验证成功，可以连接 搜索服务 搜索。",
         "missingKey": "尚未保存 Key，请先保存 Tavily API Key。",
         "unreadableKey": "无法在此设备读取已保存的 Key，请替换或清除后重新保存。",
-        "invalidKey": "Tavily 拒绝了已保存的 Key，请检查并保存替换 Key。",
-        "quota": "Tavily 额度已用尽，请检查 Tavily 账户或套餐。",
-        "rateLimit": "Tavily 请求过于频繁，请稍后重试。",
+        "invalidKey": "搜索服务 拒绝了已保存的 Key，请检查并保存替换 Key。",
+        "quota": "搜索服务 额度已用尽，请检查 搜索服务 账户或套餐。",
+        "rateLimit": "搜索服务 请求过于频繁，请稍后重试。",
         "timeout": "测试超时，请检查连接后重试。",
-        "networkError": "无法连接 Tavily，请检查网络或代理后重试。",
-        "serviceError": "Tavily 服务暂时不可用，请稍后重试。",
-        "unexpectedResponse": "Tavily 返回了意外响应，请稍后重试。"
-      }
+        "networkError": "无法连接 搜索服务，请检查网络或代理后重试。",
+        "serviceError": "搜索服务 服务暂时不可用，请稍后重试。",
+        "unexpectedResponse": "搜索服务 返回了意外响应，请稍后重试。",
+        "unsupportedProvider": "当前服务商不提供联网搜索能力，请改用 Tavily 或切换受支持的服务商。",
+        "unsupportedModel": "当前型号尚未通过 CoDesign 原生搜索适配验证，请选择已适配的型号或 Tavily。",
+        "nativeDisabled": "当前服务商的原生联网搜索已关闭，请在联网搜索设置中开启。",
+        "notVerified": "已识别配置，尚未通过真实模型请求验证原生搜索。"
+      },
+      "backend": "搜索后端",
+      "backendHint": "自动模式优先选择支持的当前模型供应商，否则选择已配置的 Tavily。修改从下一轮生效。",
+      "backendAuto": "自动",
+      "backendProvider": "使用当前模型供应商",
+      "selectedService": "实际搜索服务",
+      "unavailable": "尚未配置可用的搜索服务",
+      "inherited": "复用已有模型供应商凭据，无须重复填写 Key",
+      "nativeEnabled": "允许模型原生搜索",
+      "nativeHint": "仅适配 OpenAI Responses 和 Claude 官方 API Key。每轮仍需授权，搜索可能另行收费。",
+      "nativeRequests": "原生联网模型请求上限",
+      "nativeRequestsHint": "限制每轮启用原生搜索的模型请求数；一次请求可能执行多次搜索。独立搜索与网页读取使用另一份共享次数预算。"
     },
     "imageGen": {
       "tabTitle": "图像生成",
@@ -554,7 +574,10 @@
         "logoutFailedTitle": "ChatGPT 登出失败",
         "statusFailedTitle": "ChatGPT 登录状态读取失败",
         "unknownError": "未知错误",
-        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。"
+        "unsupportedCountryRegion": "当前账号、国家、地区或区域暂不支持 ChatGPT 订阅登录。",
+        "modelsFailedTitle": "ChatGPT 候选模型加载失败",
+        "modelLabel": "ChatGPT 模型 ID",
+        "modelHelp": "优先使用本机 Codex 的模型配置。候选来自应用的模型目录，是否可用取决于你的 ChatGPT 账号。可输入其他模型 ID，之后也可在 Models 中编辑。"
       },
       "addProvider": "添加服务",
       "addCustom": "添加自定义",
@@ -592,8 +615,8 @@
         "keylessLabel": "无需 API Key",
         "keylessDescription": "仅适用于允许不带 API Key 访问的接入地址。切换到此模式后，保存时将移除已存储的密钥。",
         "defaultModel": "默认模型",
-        "compatibilityHintTitle": "\u517c\u5bb9\u6027\u63d0\u793a",
-        "compatibilityHintBody": "\u90e8\u5206 coding plan\uff0c\u534f\u8bae\u8f6c\u6362\u670d\u52a1\u6216 OpenAI \u517c\u5bb9\u7f51\u5173\u53ea\u5141\u8bb8\u7279\u5b9a\u5ba2\u6237\u7aef\uff08\u5982 Claude Code\uff0copenclaw\uff0cHermes\uff09\u8bbf\u95ee\u3002\u5373\u4f7f API \u770b\u8d77\u6765\u517c\u5bb9\uff0cOpen CoDesign \u4e5f\u53ef\u80fd\u56e0\u4e3a\u5e94\u7528\u767d\u540d\u5355\u800c\u65e0\u6cd5\u4f7f\u7528\u3002",
+        "compatibilityHintTitle": "兼容性提示",
+        "compatibilityHintBody": "部分 coding plan，协议转换服务或 OpenAI 兼容网关只允许特定客户端（如 Claude Code，openclaw，Hermes）访问。即使 API 看起来兼容，Open CoDesign 也可能因为应用白名单而无法使用。",
         "switchToManual": "手动输入",
         "switchToDropdown": "从列表选择",
         "discoveringModels": "正在发现模型…",
@@ -601,6 +624,7 @@
         "discoveryFailed": "无法自动发现模型",
         "test": "测试连接",
         "testOk": "正常 — 共 {{count}} 个模型",
+        "testOkNoListing": "没有模型列表 — 请手动输入模型 ID。推理接口仍可工作。",
         "save": "保存并继续",
         "saveEdit": "保存修改"
       },
@@ -695,6 +719,7 @@
         "contextWindowSaved": "已保存上下文窗口",
         "contextWindowSaveFailed": "保存上下文窗口失败",
         "connectionOk": "连接正常",
+        "connectionOkDegraded": "已连接 — 无法列出模型，但推理接口可用",
         "connectionFailed": "连接失败"
       },
       "litellm": {
@@ -707,6 +732,12 @@
           "notFoundLocal": "请确认 base URL 以 /v1 结尾，并且本地 LiteLLM 代理运行在 4000 端口。",
           "unreachable": "请先启动 LiteLLM 代理，然后重试。"
         }
+      },
+      "discovery": {
+        "manualHint": "此服务商需要手动输入模型 ID。",
+        "inferOnlyHint": "此服务商不提供模型列表 — 请输入模型 ID。推理接口仍可工作。",
+        "staticHint": "此服务商的已知模型。仍可手动输入其他 ID。",
+        "enterModelId": "model-id"
       },
       "cliProxyApi": {
         "presetName": "CLIProxyAPI",
@@ -819,7 +850,7 @@
       "systemNotifications": "系统通知",
       "systemNotificationsHint": "Open CoDesign 在后台时，设计完成、生成失败或需要你回答问题时发送系统通知。在 macOS 上关闭最后一个窗口后不再通知，重新打开窗口后恢复。",
       "timeout": "生成超时",
-      "timeoutHint": "超过该秒数后会中止生成请求。",
+      "timeoutHint": "生成请求在超时后会被中止。选择「无超时」可跑过夜本地模型。",
       "timeoutSeconds": "{{value}} 秒",
       "proxy": "HTTP 代理",
       "proxyHint": "将出站网络与 LLM API 请求通过此代理转发（例如 http://127.0.0.1:7890）。留空表示禁用。即时生效，无需重启。",
@@ -828,7 +859,8 @@
       "toggleDevtools": "切换 DevTools",
       "prefsLoadFailed": "加载偏好设置失败",
       "prefsSaveFailed": "保存偏好失败",
-      "devtoolsFailed": "无法切换 DevTools"
+      "devtoolsFailed": "无法切换 DevTools",
+      "timeoutDisabled": "无超时"
     }
   },
   "updates": {
@@ -1233,6 +1265,7 @@
       "corsError": "CORS 跨域错误（主进程中不应出现此错误，这是一个 Bug）。",
       "sslError": "SSL / 证书错误（自签名或私有 CA 证书？）。可在「设置 → 服务商 → 该条目 → 禁用 TLS 校验」启用对可信内网端点的连接。",
       "endpointNotFound": "Base URL 已包含版本路径，但 Provider 没有暴露这个接口路径。",
+      "modelsListingNotApplicable": "此服务商不提供模型列表接口。这是预期行为 — 请输入模型 ID 并通过推理验证，不要把缺少 /models 当成硬失败。",
       "gatewayIncompatible": "网关接受了连接但没有实现该 Provider 的 API。尝试切换 wire（例如改为 openai-chat）。",
       "gatewayWafBlocked": "网关或反代在请求到达模型前拦截了生成请求。测试连接可能仍然通过，因为它只探测 /models 端点。",
       "openaiResponsesMisconfigured": "端点拒绝了请求格式。wire 可能配错了——尝试切换到 openai-chat。",
@@ -1275,8 +1308,8 @@
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",
-    "gatewayAllowlistHintTitle": "\u8fd9\u4e2a\u7aef\u70b9\u53ef\u80fd\u9650\u5236\u53ef\u63a5\u5165\u7684\u5e94\u7528",
-    "gatewayAllowlistHintBody": "\u90e8\u5206 coding plan \u548c\u534f\u8bae\u8f6c\u6362\u7f51\u5173\u4f1a\u914d\u7f6e\u5e94\u7528\u767d\u540d\u5355\u3002\u5b83\u4eec\u5373\u4f7f\u58f0\u79f0\u63d0\u4f9b OpenAI \u517c\u5bb9 API\uff0c\u4e5f\u53ef\u80fd\u5728\u6ca1\u6709\u663e\u5f0f\u5141\u8bb8 Open CoDesign \u7684\u60c5\u51b5\u4e0b\u62d2\u7edd\u8bf7\u6c42\u3002",
+    "gatewayAllowlistHintTitle": "这个端点可能限制可接入的应用",
+    "gatewayAllowlistHintBody": "部分 coding plan 和协议转换网关会配置应用白名单。它们即使声称提供 OpenAI 兼容 API，也可能在没有显式允许 Open CoDesign 的情况下拒绝请求。",
     "dismiss": "关闭",
     "report": {
       "title": "上报问题",
@@ -1432,7 +1465,7 @@
       "recent": "最近",
       "all": "全部设计",
       "examples": "示例",
-      "resources": "资源"
+      "resources": "设计系统"
     },
     "recent": {
       "title": "最近",
@@ -1560,5 +1593,66 @@
     "EXPORTER_ZIP_FAILED": "ZIP 导出失败。",
     "OPEN_PATH_FAILED": "无法打开目标文件夹或文件。",
     "RENDERER_ERROR": "渲染进程出现错误，详情见日志。"
+  },
+  "library": {
+    "details": "设计系统详情",
+    "livePreview": "样例预览",
+    "previewHint": "完整查看设计语言，也可以直接操作组件。",
+    "previewZoom": "预览缩放",
+    "fit": "适应画布",
+    "interactive": "可交互样例",
+    "specHint": "查看设计规范、样式变量与使用规则",
+    "readDocument": "阅读",
+    "viewSource": "原文",
+    "tokens": "样式变量",
+    "readyHint": "规范与可运行预览已就绪，可用于新设计。",
+    "checkIssues": "待检查问题 · {{count}} 项",
+    "issuesHint": "请在编辑器中修复规范或预览问题，检查通过后即可复用。",
+    "source": "来源",
+    "brandReference": "公开品牌设计参考",
+    "attribution": "许可与来源说明",
+    "notAffiliated": "参考公开品牌资料整理，与品牌方无关联。",
+    "checkPreview": "检查预览",
+    "brand": {
+      "ibm": "严谨的网格、清晰的层级与紧凑的数据界面，适合专业工具和企业产品。",
+      "vercel": "克制的黑白配色、精确的边界和充足的留白，适合开发工具与现代数字产品。",
+      "stripe": "富有表现力的排版、柔和的层次与鲜明的行动入口，适合品牌展示与业务产品。"
+    },
+    "title": "设计系统",
+    "subtitle": "选择一套设计语言，调整成自己的系统，在不同设计中持续复用。",
+    "builtin": "内置设计系统",
+    "mine": "我的设计系统",
+    "new": "新建设计系统",
+    "fromDesign": "从已有设计导入",
+    "importFile": "导入 DESIGN.md",
+    "empty": "创建自己的设计系统、导入规范，或基于内置系统开始调整。",
+    "loading": "加载中…",
+    "ready": "可用",
+    "draft": "草稿",
+    "use": "使用此系统",
+    "fork": "基于此创建",
+    "edit": "编辑设计系统",
+    "validate": "检查并保存",
+    "checking": "检查中…",
+    "export": "导出 DESIGN.md",
+    "rename": "编辑信息",
+    "delete": "删除",
+    "close": "关闭",
+    "cancel": "取消",
+    "confirm": "确认",
+    "name": "名称",
+    "description": "描述与设计需求",
+    "chooseDesign": "选择已有设计",
+    "deleteHint": "删除这套系统及其编辑工作区？已经使用它创建的设计不会受到影响。",
+    "draftHint": "当前为草稿。请编辑并检查规范及可运行预览，通过后即可复用。",
+    "personalSource": "个人设计系统",
+    "preview": "设计系统可运行预览",
+    "previewError": "样例页无法加载，请进入编辑器修复。",
+    "optional": "设计系统（可选）",
+    "none": "不使用设计系统",
+    "createFailed": "创建设计失败，请重试。",
+    "saveFromDesign": "保存为设计系统",
+    "back": "返回设计系统",
+    "createPrompt": "根据以下需求，在当前工作区建立可复用的设计系统。同时更新 DESIGN.md 与 App.jsx，实现组件和布局规范，保留 data-design-system 对应关系，使用 preview() 检查交互后通过 done() 完成。用户还可以在对话中追加参考材料。"
   }
 }

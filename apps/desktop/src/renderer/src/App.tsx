@@ -143,7 +143,8 @@ export function App() {
       if (state.currentDesignId === null && state.designs.length > 0) {
         const runningDesignId = Object.keys(state.generationByDesign)[0];
         const initialDesign =
-          state.designs.find((design) => design.id === runningDesignId) ?? state.designs[0];
+          state.designs.find((design) => design.id === runningDesignId) ??
+          state.designs.find((design) => !design.designSystemId);
         if (initialDesign) await switchDesign(initialDesign.id);
       }
     }

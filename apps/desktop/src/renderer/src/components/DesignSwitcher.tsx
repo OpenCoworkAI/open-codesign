@@ -39,7 +39,9 @@ export function DesignSwitcher() {
   }, [open]);
 
   const current = designs.find((d) => d.id === currentDesignId) ?? null;
-  const others = designs.filter((d) => d.id !== currentDesignId).slice(0, RECENT_LIMIT);
+  const others = designs
+    .filter((d) => d.id !== currentDesignId && !d.designSystemId)
+    .slice(0, RECENT_LIMIT);
 
   const label = current?.name ?? t('projects.untitled');
 

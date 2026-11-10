@@ -8,6 +8,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CodesignApi } from '../preload';
+
+const electronBridge = vi.hoisted(() => ({
+  exposeInMainWorld: vi.fn<(name: string, api: CodesignApi) => void>(),
+  invoke: vi.fn(),
+}));
 
 // Collect registered channel names via a mock ipcMain.
 const registeredChannels: string[] = [];
@@ -35,6 +41,8 @@ vi.mock('./electron-runtime', () => ({
 
 // Stub Electron modules that electron-runtime would otherwise pull in.
 vi.mock('electron', () => ({
+  contextBridge: { exposeInMainWorld: electronBridge.exposeInMainWorld },
+  ipcRenderer: electronBridge,
   app: { getPath: vi.fn(() => '/tmp'), isPackaged: false, getVersion: vi.fn(() => '0.0.0') },
   ipcMain: { handle: vi.fn() },
   safeStorage: { isEncryptionAvailable: vi.fn(() => false) },
@@ -154,26 +162,104 @@ describe('registerOnboardingIpc — channel versioning', () => {
       expect(get).toBeDefined();
       expect(save).toBeDefined();
       expect(test).toBeDefined();
-      expect(await get?.({})).toEqual({ enabled: false, hasKey: false });
-      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toEqual({
+      expect(await get?.({})).toMatchObject({
         enabled: false,
-        hasKey: true,
+        hasKey: false,
+        backend: 'auto',
+        nativeEnabled: false,
+        maxNativeRequests: 12,
       });
-      expect(await save?.({}, { enabled: true })).toEqual({ enabled: true, hasKey: true });
+      expect(await save?.({}, { apiKey: 'tvly-ipc-fixture' })).toMatchObject({
+        ok: true,
+        settings: { enabled: false, hasKey: true },
+      });
+      expect(await save?.({}, { enabled: true })).toMatchObject({
+        ok: true,
+        settings: { enabled: true, hasKey: true },
+      });
       const listProviders = handlers.get('settings:v1:list-providers');
       expect(listProviders).toBeDefined();
       expect(await listProviders?.({})).toEqual([]);
-      expect(await get?.({})).toEqual({ enabled: true, hasKey: true });
+      expect(await get?.({})).toMatchObject({ enabled: true, hasKey: true });
       expect(probe).not.toHaveBeenCalled();
       expect(await test?.({})).toEqual({ status: 'ok' });
       expect(probe).toHaveBeenCalledExactlyOnceWith('tvly-ipc-fixture', 15000);
-      expect(await save?.({}, { clearKey: true })).toEqual({ enabled: true, hasKey: false });
+      expect(await save?.({}, { clearKey: true })).toMatchObject({
+        ok: true,
+        settings: { enabled: true, hasKey: false },
+      });
       expect(await test?.({})).toEqual({ status: 'missing-key' });
       expect(probe).toHaveBeenCalledOnce();
     } finally {
       probe.mockRestore();
     }
   }, 15_000);
+  it('preserves safe save errors through the main handler and preload invoke bridge', async () => {
+    const { CodesignError, ERROR_CODES, hydrateConfig } = await import('@open-codesign/shared');
+    const { buildSecretRef } = await import('./keychain');
+    const { writeConfig } = await import('./config');
+    const { getCachedConfig, setCachedConfig } = await import('./onboarding/config-cache');
+    setCachedConfig(
+      hydrateConfig({
+        version: 3,
+        activeProvider: '',
+        activeModel: '',
+        providers: {},
+        secrets: {},
+      }),
+    );
+    await registerIpcForTest();
+    const replies: unknown[] = [];
+    electronBridge.invoke.mockImplementation(async (channel: string, input: unknown) => {
+      const handler = handlers.get(channel);
+      if (!handler) throw new Error('Missing IPC handler');
+      try {
+        const reply: unknown = structuredClone(await handler({}, input));
+        replies.push(reply);
+        return reply;
+      } catch (err) {
+        // Match Electron invoke: a thrown error loses its custom code and cause.
+        throw new Error(err instanceof Error ? err.message : String(err));
+      }
+    });
+    await import('../preload');
+    const api = electronBridge.exposeInMainWorld.mock.calls[0]?.[1];
+    if (!api) throw new Error('Missing exposed API');
+
+    const rendererSave = async (input: Parameters<CodesignApi['webSearch']['save']>[0]) => {
+      try {
+        return structuredClone(await api.webSearch.save(structuredClone(input)));
+      } catch (err) {
+        // contextBridge also drops Error custom properties, so failures must remain plain data.
+        throw new Error(err instanceof Error ? err.message : String(err));
+      }
+    };
+    expect(await rendererSave({ enabled: false })).toMatchObject({
+      ok: true,
+      settings: { enabled: false, hasKey: false },
+    });
+    const before = structuredClone(getCachedConfig());
+    vi.mocked(writeConfig).mockClear();
+    for (const [error, code] of [
+      [
+        new CodesignError('private key fixture', ERROR_CODES.KEYCHAIN_UNAVAILABLE),
+        'KEYCHAIN_UNAVAILABLE',
+      ],
+      [new Error('private adapter failure fixture'), 'WEB_SEARCH_SAVE_FAILED'],
+    ] as const) {
+      vi.mocked(buildSecretRef).mockImplementationOnce(() => {
+        throw error;
+      });
+      expect(await rendererSave({ apiKey: 'tvly-private-fixture' })).toEqual({ ok: false, code });
+      expect(replies.at(-1)).toEqual({ ok: false, code });
+    }
+    expect(await rendererSave({ apiKey: '' })).toEqual({ ok: false, code: 'IPC_BAD_INPUT' });
+    expect(replies.at(-1)).toEqual({ ok: false, code: 'IPC_BAD_INPUT' });
+    expect(JSON.stringify(replies)).not.toContain('private');
+    expect(getCachedConfig()).toEqual(before);
+    expect(writeConfig).not.toHaveBeenCalled();
+  }, 15_000);
+
   it('registers settings:v1:list-providers without the unversioned settings:list-providers shim', async () => {
     await registerIpcForTest();
 

@@ -26,9 +26,23 @@ describe('web search preload bridge', () => {
 
   it('forwards separate enable, replace and clear patches without filling in absent keys', async () => {
     for (const input of [{ enabled: false }, { apiKey: 'tvly-fixture' }, { clearKey: true }]) {
-      await api.webSearch.save(input);
+      const settings = { enabled: false, hasKey: true };
+      electron.invoke.mockResolvedValueOnce({ ok: true, settings });
+      expect(await api.webSearch.save(input)).toEqual({ ok: true, settings });
       expect(electron.invoke).toHaveBeenLastCalledWith('settings:v1:save-web-search', input);
     }
+  });
+
+  it.each([
+    'KEYCHAIN_UNAVAILABLE',
+    'IPC_BAD_INPUT',
+    'WEB_SEARCH_SAVE_FAILED',
+  ])('preserves the %s error result as plain data across isolated contexts', async (code) => {
+    electron.invoke.mockResolvedValueOnce(structuredClone({ ok: false, code }));
+    expect(structuredClone(await api.webSearch.save({ apiKey: 'tvly-fixture' }))).toEqual({
+      ok: false,
+      code,
+    });
   });
 
   it('tests with no arguments, so unsaved keys and task authorization cannot be supplied', async () => {

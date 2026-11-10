@@ -16,17 +16,21 @@ import type {
   DesignSnapshot,
   ExternalConfigsDetection,
   GeneratePayloadV1,
+  LibraryDesignSystem,
+  LibraryDesignSystemDetail,
   ListEventsInput,
   ListEventsResult,
   LocalInputFile,
   ModelRef,
   OnboardingState,
   PreviewMode,
+  ProviderModelDiscoveryMode,
   ReasoningLevel,
   ReportEventInput,
   ReportEventResult,
   ResourceStateV1,
   SaveWebSearchSettingsInput,
+  SaveWebSearchSettingsResult,
   SelectedElement,
   SnapshotCreateInput,
   SourceEditApplyRequestV1,
@@ -39,6 +43,7 @@ import type {
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
+import type { CodexModelOptions } from '../main/codex-models';
 import type { CodexOAuthStatus } from '../main/codex-oauth-ipc';
 import type {
   ConnectionTestError,
@@ -222,6 +227,8 @@ export interface ProviderRow {
    *  Built-in providers force-ignore this flag at runtime; only surfaced
    *  for custom/imported providers. See #229. */
   tlsRejectUnauthorized?: boolean;
+  modelDiscoveryMode: ProviderModelDiscoveryMode;
+  modelsHint?: string[];
   error?: 'decryption_failed' | string;
 }
 
@@ -609,6 +616,7 @@ const api = {
       queryParams?: Record<string, string>;
       envKey?: string;
       tlsRejectUnauthorized?: boolean;
+      modelDiscoveryMode?: ProviderModelDiscoveryMode;
       setAsActive: boolean;
     }) => ipcRenderer.invoke('config:v1:add-provider', input) as Promise<OnboardingState>,
     updateProvider: (input: {
@@ -632,6 +640,7 @@ const api = {
       /** Per-provider TLS verification opt-out (#229). Omit to leave
        *  untouched; `false`/`true` writes the field through. */
       tlsRejectUnauthorized?: boolean;
+      modelDiscoveryMode?: ProviderModelDiscoveryMode;
     }) => ipcRenderer.invoke('config:v1:update-provider', input) as Promise<OnboardingState>,
     removeProvider: (id: string) =>
       ipcRenderer.invoke('config:v1:remove-provider', id) as Promise<OnboardingState>,
@@ -673,7 +682,10 @@ const api = {
   webSearch: {
     get: () => ipcRenderer.invoke('settings:v1:get-web-search') as Promise<WebSearchSettingsState>,
     save: (input: SaveWebSearchSettingsInput) =>
-      ipcRenderer.invoke('settings:v1:save-web-search', input) as Promise<WebSearchSettingsState>,
+      ipcRenderer.invoke(
+        'settings:v1:save-web-search',
+        input,
+      ) as Promise<SaveWebSearchSettingsResult>,
     test: () => ipcRenderer.invoke('settings:v1:test-web-search') as Promise<WebSearchTestResult>,
   },
   memory: {
@@ -697,7 +709,9 @@ const api = {
   },
   codexOAuth: {
     status: () => ipcRenderer.invoke('codex-oauth:v1:status') as Promise<CodexOAuthStatus>,
-    login: () => ipcRenderer.invoke('codex-oauth:v1:login') as Promise<CodexOAuthStatus>,
+    models: () => ipcRenderer.invoke('codex-oauth:v1:models') as Promise<CodexModelOptions>,
+    login: (model?: string) =>
+      ipcRenderer.invoke('codex-oauth:v1:login', model) as Promise<CodexOAuthStatus>,
     cancelLogin: () => ipcRenderer.invoke('codex-oauth:v1:cancel-login') as Promise<boolean>,
     logout: () => ipcRenderer.invoke('codex-oauth:v1:logout') as Promise<CodexOAuthStatus>,
   },
@@ -809,15 +823,69 @@ const api = {
       return () => ipcRenderer.removeListener('codesign:files:v1:changed', listener);
     },
   },
+  designSystems: {
+    list: () =>
+      ipcRenderer.invoke('design-systems:v1:list', { schemaVersion: 1 }) as Promise<
+        LibraryDesignSystem[]
+      >,
+    get: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:get', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<LibraryDesignSystemDetail>,
+    create: (name: string, description: string) =>
+      ipcRenderer.invoke('design-systems:v1:create', {
+        schemaVersion: 1,
+        name,
+        description,
+      }) as Promise<LibraryDesignSystemDetail>,
+    fork: (id: string, name?: string) =>
+      ipcRenderer.invoke('design-systems:v1:fork', {
+        schemaVersion: 1,
+        id,
+        name,
+      }) as Promise<LibraryDesignSystemDetail>,
+    edit: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:edit', { schemaVersion: 1, id }) as Promise<Design>,
+    validate: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:validate', {
+        schemaVersion: 1,
+        id,
+      }) as Promise<LibraryDesignSystemDetail>,
+    update: (id: string, name: string, description: string) =>
+      ipcRenderer.invoke('design-systems:v1:update', {
+        schemaVersion: 1,
+        id,
+        name,
+        description,
+      }) as Promise<LibraryDesignSystemDetail>,
+    import: (designId?: string) =>
+      ipcRenderer.invoke('design-systems:v1:import', {
+        schemaVersion: 1,
+        designId,
+      }) as Promise<LibraryDesignSystemDetail | null>,
+    remove: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:delete', { schemaVersion: 1, id }) as Promise<void>,
+    export: (id: string) =>
+      ipcRenderer.invoke('design-systems:v1:export', { schemaVersion: 1, id }) as Promise<
+        string | null
+      >,
+  },
   snapshots: {
     listDesigns: () =>
       ipcRenderer.invoke('snapshots:v1:list-designs', { schemaVersion: 1 }) as Promise<Design[]>,
-    createDesign: (name: string, workspacePath?: string | null, demoInputId?: string) =>
+    createDesign: (
+      name: string,
+      workspacePath?: string | null,
+      demoInputId?: string,
+      designSystemId?: string,
+    ) =>
       ipcRenderer.invoke('snapshots:v1:create-design', {
         schemaVersion: 1,
         name,
         ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(demoInputId !== undefined ? { demoInputId } : {}),
+        ...(designSystemId !== undefined ? { designSystemId } : {}),
       }) as Promise<Design>,
     getDesign: (id: string) =>
       ipcRenderer.invoke('snapshots:v1:get-design', {

@@ -124,8 +124,9 @@ function readPersistedSchema(r: Record<string, unknown>): number {
 function readPersistedTimeout(r: Record<string, unknown>): number {
   const value = r['generationTimeoutSec'];
   if (value === undefined) return DEFAULTS.generationTimeoutSec;
-  if (typeof value !== 'number' || value <= 0) {
-    failInvalidPersistedPreference('generationTimeoutSec must be a positive number');
+  // 0 disables the generation timeout (overnight local models).
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    failInvalidPersistedPreference('generationTimeoutSec must be a non-negative number');
   }
   return value;
 }
@@ -313,9 +314,9 @@ function readUpdateChannel(r: Record<string, unknown>): UpdateChannel | undefine
 function readTimeoutSec(r: Record<string, unknown>): number | undefined {
   const value = r['generationTimeoutSec'];
   if (value === undefined) return undefined;
-  if (typeof value !== 'number' || value <= 0) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     throw new CodesignError(
-      'generationTimeoutSec must be a positive number',
+      'generationTimeoutSec must be a non-negative number',
       ERROR_CODES.IPC_BAD_INPUT,
     );
   }
