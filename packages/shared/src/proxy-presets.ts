@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
+    id: 'uberllm',
+    label: 'UberLLM',
+    provider: 'openai',
+    baseUrl: 'https://api.uberllm.dev/v1',
+    notes: 'Multi-model relay, prepaid',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
