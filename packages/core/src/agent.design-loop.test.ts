@@ -1,8 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@mariozechner/pi-agent-core';
-import { type AssistantMessage, createAssistantMessageEventStream } from '@mariozechner/pi-ai';
+import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@earendil-works/pi-agent-core';
+import { type AssistantMessage, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateViaAgent } from './agent';
 import type { GenerateInput } from './index';
@@ -13,8 +13,8 @@ import type { TextEditorFsCallbacks } from './tools/text-editor';
 const native = vi.hoisted(() => ({ stream: vi.fn<StreamFn>(), agents: [] as Agent[] }));
 
 // Substitute only pi's streaming boundary; Agent scheduling, tools and recovery are real.
-vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@mariozechner/pi-agent-core')>();
+vi.mock('@earendil-works/pi-agent-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@earendil-works/pi-agent-core')>();
   return {
     ...actual,
     Agent: class extends actual.Agent {

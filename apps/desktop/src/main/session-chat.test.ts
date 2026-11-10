@@ -60,7 +60,7 @@ describe('session design brief storage', () => {
       const db = initSnapshotsDb(path.join(root, 'design-store.json'));
       const design = createDesign(db, 'Native sources');
       updateDesignWorkspace(db, design.id, root);
-      const message: import('@mariozechner/pi-ai').AssistantMessage = {
+      const message: import('@earendil-works/pi-ai').AssistantMessage = {
         role: 'assistant',
         api: 'anthropic-messages',
         provider: 'anthropic',

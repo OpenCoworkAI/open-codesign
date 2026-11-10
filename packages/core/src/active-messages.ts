@@ -1,4 +1,4 @@
-import type { Agent, AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core';
+import type { Agent, AgentEvent, AgentMessage } from '@earendil-works/pi-agent-core';
 import {
   type ActiveRunMessageInputV1,
   type ActiveRunMessageV1,

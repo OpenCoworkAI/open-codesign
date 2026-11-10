@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Agent } from '@mariozechner/pi-agent-core';
-import { createAssistantMessageEventStream, getModel } from '@mariozechner/pi-ai';
+import { Agent } from '@earendil-works/pi-agent-core';
+import { createAssistantMessageEventStream, getModel } from '@earendil-works/pi-ai';
 import type { Design } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

@@ -3,7 +3,7 @@ import { getCodexModelOptions } from './codex-models';
 import { readCodexConfig } from './imports/codex-config';
 
 vi.mock('./imports/codex-config', () => ({ readCodexConfig: vi.fn() }));
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock('@earendil-works/pi-ai', () => ({
   getModels: (provider: string) => (provider === 'openai-codex' ? [{ id: 'catalog-model' }] : []),
 }));
 

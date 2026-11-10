@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Message, Usage } from '@mariozechner/pi-ai';
+import type { Message, Usage } from '@earendil-works/pi-ai';
 import { SessionManager } from '@open-codesign/core';
 import { normalizeDesignFilePath } from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';

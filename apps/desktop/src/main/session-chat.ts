@@ -39,7 +39,7 @@ const NATIVE_SEARCH_CUSTOM_TYPE = 'open-codesign.native-search.v1';
 export function appendSessionNativeSearchMessage(
   opts: SessionChatStoreOptions,
   designId: string,
-  message: import('@mariozechner/pi-ai').AssistantMessage,
+  message: import('@earendil-works/pi-ai').AssistantMessage,
 ): void {
   const manager = openSession(opts, designId);
   manager.appendCustomEntry(NATIVE_SEARCH_CUSTOM_TYPE, { schemaVersion: 1, message });
@@ -49,7 +49,7 @@ export function appendSessionNativeSearchMessage(
 export function readSessionNativeSearchMessages(
   opts: SessionChatStoreOptions,
   designId: string,
-): import('@mariozechner/pi-ai').AssistantMessage[] {
+): import('@earendil-works/pi-ai').AssistantMessage[] {
   const file = sessionFileForDesign(opts.sessionDir, designId);
   if (!existsSync(file)) return [];
   const manager = SessionManager.open(file, opts.sessionDir, resolveSessionCwd(opts, designId));
@@ -66,7 +66,7 @@ export function readSessionNativeSearchMessages(
         return [];
       const value = custom.data as {
         schemaVersion?: number;
-        message?: import('@mariozechner/pi-ai').AssistantMessage;
+        message?: import('@earendil-works/pi-ai').AssistantMessage;
       };
       const message = value.message;
       if (

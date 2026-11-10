@@ -1,6 +1,6 @@
 # Distribution channels
 
-Canonical sources for Open CoDesign's package manager manifests. The `packaging/` tree is the source of truth; after each stable tag push `release.yml` runs `update-shas.sh` and commits the synced manifests back to `main`.
+Canonical sources for Open CoDesign's package manager manifests. The `packaging/` tree is the source of truth; after each stable release `release.yml` runs `update-shas.sh` and opens a PR with the synced manifests.
 
 Windows releases publish both NSIS setup exes and portable zip archives. winget uses the setup exes. Scoop uses the zip archives so installation does not depend on unpacking electron-builder's nested NSIS payload; older releases without zip assets use the manifest's legacy NSIS fallback.
 
@@ -27,12 +27,40 @@ packaging/
 ## Release flow
 
 1. Push a `vX.Y.Z` tag. `release.yml` builds + publishes the installers.
-2. After `publish` succeeds, the **`bump-manifests`** job auto-runs `update-shas.sh`: it pulls `SHA256SUMS.txt` from the release, rewrites versions / URLs / checksums across all four channels (and auto-creates the new winget version directory by copying from the previous one), then commits the diff back to `main` as `chore(release): sync manifests to vX.Y.Z`.
+2. After `publish` succeeds, the **`bump-manifests`** job runs `update-shas.sh`: it pulls `SHA256SUMS.txt` from the release, rewrites versions / URLs / checksums across all four channels, and opens or updates `release/vX.Y.Z-manifests` as a PR to `main`. Auto-merge waits for required checks. It never pushes directly to `main` or adds `[skip ci]`.
 3. The **`scoop`** job copies the generated Scoop manifest into `OpenCoworkAI/scoop-bucket` when `SCOOP_BUCKET_TOKEN` is configured.
 4. The **`homebrew`** job copies the generated cask into `OpenCoworkAI/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
 5. The **`winget`** job submits future bumps after Microsoft accepts the initial package. The v0.2.0 winget PR is microsoft/winget-pkgs#372310.
 
-To run the sync manually (e.g. to backfill a past release or test script changes):
+### Manifest PR credentials and native release gate
+
+Configure the repository Actions secret `RELEASE_BOT_TOKEN` with a fine-grained
+PAT restricted to this repository, with **Contents: read/write** and
+**Pull requests: read/write** (and required organization approval). Use a dedicated
+automation account. This token creates the branch and PR so normal PR checks run;
+the built-in `GITHUB_TOKEN` is deliberately not a fallback, because its events do
+not start those checks. Do not grant branch-protection bypass or weaken required CI.
+Repository auto-merge must be enabled. Missing credentials, failed PR creation,
+and failed auto-merge setup fail the sync job visibly, after release publication.
+This does not change the separate Homebrew, Scoop, or winget credentials.
+
+Existing manifest PRs whose commits contain `[skip ci]` need a new commit without
+that marker (or regeneration through this workflow); enabling token permissions
+alone does not repair their missing CI checks.
+
+Release publication now waits for the reusable Intel check on `macos-15-intel`,
+including architecture validation and native application smoke testing. Related
+workflow and macOS packaging changes also run it on PRs. The check only builds
+and tests; it does not publish. A release invocation suppresses its extra DMG
+artifact so the release's installer downloads stay unambiguous.
+
+Test the manifest PR logic without credentials or network writes:
+
+```sh
+bash .github/scripts/sync-release-manifests.test.sh
+```
+
+To run manifest generation manually (e.g. to backfill a past release or test script changes):
 
 ```sh
 ./packaging/update-shas.sh              # uses apps/desktop/package.json version
