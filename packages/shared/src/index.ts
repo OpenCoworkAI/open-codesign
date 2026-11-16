@@ -11,7 +11,13 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
-export { isRecoveryCategory, RECOVERY_CATEGORIES, type RecoveryCategory } from './recovery';
+export {
+  isRecoveryCategory,
+  type ProviderFailureContext,
+  RECOVERY_CATEGORIES,
+  type RecoveryCategory,
+  readProviderFailureContext,
+} from './recovery';
 export type {
   WebSearchBackend,
   WebSearchMode,

@@ -1175,6 +1175,7 @@
       "auth_key_invalid": "Comprueba o sustituye la clave API en la configuración del proveedor.",
       "auth_key_expired": "Inicia sesión de nuevo o sustituye la clave API caducada.",
       "auth_permission": "Comprueba los permisos de la clave API en el panel del proveedor.",
+      "region_restricted": "Este proveedor no admite esta cuenta o región. Contacta con el proveedor o elige otro proveedor disponible.",
       "endpoint_not_found": "Comprueba la URL base, la ruta y el puerto del proveedor.",
       "endpoint_missing_v1": "Comprueba si este proveedor requiere /v1 en la URL base.",
       "wire_incompatible": "Selecciona un protocolo API compatible en la configuración avanzada.",

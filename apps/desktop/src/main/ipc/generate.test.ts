@@ -1,3 +1,4 @@
+import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../electron-runtime', () => ({
@@ -39,6 +40,20 @@ describe('generation failure recovery context', () => {
     expect(normalize(err).error).toMatchObject({
       upstream_recovery_category: 'network_unreachable',
       upstream_code: 'ECONNREFUSED',
+    });
+  });
+
+  it('retains the category computed from the wrapped provider response', () => {
+    const err = new CodesignError('Provider request failed', 'PROVIDER_ERROR', {
+      cause: { status: 429, code: 'insufficient_quota', message: 'quota exhausted' },
+    });
+    expect(normalize(err)).toMatchObject({
+      upstreamStatus: 429,
+      error: {
+        upstream_status: 429,
+        upstream_code: 'insufficient_quota',
+        upstream_recovery_category: 'billing',
+      },
     });
   });
 

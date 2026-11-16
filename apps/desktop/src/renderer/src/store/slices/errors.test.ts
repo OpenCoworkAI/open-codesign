@@ -88,6 +88,34 @@ describe('provider recovery hints in generation errors', () => {
     expect(description).not.toContain(i18n.t('diagnostics.cause.unknown'));
   });
 
+  it('does not suggest replacing a key for a provider region restriction', async () => {
+    await initI18n('en');
+    const error = Object.assign(new Error('Country, region, or territory not supported'), {
+      upstream_status: 403,
+      upstream_recovery_category: 'region_restricted',
+    });
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    expect(hypothesis?.suggestedFix).toBeUndefined();
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).toContain(
+      'Contact the provider',
+    );
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).not.toContain('API key');
+  });
+
+  it.each([
+    401, 429,
+  ])('shows billing recovery rather than auth/rate-limit actions for quota returned as %s', async (status) => {
+    await initI18n('en');
+    const error = Object.assign(new Error('quota exhausted'), {
+      upstream_status: status,
+      upstream_recovery_category: 'billing',
+    });
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    expect(hypothesis?.category).toBe('billing');
+    expect(hypothesis?.suggestedFix?.label).toBe('diagnostics.fix.addCreditsGeneric');
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).toContain('remaining quota');
+  });
+
   it.each([
     'unknown',
     'made_up_category',

@@ -1,3 +1,4 @@
+import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
   classifyRecoveryCategory,
@@ -24,6 +25,17 @@ describe('provider recovery classification', () => {
     [402, undefined, 'payment required', 'billing'],
     [429, 'insufficient_quota', 'quota exhausted', 'billing'],
     [429, undefined, 'too many requests', 'rate_limit'],
+    [429, undefined, 'per-minute request quota reached', 'rate_limit'],
+    [
+      429,
+      'rate_limit_exceeded',
+      'Quota exhausted for per-minute requests; retry in 60 seconds',
+      'rate_limit',
+    ],
+    [401, 'insufficient_quota', 'quota exhausted', 'billing'],
+    [403, undefined, 'credit balance is too low', 'billing'],
+    [403, 'unsupported_country_region_territory', 'Forbidden', 'region_restricted'],
+    [403, undefined, 'Country, region, or territory not supported', 'region_restricted'],
     [404, undefined, 'model not found', 'model_not_found'],
     [404, undefined, 'page not found', 'endpoint_not_found'],
     [413, undefined, 'body too large', 'request_too_large'],
@@ -53,6 +65,49 @@ describe('provider recovery classification', () => {
   it('handles long upstream text without guessing a missing version or incompatible wire', () => {
     const message = 'baseurlmissing include wire '.repeat(10_000);
     expect(classifyRecoveryCategory(undefined, undefined, message)).toBe('unknown');
+  });
+
+  it('preserves wrapped upstream status, code, request ID and scrubbed body', () => {
+    const cause = {
+      status: 429,
+      code: 'insufficient_quota',
+      message: 'quota exhausted',
+      headers: { 'x-request-id': 'wrapped-request' },
+      responseBody: 'quota exhausted for sk-aaaaaaaaaaaaaaaaaaaaa',
+    };
+    const error = new CodesignError('Provider request failed', 'PROVIDER_ERROR', { cause });
+    expect(normalizeProviderError(error, 'custom-relay', 0)).toMatchObject({
+      upstream_status: 429,
+      upstream_code: 'insufficient_quota',
+      upstream_request_id: 'wrapped-request',
+      upstream_message: 'Provider request failed',
+      recovery_category: 'billing',
+      redacted_body_head: 'quota exhausted for ***REDACTED***',
+    });
+  });
+
+  it('uses nested provider text rather than a generic wrapper for recovery', () => {
+    const cause = Object.assign(new Error('unsupported role: developer'), { status: 400 });
+    expect(
+      normalizeProviderError(
+        new CodesignError('Request failed', 'PROVIDER_ERROR', { cause }),
+        'relay',
+        0,
+      ),
+    ).toMatchObject({ upstream_status: 400, recovery_category: 'model_not_supported_role' });
+  });
+
+  it.each([
+    ['429 Provider returned error: temporarily rate-limited upstream', 429, 'rate_limit'],
+    ['HTTP 401 invalid key', 401, 'auth_key_invalid'],
+    ['Request ID 401 was not found', undefined, 'unknown'],
+  ] as const)('extracts only an explicit pi HTTP status from %s', (message, status, category) => {
+    expect(
+      normalizeProviderError(new CodesignError(message, 'PROVIDER_ERROR'), 'relay', 0),
+    ).toMatchObject({
+      upstream_status: status,
+      recovery_category: category,
+    });
   });
 
   it('does not follow a cyclic error cause forever', () => {

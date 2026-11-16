@@ -1167,6 +1167,7 @@
       "auth_key_invalid": "Confira ou substitua a chave de API nas configurações do provedor.",
       "auth_key_expired": "Entre novamente ou substitua a chave de API expirada.",
       "auth_permission": "Confira as permissões da chave de API no painel do provedor.",
+      "region_restricted": "Este provedor não oferece suporte a esta conta ou região. Entre em contato com o provedor ou escolha outro provedor disponível.",
       "endpoint_not_found": "Confira a URL base, o caminho e a porta do provedor.",
       "endpoint_missing_v1": "Confira se este provedor exige /v1 na URL base.",
       "wire_incompatible": "Selecione um protocolo de API compatível nas configurações avançadas.",

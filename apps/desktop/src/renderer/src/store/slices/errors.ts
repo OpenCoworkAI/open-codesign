@@ -171,7 +171,12 @@ export function deriveGenerateHypothesis(
     ...(status !== undefined ? { status } : {}),
     ...(message !== undefined ? { message } : {}),
   };
-  const hypotheses = diagnoseGenerateFailure(ctx);
+  if (recoveryCategory === 'region_restricted') {
+    return { cause: 'diagnostics.cause.unknown', recoveryCategory };
+  }
+  const hypotheses = diagnoseGenerateFailure(
+    recoveryCategory === 'billing' ? { ...ctx, status: 402, code: '402' } : ctx,
+  );
   const primary = hypotheses[0];
   // Skip the bare "unknown" hypothesis — appending "Unknown error" to a
   // toast that already shows the upstream message is just noise.

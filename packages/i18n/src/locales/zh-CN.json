@@ -1370,6 +1370,7 @@
       "auth_key_invalid": "在服务商设置中检查或更换 API 密钥。",
       "auth_key_expired": "重新登录，或在服务商设置中更换已过期的 API 密钥。",
       "auth_permission": "在服务商控制台检查 API 密钥的权限。",
+      "region_restricted": "此服务商不支持当前账号或地区。请联系服务商，或选择其他可用的服务商。",
       "endpoint_not_found": "检查服务商的基础地址、路径和端口。",
       "endpoint_missing_v1": "检查此服务商是否要求在基础地址中包含 /v1。",
       "wire_incompatible": "在高级设置中选择此服务商支持的 API 协议。",
