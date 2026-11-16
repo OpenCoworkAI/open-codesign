@@ -4,13 +4,25 @@ import {
   appendSessionActiveMessage,
   appendSessionChatMessage,
   appendSessionToolStatus,
-  listSessionActiveMessages,
-  listSessionChatMessages,
   type SessionChatStoreOptions,
+  sessionChatProjection,
 } from './session-chat';
 
 function payload(row: ChatMessageRow): Record<string, unknown> {
   return (row.payload ?? {}) as Record<string, unknown>;
+}
+
+/** Repair in bounded batches so launch recovery can service the renderer. */
+export async function projectRunEventHistory(
+  opts: SessionChatStoreOptions,
+  events: AgentStreamEvent[],
+  shouldProject: (designId: string) => boolean = () => true,
+): Promise<void> {
+  for (let index = 0; index < events.length; index += 1) {
+    if (index % 32 === 0) await setImmediate();
+    const event = events[index];
+    if (event && shouldProject(event.designId)) projectRunEventToChat(opts, event);
+  }
 }
 
 /** The journal is authoritative; replay repairs a crash between journal and chat writes. */
@@ -21,9 +33,7 @@ export function projectRunEventToChat(
   if (event.seq === undefined) return;
   if (event.type === 'active_message' && event.activeMessage) {
     const message = event.activeMessage;
-    const previous = listSessionActiveMessages(opts, event.designId).find(
-      (row) => row.messageId === message.messageId,
-    );
+    const previous = sessionChatProjection(opts, event.designId).activeMessage(message.messageId);
     if (
       !previous ||
       (previous.status === 'pending' && message.status !== 'pending') ||
@@ -38,11 +48,11 @@ export function projectRunEventToChat(
     )
   )
     return;
-  const rows = listSessionChatMessages(opts, event.designId);
+  const projection = sessionChatProjection(opts, event.designId);
   const key = `${event.generationId}:${event.seq}`;
   const append = (kind: ChatAppendInput['kind'], data: Record<string, unknown>, suffix = '') => {
     const eventKey = key + suffix;
-    if (rows.some((row) => payload(row)['runEventKey'] === eventKey)) return;
+    if (projection.hasEvent(eventKey)) return;
     appendSessionChatMessage(opts, {
       designId: event.designId,
       kind,
@@ -65,12 +75,7 @@ export function projectRunEventToChat(
       ...(event.message ? { error: { message: event.message } } : {}),
     });
   } else if (event.type === 'tool_call_result') {
-    const row = rows.find(
-      (row) =>
-        row.kind === 'tool_call' &&
-        payload(row)['runId'] === event.generationId &&
-        payload(row)['toolCallId'] === event.toolCallId,
-    );
+    const row = projection.tool(event.generationId, event.toolCallId);
     if (row) {
       const appliedKey = payload(row)['runResultEventKey'];
       const prefix = `${event.generationId}:`;
@@ -92,13 +97,7 @@ export function projectRunEventToChat(
   } else if (event.type === 'error') {
     append('error', { message: event.message ?? 'Unknown error', code: event.code });
   } else if (event.type === 'run_settled') {
-    for (const row of rows) {
-      if (
-        row.kind !== 'tool_call' ||
-        payload(row)['runId'] !== event.generationId ||
-        payload(row)['status'] !== 'running'
-      )
-        continue;
+    for (const row of projection.runningTools(event.generationId)) {
       appendSessionToolStatus(opts, {
         designId: event.designId,
         seq: row.seq,
@@ -111,12 +110,7 @@ export function projectRunEventToChat(
     }
     const response = event.response;
     if (response) {
-      if (
-        response.message.trim() &&
-        !rows.some(
-          (row) => row.kind === 'assistant_text' && payload(row)['runId'] === event.generationId,
-        )
-      )
+      if (response.message.trim() && !projection.hasAssistant(event.generationId))
         append('assistant_text', { text: response.message }, ':message');
       const first = response.artifacts[0];
       const filename =
@@ -135,3 +129,5 @@ export function projectRunEventToChat(
     }
   }
 }
+
+import { setImmediate } from 'node:timers/promises';
