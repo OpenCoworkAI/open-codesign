@@ -68,6 +68,15 @@ describe('decryptSecret', () => {
   it('fails closed when Linux basic_text backend is selected', () => {
     vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValueOnce('basic_text');
     expectKeychainUnavailable(() => encryptSecret('sk-test-secret'));
+    expect(safeStorage.encryptString).not.toHaveBeenCalled();
+  });
+
+  it('explains how an installed secret service can be selected persistently', () => {
+    vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValueOnce('basic_text');
+    expect(() => encryptSecret('sk-test-secret')).toThrow('linux-password-store.json');
+    vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValueOnce('basic_text');
+    expect(() => encryptSecret('sk-test-secret')).toThrow('may already be installed');
+    expect(safeStorage.encryptString).not.toHaveBeenCalled();
   });
 
   it('reads existing plaintext secret rows', () => {

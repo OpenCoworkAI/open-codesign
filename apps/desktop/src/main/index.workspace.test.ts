@@ -44,6 +44,7 @@ function BrowserWindowMock() {}
 vi.mock('./electron-runtime', () => ({
   BrowserWindow: BrowserWindowMock,
   app: {
+    commandLine: { hasSwitch: vi.fn(() => false), appendSwitch: vi.fn() },
     getPath: vi.fn((name: string) => {
       if (name === 'userData') return '/tmp/open-codesign-tests';
       if (name === 'logs') return '/tmp/open-codesign-tests/logs';
