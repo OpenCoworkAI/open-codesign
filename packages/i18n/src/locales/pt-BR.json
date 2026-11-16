@@ -313,6 +313,18 @@
     }
   },
   "settings": {
+    "webSearch": {
+      "serply": {
+        "newKey": "Chave de API do Serply",
+        "replaceKey": "Substituir chave de API do Serply",
+        "getKey": "Obter uma chave em app.serply.io",
+        "clearConfirm": "Remover a chave salva do Serply? A chave do Tavily será mantida.",
+        "openFailed": "Não foi possível abrir a página de chaves do Serply. Acesse https://app.serply.io no navegador."
+      },
+      "result": {
+        "missingKey": "Não há chave salva para o serviço de busca selecionado. Salve a chave de API primeiro."
+      }
+    },
     "title": "Configurações",
     "imageGen": {
       "tabTitle": "Geração de imagens",

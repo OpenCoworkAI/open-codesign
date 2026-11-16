@@ -28,7 +28,7 @@ export function createWebResearchRun(
       ...(config?.webSearch ? { webSearch: config.webSearch } : {}),
     }),
   );
-  const credentialId = route.providerId ?? 'tavily';
+  const credentialId = route.providerId ?? (route.service === 'serply' ? 'serply' : 'tavily');
   const ciphertext = config?.secrets[credentialId]?.ciphertext;
   let credential: Promise<string | undefined> | undefined;
   const network = createWebResearchNetwork(

@@ -8,6 +8,7 @@ import {
   publicWebUrl,
   readableHtml,
   requestPublicUrl,
+  testSearchConnection,
   testTavilyConnection,
 } from './web-research-network';
 
@@ -18,6 +19,125 @@ const settings = {
   timeoutMs: 1000,
   maxChars: 1000,
 };
+
+describe('Serply search adapter', () => {
+  it('uses documented GET query parameters and X-Api-Key without a body or bearer key', async () => {
+    const fake = transport([
+      {
+        body: JSON.stringify({
+          results: [
+            {
+              title: 'Synthetic source',
+              link: 'https://example.com/source#section',
+              description: 'd'.repeat(3000),
+            },
+            { title: 'Duplicate', link: 'https://example.com/source' },
+            { title: 'Private', link: 'http://127.0.0.1/private' },
+            { title: 'Credentials', link: 'https://user:password@example.com' },
+            { title: 'Second', link: 'https://example.org/source', description: 'Second snippet' },
+          ],
+          ads: [{ link: 'https://ads.example.com' }],
+          ai_overview: { description: 'Not a source' },
+        }),
+      },
+    ]);
+    const network = createWebResearchNetwork(
+      { ...settings, service: 'serply', maxChars: 12000 },
+      fake,
+    );
+    const query = 'C# 100%? x&y';
+    const result = await network.search(query, 5);
+    expect(fake.seen).toHaveLength(1);
+    expect(fake.seen[0]?.url.origin).toBe('https://api.serply.io');
+    expect(fake.seen[0]?.url.pathname).toBe('/v1/search/');
+    expect(fake.seen[0]?.url.searchParams.get('q')).toBe(query);
+    expect(fake.seen[0]?.url.searchParams.get('num')).toBe('5');
+    expect(fake.seen[0]?.url.href).not.toContain(settings.apiKey);
+    expect(fake.seen[0]?.options.method).toBe('GET');
+    expect(fake.seen[0]?.options.headers).toMatchObject({
+      'X-Api-Key': settings.apiKey,
+      Accept: 'application/json',
+    });
+    expect(fake.seen[0]?.options.headers).not.toHaveProperty('Authorization');
+    expect(fake.seen[0]?.body).toBe('');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      title: 'Synthetic source',
+      url: 'https://example.com/source',
+      excerpt: 'd'.repeat(2000),
+      originalRead: false,
+      publisher: null,
+      publishedAt: null,
+    });
+    expect(result[1]?.excerpt).toBe('Second snippet');
+  });
+
+  it('keeps request/count limits and never falls back or follows a search redirect', async () => {
+    const fake = transport([
+      { status: 302, headers: { location: 'https://other.example.com' }, body: settings.apiKey },
+    ]);
+    const network = createWebResearchNetwork({ ...settings, service: 'serply', maxCalls: 1 }, fake);
+    await expect(network.search('query', 1)).rejects.toThrow('HTTP 302');
+    await expect(network.search('query', 1)).rejects.toThrow('budget');
+    expect(fake.seen).toHaveLength(1);
+    const invalid = createWebResearchNetwork({ ...settings, service: 'serply' }, transport([]));
+    await expect(invalid.search('query', 6)).rejects.toThrow('1–5');
+  });
+
+  it('uses the existing public DNS boundary and never sends credentials to private addresses', async () => {
+    const fake = transport([]);
+    fake.resolve.mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }]);
+    await expect(
+      createWebResearchNetwork({ ...settings, service: 'serply' }, fake).search('query', 1),
+    ).rejects.toThrow('Blocked non-public DNS');
+    expect(fake.seen).toHaveLength(0);
+  });
+
+  it.each([
+    [401, 'invalid-key'],
+    [403, 'invalid-key'],
+    [402, 'quota'],
+    [429, 'rate-limit'],
+    [500, 'service-error'],
+    [302, 'unexpected-response'],
+  ] as const)('returns only bounded probe status for HTTP %s', async (httpStatus, status) => {
+    const fake = transport([
+      { status: httpStatus, body: JSON.stringify({ detail: settings.apiKey }) },
+    ]);
+    expect(await testSearchConnection('serply', settings.apiKey, 1000, fake)).toEqual({
+      status,
+      httpStatus,
+    });
+    expect(fake.seen).toHaveLength(1);
+  });
+
+  it('treats malformed successful replies as unexpected without exposing the body', async () => {
+    const fake = transport([{ body: settings.apiKey }]);
+    expect(await testSearchConnection('serply', settings.apiKey, 1000, fake)).toEqual({
+      status: 'unexpected-response',
+    });
+  });
+  it.each([
+    'HTTP ',
+    'Blocked ',
+    'Search service ',
+  ])('does not forward a transport error containing the credential/query behind the prefix %s', async (prefix) => {
+    const fake = {
+      resolve: async () => {
+        throw new Error(
+          `${prefix}${settings.apiKey} https://api.serply.io/v1/search/?q=private-search`,
+        );
+      },
+    };
+    const network = createWebResearchNetwork({ ...settings, service: 'serply' }, fake);
+    await expect(network.search('private-search', 1)).rejects.toThrow(
+      'Web request failed (network, DNS, TLS or parsing error).',
+    );
+    expect(await testSearchConnection('serply', settings.apiKey, 1000, fake)).toEqual({
+      status: 'network-error',
+    });
+  });
+});
 function transport(
   responses: Array<{ status?: number; headers?: Record<string, string>; body?: string }>,
 ) {

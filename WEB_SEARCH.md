@@ -1,6 +1,6 @@
 # Web Search v1
 
-Open CoDesign can research a slide topic, save facts/data, build slides, and deliver a separate sources file. It uses **Tavily Search** and a bounded, direct HTTP(S) reader. There is no research panel, MCP runtime, or hosted account. HTML reading uses the lazily loaded `parse5` HTML5 parser; it does not execute webpage scripts or load their resources.
+Open CoDesign can research a slide topic, save facts/data, build slides, and deliver a separate sources file. It supports **Tavily**, **Serply**, and eligible model-provider search capabilities, with a bounded, direct HTTP(S) reader. There is no research panel, MCP runtime, or hosted account. HTML reading uses the lazily loaded `parse5` HTML5 parser; it does not execute webpage scripts or load their resources.
 
 ## Configure
 
@@ -15,7 +15,15 @@ Changes apply to subsequent new runs (including the next turn in an existing des
 
 Search queries are sent to Tavily; webpage requests go directly to the requested public host. Never paste a key into chat or a design workspace. Key input is transient UI state and is cleared after saving; saved credentials are resolved only in the main process. Get/save/test IPC responses contain only configuration status or bounded diagnostic codes, never credentials, request headers, provider response bodies, or raw errors. No new credential store is introduced: the existing OS-backed `safe:` storage (or `plain:` fallback when unavailable) and active app configuration are reused.
 
-### Test connection
+### Serply
+
+Choose **Serply** in **Search backend**, then save a Serply API key from the [official dashboard](https://app.serply.io). The selected backend owns its key field: Serply uses `secrets.serply`, and Tavily uses `secrets.tavily`. Switching backends preserves both keys, while replacing or clearing a key affects only the selected backend. Serply is selected explicitly; Automatic keeps its existing provider/Tavily selection rules and never chooses Serply as a fallback.
+
+The adapter follows the [official Google Search reference](https://www.serply.io/docs/resources/google-search) and [authentication guide](https://www.serply.io/docs/guides/authentication): one `GET https://api.serply.io/v1/search/?q=...&num=...` request with `X-Api-Key`. Standard query parameters preserve punctuation such as `#`, `?`, and `%`. Only `results[].title/link/description` become sources; ads and answer summaries are ignored. Result counts stay between 1 and 5, snippets are capped at 2,000 characters, and the existing public-address, DNS pinning, response-size, timeout, and per-run call limits still apply. Search redirects are not followed and a failed request never changes backends.
+
+**Test search service** sends one search for `Open CoDesign` with one result, using the saved Serply key. This may consume Serply credits; no test runs automatically on open, save, enable, or backend changes. The [documented error statuses](https://www.serply.io/docs/guides/errors) become bounded status codes only. No raw response, credential, or request header crosses Settings IPC. Live Serply requests and paid account behavior were not exercised during this implementation; tests use synthetic transport fixtures.
+
+### Tavily connection test
 
 The button sends exactly one bounded `POST https://api.tavily.com/search` request with Bearer authentication, fixed query `Tavily`, `max_results: 1`, `search_depth: "basic"`, `auto_parameters: false`, and no generated answer or raw content. It is not run on open, save, toggle, or clear. It consumes **1 Tavily API credit** for a successful basic search, but does **not** consume a task's call budget, grant/bypass task authorization, or save research/chat/workspace records. There is no automatic retry or fallback.
 
