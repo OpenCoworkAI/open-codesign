@@ -205,6 +205,7 @@ async function runWorkspaceMemoryUpdateOnce(
     ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
     ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
     ...(opts.reasoningLevel !== undefined ? { reasoningLevel: opts.reasoningLevel } : {}),
+    ...(opts.thinkingLevelMap !== undefined ? { thinkingLevelMap: opts.thinkingLevelMap } : {}),
     logger: {
       info: (event, data) => log.info(event, data),
       warn: (event, data) => log.warn(event, data),
@@ -341,6 +342,7 @@ async function doUserMemoryConsolidation(
     ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
     ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
     ...(opts.reasoningLevel !== undefined ? { reasoningLevel: opts.reasoningLevel } : {}),
+    ...(opts.thinkingLevelMap !== undefined ? { thinkingLevelMap: opts.thinkingLevelMap } : {}),
     logger: {
       info: (event, data) => log.info(event, data),
       warn: (event, data) => log.warn(event, data),
@@ -405,6 +407,7 @@ async function resolveUserMemoryConsolidationOptions(
     wire: active.wire,
     ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
     ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),
+    ...(active.thinkingLevelMap !== undefined ? { thinkingLevelMap: active.thinkingLevelMap } : {}),
     ...(active.allowKeyless ? { allowKeyless: true } : {}),
   };
 }

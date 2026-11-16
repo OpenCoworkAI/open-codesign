@@ -11,6 +11,7 @@ import type {
   ModelRef,
   ReasoningLevel,
   ResourceStateV1,
+  ThinkingLevelMap,
   WireApi,
 } from '@open-codesign/shared';
 import { Value } from '@sinclair/typebox/value';
@@ -89,6 +90,8 @@ export interface UpdateDesignSessionBriefInput {
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
+  /** Whitelist remap of thinking levels to the provider's wire vocabulary. */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   userMemory?: string | null | undefined;
   workspaceMemory?: string | null | undefined;
   sourceUserMemoryHash?: string | undefined;
@@ -510,6 +513,9 @@ export async function updateDesignSessionBrief(
           ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
           ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
           ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
+          ...(input.thinkingLevelMap !== undefined
+            ? { thinkingLevelMap: input.thinkingLevelMap }
+            : {}),
           maxTokens,
         },
         {
