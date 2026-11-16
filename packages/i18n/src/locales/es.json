@@ -314,6 +314,12 @@
   },
   "settings": {
     "title": "Configuración",
+    "webSearch": {
+      "backendKeenable": "Keenable (sin clave API)",
+      "keenableNoKey": "Keenable no necesita clave",
+      "keenableHint": "Solo se usa al seleccionarlo. Las consultas se envían a Keenable y pueden conservarse con los resultados. El uso sin clave tiene límites por IP.",
+      "keenableTestHint": "Ejecuta una búsqueda de Keenable con la configuración guardada y sin clave. No activa la búsqueda ni autoriza una tarea. Sin reintentos ni cambio automático de servicio."
+    },
     "tabs": {
       "models": "Modelos",
       "images": "API de Imágenes",

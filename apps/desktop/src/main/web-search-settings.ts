@@ -48,6 +48,15 @@ export function saveWebSearchSettings(raw: unknown): Promise<WebSearchSettingsSt
   const save = pendingSave.then(async () => {
     try {
       const current = getCachedConfig();
+      if (
+        (input.backend ?? current?.webSearch?.backend) === 'keenable' &&
+        (input.apiKey !== undefined || input.clearKey === true)
+      ) {
+        throw new CodesignError(
+          'Keenable does not use a search API key.',
+          ERROR_CODES.IPC_BAD_INPUT,
+        );
+      }
       const config = current
         ? toPersistedV3(current)
         : { version: 3 as const, activeProvider: '', activeModel: '', providers: {}, secrets: {} };
@@ -88,7 +97,10 @@ export function saveWebSearchSettings(raw: unknown): Promise<WebSearchSettingsSt
       return settingsState(next);
     } catch (err) {
       // Preserve keychain failures so Settings can show the keyed KEYCHAIN_UNAVAILABLE copy.
-      if (err instanceof CodesignError && err.code === ERROR_CODES.KEYCHAIN_UNAVAILABLE) {
+      if (
+        err instanceof CodesignError &&
+        (err.code === ERROR_CODES.KEYCHAIN_UNAVAILABLE || err.code === ERROR_CODES.IPC_BAD_INPUT)
+      ) {
         throw err;
       }
       // OS encryption and persistence errors must not expose the key or payload.
@@ -120,6 +132,8 @@ export async function testWebSearchSettings(): Promise<WebSearchTestResult> {
   const route = resolveWebSearchRoute(config);
   if (route.reason) return { status: route.reason };
   if (route.mode === 'native-tool') return { status: 'not-verified' };
+  if (route.service === 'keenable')
+    return testSearchConnection('keenable', '', config?.webSearch?.timeoutMs ?? 15000);
   if (
     route.service &&
     route.service !== 'tavily' &&

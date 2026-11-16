@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   configDir: '',
   encrypted: false,
   probe: vi.fn(),
+  searchProbe: vi.fn(),
   log: vi.fn(),
 }));
 vi.mock('./storage-settings', async (importOriginal) => ({
@@ -37,7 +38,10 @@ vi.mock('./electron-runtime', () => ({
 vi.mock('./logger', () => ({
   getLogger: () => ({ warn: mocks.log, info: mocks.log, error: mocks.log, debug: mocks.log }),
 }));
-vi.mock('./web-research-network', () => ({ testTavilyConnection: mocks.probe }));
+vi.mock('./web-research-network', () => ({
+  testTavilyConnection: mocks.probe,
+  testSearchConnection: mocks.searchProbe,
+}));
 
 const key = 'tvly-settings-test-fixture';
 const limits = { enabled: true, maxCalls: 7, timeoutMs: 4000, maxChars: 3000 };
@@ -57,6 +61,7 @@ beforeEach(async () => {
   mocks.configDir = await mkdtemp(join(tmpdir(), 'codesign-search-settings-'));
   mocks.encrypted = false;
   mocks.probe.mockReset().mockResolvedValue({ status: 'ok' });
+  mocks.searchProbe.mockReset().mockResolvedValue({ status: 'ok' });
   mocks.log.mockClear();
   setCachedConfig(fixture());
 });
@@ -66,6 +71,28 @@ afterEach(async () => {
 });
 
 describe('web search settings persistence', () => {
+  it('persists Keenable without changing credentials or limits and tests without decrypting Tavily', async () => {
+    setCachedConfig(fixture('safe:unreadable-fixture'));
+    const before = toPersistedV3(getCachedConfig() ?? fixture());
+    expect(await saveWebSearchSettings({ backend: 'keenable' })).toMatchObject({
+      backend: 'keenable',
+      service: 'keenable',
+      inheritsCredential: false,
+    });
+    const stored = await configFile.readConfig();
+    expect(stored?.webSearch).toEqual({ ...limits, backend: 'keenable' });
+    expect(stored?.secrets).toEqual(before.secrets);
+    expect(await testWebSearchSettings()).toEqual({ status: 'ok' });
+    expect(mocks.searchProbe).toHaveBeenCalledExactlyOnceWith('keenable', '', 4000);
+    expect(mocks.probe).not.toHaveBeenCalled();
+    await expect(saveWebSearchSettings({ apiKey: 'must-not-store' })).rejects.toMatchObject({
+      code: 'IPC_BAD_INPUT',
+    });
+    await expect(saveWebSearchSettings({ clearKey: true })).rejects.toMatchObject({
+      code: 'IPC_BAD_INPUT',
+    });
+    expect(getCachedConfig()?.secrets).toEqual(before.secrets);
+  });
   it('reads only configured status, without decrypting or returning any credential', () => {
     setCachedConfig(fixture('safe:unreadable-fixture'));
     expect(getWebSearchSettings()).toMatchObject({ enabled: true, hasKey: true });

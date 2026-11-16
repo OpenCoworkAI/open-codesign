@@ -42,6 +42,33 @@ function config(): Pick<Config, 'webSearch' | 'secrets'> {
 }
 
 describe('per-generation web research snapshot', () => {
+  it('snapshots keyless Keenable without decrypting saved keys and retains per-run authorization', async () => {
+    const cached = config();
+    if (!cached.webSearch) throw new Error('Missing fixture settings');
+    cached.webSearch.backend = 'keenable';
+    const fake = transport();
+    const decrypt = vi.fn(() => {
+      throw new Error('saved key must not be read');
+    });
+    const active = createWebResearchRun(cached, decrypt, fake);
+    expect(active.route.service).toBe('keenable');
+    const ask = vi.fn<Parameters<typeof createWebResearchAuthorization>[1]>(async () => ({
+      status: 'answered',
+      answers: [{ questionId: 'web-research-permission', value: 'Allow this run' }],
+    }));
+    const authorize = createWebResearchAuthorization(active.settings, ask);
+    expect(fake.seen).toHaveLength(0);
+    await authorize();
+    await active.network.search('query', 1);
+    expect(ask).toHaveBeenCalledOnce();
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(fake.seen[0]?.headers).toMatchObject({ 'X-Keenable-Title': 'Open CoDesign' });
+    expect(fake.seen[0]?.headers).not.toHaveProperty('Authorization');
+    cached.webSearch.backend = 'tavily';
+    await active.network.search('still Keenable', 1);
+    expect(decrypt).not.toHaveBeenCalled();
+    await expect(active.network.fetch('https://example.com')).rejects.toThrow(/budget/);
+  });
   it('shares first credential resolution between concurrent searches', async () => {
     const fake = transport();
     const decrypt = vi.fn((value: string) => value);

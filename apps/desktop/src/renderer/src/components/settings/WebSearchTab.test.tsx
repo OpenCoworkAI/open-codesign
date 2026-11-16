@@ -92,6 +92,51 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Tavily Settings UI', () => {
+  it('clears an unsaved Tavily draft when selecting Keenable without saving or testing a key', async () => {
+    await mount();
+    hooks.state[1] = 'transient-tavily-key';
+    api.save.mockResolvedValueOnce({
+      ok: true,
+      settings: { enabled: false, hasKey: true, backend: 'keenable', service: 'keenable' },
+    });
+    find(render(), (props) => props['aria-label'] === 'settings.webSearch.backend').onChange?.({
+      target: { checked: false, value: 'keenable' },
+    });
+    await vi.waitFor(() =>
+      expect(api.save).toHaveBeenCalledExactlyOnceWith({ backend: 'keenable' }),
+    );
+    expect(hooks.state[1]).toBe('');
+    expect(renderToStaticMarkup(render())).not.toContain('type="password"');
+    expect(api.test).not.toHaveBeenCalled();
+  });
+  it('selects and tests keyless Keenable without showing or sending an API key', async () => {
+    api.get.mockResolvedValue({
+      enabled: false,
+      hasKey: false,
+      backend: 'keenable',
+      service: 'keenable',
+      mode: 'search-api',
+    });
+    await mount();
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain('settings.webSearch.backendKeenable');
+    expect(html).toContain('settings.webSearch.keenableNoKey');
+    expect(html).toContain('settings.webSearch.keenableHint');
+    expect(html).toContain('settings.webSearch.keenableTestHint');
+    expect(html).not.toContain('type="password"');
+    expect(api.test).not.toHaveBeenCalled();
+    const test = find(
+      render(),
+      (props) =>
+        props.onClick !== undefined &&
+        Array.isArray(props.children) &&
+        props.children.includes('settings.webSearch.test'),
+    );
+    expect(test.disabled).toBe(false);
+    await test.onClick?.();
+    expect(api.test).toHaveBeenCalledExactlyOnceWith();
+    expect(api.save).not.toHaveBeenCalled();
+  });
   it('saves backend and native opt-in without sending a duplicate key', async () => {
     await mount();
     api.save.mockResolvedValueOnce({
