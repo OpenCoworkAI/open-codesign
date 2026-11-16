@@ -513,6 +513,31 @@ describe('resolveActiveModel', () => {
     expect(result.reasoningLevel).toBe('off');
   });
 
+  it('threads through the per-provider thinking level map for the canonical active', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-5.5',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+      },
+      providers: {
+        openai: {
+          ...BUILTIN_PROVIDERS.openai,
+          defaultModel: 'gpt-5.5',
+          thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+        },
+      },
+    });
+    const result = resolveActiveModel(cfg, { provider: 'openai', modelId: 'gpt-5.5' });
+
+    expect(result.thinkingLevelMap).toEqual({
+      off: 'none',
+      low: 'low',
+      medium: 'medium',
+      xhigh: 'xhigh',
+    });
+  });
+
   it('threads through the per-provider context window for the canonical active', () => {
     const cfg = makeCfg({
       provider: 'ollama',

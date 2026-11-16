@@ -668,3 +668,46 @@ it('round-trips opt-in web search settings and keeps Tavily in the existing secr
     parseConfigFlexible({ version: 3, activeProvider: '', activeModel: '' }).webSearch,
   ).toBeUndefined();
 });
+
+describe('provider thinkingLevelMap', () => {
+  it('declares reasoning support even for unrecognized local model ids', () => {
+    expect(
+      resolveProviderCapabilities('custom-local', {
+        wire: 'openai-chat',
+        thinkingLevelMap: { off: 'none', low: 'local-low' },
+        capabilities: { supportsReasoning: false },
+      }).supportsReasoning,
+    ).toBe(true);
+  });
+  const provider = {
+    id: 'custom-ninfer',
+    name: 'Ninfer',
+    builtin: false,
+    wire: 'openai-chat',
+    baseUrl: 'http://127.0.0.1:8090/v1',
+    defaultModel: 'qwen-local',
+  };
+  const config = (thinkingLevelMap: unknown) => ({
+    version: 3,
+    activeProvider: 'custom-ninfer',
+    activeModel: 'qwen-local',
+    secrets: {},
+    providers: { 'custom-ninfer': { ...provider, thinkingLevelMap } },
+  });
+
+  it('accepts a whitelist remap of thinking levels to wire values', () => {
+    const map = { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' };
+    expect(ConfigV3Schema.parse(config(map)).providers['custom-ninfer']?.thinkingLevelMap).toEqual(
+      map,
+    );
+  });
+
+  it.each([
+    ['an unknown level', { turbo: 'max' }],
+    ['an empty wire value', { high: '' }],
+    ['a non-string wire value', { high: 3 }],
+    ['a non-object map', 'high'],
+  ])('rejects %s', (_label, thinkingLevelMap) => {
+    expect(() => ConfigV3Schema.parse(config(thinkingLevelMap))).toThrow();
+  });
+});

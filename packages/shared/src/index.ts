@@ -343,6 +343,7 @@ export type {
   ReasoningLevel,
   ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
+  ThinkingLevelMap,
   WireApi,
 } from './config';
 export {
@@ -350,6 +351,7 @@ export {
   CHATGPT_CODEX_PROVIDER_ID,
   ConfigSchema,
   ConfigV3Schema,
+  clampToThinkingLevelMap,
   defaultProviderCapabilities,
   deriveModelDiscoveryMode,
   detectWireFromBaseUrl,
@@ -368,12 +370,14 @@ export {
   ProviderEntrySchema,
   ProviderModelDiscoveryModeSchema,
   parseConfigFlexible,
+  REASONING_LEVELS,
   ReasoningLevelSchema,
   resolveProviderCapabilities,
   SecretRef,
   STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   StoredDesignSystem,
   SUPPORTED_ONBOARDING_PROVIDERS,
+  ThinkingLevelMapSchema,
   toPersistedV3,
   WireApiSchema,
 } from './config';

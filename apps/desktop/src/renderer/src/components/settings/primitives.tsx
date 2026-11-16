@@ -1,6 +1,7 @@
 import { getCurrentLocale, useT } from '@open-codesign/i18n';
 import {
   CHATGPT_CODEX_PROVIDER_ID,
+  clampToThinkingLevelMap,
   connectionTestProbesModelsEndpoint,
   type ErrorCode,
   localModelsForDiscoveryMode,
@@ -475,6 +476,7 @@ export function ProviderCard({
         <ReasoningDepthSelector
           provider={row.provider}
           value={row.reasoningLevel}
+          thinkingLevelMap={row.thinkingLevelMap}
           onUpdated={onRowChanged}
         />
       )}
@@ -797,10 +799,13 @@ type ReasoningOption = '' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhi
 export function ReasoningDepthSelector({
   provider,
   value,
+  thinkingLevelMap,
   onUpdated,
 }: {
   provider: string;
   value: ReasoningLevel | undefined;
+  /** Whitelist remap from provider config; absent keeps every level. */
+  thinkingLevelMap?: ProviderRow['thinkingLevelMap'];
   onUpdated: (row: ProviderRow) => void;
 }) {
   const t = useT();
@@ -845,7 +850,7 @@ export function ReasoningDepthSelector({
     }
   }
 
-  const options: Array<{ value: ReasoningOption; label: string }> = [
+  const allOptions: Array<{ value: ReasoningOption; label: string }> = [
     { value: '', label: t('settings.providers.reasoning.default') },
     { value: 'off', label: t('settings.providers.reasoning.off') },
     { value: 'minimal', label: t('settings.providers.reasoning.minimal') },
@@ -854,13 +859,26 @@ export function ReasoningDepthSelector({
     { value: 'high', label: t('settings.providers.reasoning.high') },
     { value: 'xhigh', label: t('settings.providers.reasoning.xhigh') },
   ];
+  const options = allOptions.filter(
+    // A configured map is a whitelist: offering a level the endpoint rejects
+    // only produces a 400 at generation time.
+    (option) =>
+      option.value === '' ||
+      thinkingLevelMap === undefined ||
+      thinkingLevelMap[option.value] !== undefined,
+  );
+
+  const effectiveCurrent = current === '' ? '' : clampToThinkingLevelMap(current, thinkingLevelMap);
+  const selected = options.some((option) => option.value === effectiveCurrent)
+    ? effectiveCurrent
+    : '';
 
   return (
     <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
       <Sliders className="w-3 h-3 shrink-0" />
       <span>{t('settings.providers.reasoning.label')}</span>
       <NativeSelect
-        value={current}
+        value={selected}
         onChange={(v) => void handleChange(v as ReasoningOption)}
         options={options}
         disabled={saving}

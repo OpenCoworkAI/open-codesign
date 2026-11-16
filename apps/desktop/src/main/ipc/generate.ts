@@ -1386,6 +1386,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 ...(active.reasoningLevel !== undefined
                   ? { reasoningLevel: active.reasoningLevel }
                   : {}),
+                ...(active.thinkingLevelMap !== undefined
+                  ? { thinkingLevelMap: active.thinkingLevelMap }
+                  : {}),
                 ...(allowKeyless ? { allowKeyless: true } : {}),
                 logger: coreLogger,
               }),
@@ -1441,6 +1444,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(active.thinkingLevelMap !== undefined
+                    ? { thinkingLevelMap: active.thinkingLevelMap }
                     : {}),
                   ...(active.contextWindow !== undefined
                     ? { contextWindow: active.contextWindow }
@@ -1507,6 +1513,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                             : {}),
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
                             : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
@@ -1598,6 +1607,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
                             : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
+                            : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
                       ),
@@ -1636,6 +1648,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                             : {}),
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
                             : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
@@ -1807,6 +1822,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.thinkingLevelMap !== undefined
+                    ? { thinkingLevelMap: active.thinkingLevelMap }
+                    : {}),
                   ...(active.contextWindow !== undefined
                     ? { contextWindow: active.contextWindow }
                     : {}),
@@ -1897,6 +1915,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
             ...(active.reasoningLevel !== undefined
               ? { reasoningLevel: active.reasoningLevel }
+              : {}),
+            ...(active.thinkingLevelMap !== undefined
+              ? { thinkingLevelMap: active.thinkingLevelMap }
               : {}),
             ...(allowKeyless ? { allowKeyless: true } : {}),
             logger: titleLogger,
