@@ -9,6 +9,7 @@
 import {
   type ChatMessage,
   CodesignError,
+  canonicalBaseUrl,
   ERROR_CODES,
   type ModelRef,
   type ReasoningLevel as SharedReasoningLevel,
@@ -58,6 +59,8 @@ export interface GenerateOptions {
   allowKeyless?: boolean;
   /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
   timeoutMs?: number;
+  /** Retry budget for explicit bounded checks; normal calls keep pi defaults. */
+  maxRetries?: number;
 }
 
 export interface GenerateResult {
@@ -372,11 +375,15 @@ export async function complete(
     throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
   const apiKey = trimmedApiKey.length > 0 ? trimmedApiKey : 'open-codesign-keyless';
+  const baseUrl =
+    opts.baseUrl !== undefined && opts.wire !== undefined
+      ? canonicalBaseUrl(opts.baseUrl, opts.wire)
+      : opts.baseUrl;
 
   // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
   // /models listing returns (issue #175). Normalize on the wire only; Settings
   // keeps the prefixed form so provider/model UX stays in sync with /models.
-  const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, baseUrl);
 
   const pi = (await import('@earendil-works/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
@@ -392,6 +399,7 @@ export async function complete(
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
         timeoutMs?: number;
+        maxRetries?: number;
       },
     ) => Promise<PiAssistantMessage>;
   };
@@ -399,7 +407,7 @@ export async function complete(
   let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl);
+      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, baseUrl);
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {
@@ -408,6 +416,27 @@ export async function complete(
         ERROR_CODES.PROVIDER_MODEL_UNKNOWN,
       );
     }
+  }
+
+  // A catalog hit supplies capabilities, not permission to override the
+  // configured transport. SDK adapters read model.api/baseUrl, not piOpts.
+  if (opts.wire !== undefined) {
+    const routed = synthesizeWireModel(
+      model.provider,
+      effectiveModelId,
+      opts.wire,
+      baseUrl ?? piModel.baseUrl,
+    );
+    const { compat: _catalogCompat, ...catalog } = piModel;
+    piModel = {
+      ...catalog,
+      api: routed.api,
+      ...(routed.baseUrl !== undefined ? { baseUrl: routed.baseUrl } : {}),
+      ...(routed.reasoning !== undefined ? { reasoning: routed.reasoning } : {}),
+    };
+    if (routed.compat !== undefined) piModel.compat = routed.compat;
+  } else if (baseUrl !== undefined) {
+    piModel = { ...piModel, baseUrl };
   }
 
   const piContext = toPiContext(messages, piModel, opts);
@@ -421,13 +450,15 @@ export async function complete(
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
     timeoutMs?: number;
+    maxRetries?: number;
   } = {
     apiKey,
   };
-  if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
+  if (baseUrl !== undefined) piOpts.baseUrl = baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
+  if (opts.maxRetries !== undefined) piOpts.maxRetries = opts.maxRetries;
   const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
@@ -459,10 +490,7 @@ export async function complete(
   // sub2api-issued key and you hit the plain API-key branch. Force the
   // identity headers for custom anthropic endpoints so the WAF admits us.
   // User-supplied httpHeaders keep precedence.
-  if (
-    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl) &&
-    !looksLikeClaudeOAuthToken(apiKey)
-  ) {
+  if (shouldForceClaudeCodeIdentity(opts.wire, baseUrl) && !looksLikeClaudeOAuthToken(apiKey)) {
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 

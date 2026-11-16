@@ -91,6 +91,30 @@ async function testConnection() {
 }
 
 describe('ProviderCard connection diagnostics', () => {
+  it('replaces an earlier diagnosis when the latest inference result diverges', async () => {
+    testProvider.mockResolvedValueOnce({
+      ok: false,
+      code: 'NETWORK',
+      message: 'old network failure',
+      hint: 'old hint',
+    });
+    await render();
+    await testConnection();
+    testProvider.mockResolvedValueOnce({
+      ok: false,
+      code: 'INVOKE_DIVERGED',
+      message: 'latest invocation rejected',
+      hint: 'latest hint',
+      compatibility: 'diverges',
+      invokeParity: 'diverged',
+      attemptedUrl: 'https://relay.example.com/v1/responses',
+    });
+    await testConnection();
+    const panel = container.querySelector('[role="alert"]');
+    expect(panel?.textContent).toContain('diagnostics.cause.invokeContractDiverged');
+    expect(panel?.textContent).not.toContain('old network failure');
+    expect(panel?.textContent).toContain('https://relay.example.com/v1/responses');
+  });
   it('shows the actual inference URL instead of guessing a models URL', async () => {
     const attemptedUrl = 'https://relay.example.com/v1/chat/completions';
     testProvider.mockResolvedValue({
