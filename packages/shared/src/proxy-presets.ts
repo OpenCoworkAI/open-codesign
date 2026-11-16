@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
+    id: 'trustedrouter',
+    label: 'TrustedRouter',
+    provider: 'openai',
+    baseUrl: 'https://api.trustedrouter.com/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
