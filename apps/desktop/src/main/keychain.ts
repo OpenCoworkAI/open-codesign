@@ -1,5 +1,7 @@
 import { CodesignError, type Config, ERROR_CODES, type SecretRef } from '@open-codesign/shared';
+import { configDir } from './config';
 import { safeStorage } from './electron-runtime';
+import { linuxPasswordStoreRemediation } from './linux-password-store';
 import { getLogger } from './logger';
 
 const ENCRYPTED_PREFIX = 'safe:';
@@ -26,13 +28,15 @@ function isInsecureStorageBackend(): boolean {
 function assertEncryptionAvailableForStore(): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new CodesignError(
-      'OS keychain (secure storage) is not available. API keys cannot be stored. Finish installing the app (do not run from a mounted DMG) or enable your OS secret service, then try again.',
+      process.platform === 'linux'
+        ? `OS keychain (secure storage) is not available. API keys cannot be stored. ${linuxPasswordStoreRemediation(configDir())}`
+        : 'OS keychain (secure storage) is not available. API keys cannot be stored. Finish installing the app (do not run from a mounted DMG) or enable your OS secret service, then try again.',
       ERROR_CODES.KEYCHAIN_UNAVAILABLE,
     );
   }
   if (isInsecureStorageBackend()) {
     throw new CodesignError(
-      'OS keychain is using Electron basic_text backend, which does not protect API keys. Install a Secret Service provider (e.g. gnome-keyring or KWallet) and restart.',
+      `OS keychain is using Electron basic_text backend, which does not protect API keys. ${linuxPasswordStoreRemediation(configDir())}`,
       ERROR_CODES.KEYCHAIN_UNAVAILABLE,
     );
   }
