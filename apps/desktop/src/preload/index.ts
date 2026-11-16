@@ -52,6 +52,7 @@ import type {
   TestEndpointResponse,
 } from '../main/connection-ipc';
 import type { ImageGenerationSettingsView } from '../main/image-generation-settings';
+import type { ImageGenerationTestResult } from '../main/image-generation-test';
 
 export type {
   ClaudeCodeUserType,
@@ -60,6 +61,7 @@ export type {
   ConnectionTestResult,
   ExternalConfigsDetection,
   ImageGenerationSettingsView,
+  ImageGenerationTestResult,
   ModelsListResponse,
   PreviewMode,
   TestEndpointResponse,
@@ -699,6 +701,8 @@ const api = {
       ipcRenderer.invoke('memory:v1:clear-user-candidates') as Promise<void>,
   },
   imageGeneration: {
+    test: () =>
+      ipcRenderer.invoke('image-generation:v1:test') as Promise<ImageGenerationTestResult>,
     get: () =>
       ipcRenderer.invoke('image-generation:v1:get') as Promise<ImageGenerationSettingsView>,
     update: (patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) =>

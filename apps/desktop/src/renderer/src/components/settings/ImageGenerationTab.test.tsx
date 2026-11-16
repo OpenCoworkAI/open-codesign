@@ -3,7 +3,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ImageGenerationSettingsView } from '../../../../preload/index';
+import type {
+  ImageGenerationSettingsView,
+  ImageGenerationTestResult,
+} from '../../../../preload/index';
 import { ImageGenerationTab } from './ImageGenerationTab';
 
 const translate = (key: string) => key;
@@ -15,6 +18,7 @@ let container: HTMLDivElement;
 let root: Root;
 let settings: ImageGenerationSettingsView;
 const get = vi.fn<() => Promise<ImageGenerationSettingsView>>();
+const testProvider = vi.fn<() => Promise<ImageGenerationTestResult>>();
 const update =
   vi.fn<(patch: Partial<ImageGenerationSettingsView>) => Promise<ImageGenerationSettingsView>>();
 
@@ -35,13 +39,19 @@ beforeEach(() => {
     inheritedKeyAvailable: true,
   };
   get.mockImplementation(async () => settings);
+  testProvider.mockReset();
+  testProvider.mockResolvedValue({
+    provider: 'openai',
+    model: 'gpt-image-2',
+    mimeType: 'image/png',
+  });
   update.mockImplementation(async (patch) => {
     settings = { ...settings, ...patch };
     return settings;
   });
   Object.defineProperty(window, 'codesign', {
     configurable: true,
-    value: { imageGeneration: { get, update } },
+    value: { imageGeneration: { get, update, test: testProvider } },
   });
   container = document.createElement('div');
   document.body.append(container);
@@ -62,6 +72,15 @@ function saveButton(): HTMLButtonElement {
     (item) => item.textContent === 'common.save',
   );
   if (!button) throw new Error('Missing Save button');
+  return button;
+}
+function testButton(): HTMLButtonElement {
+  const button = [...container.querySelectorAll('button')].find((item) =>
+    ['settings.imageGen.testConnection', 'settings.imageGen.testing'].includes(
+      item.textContent ?? '',
+    ),
+  );
+  if (!button) throw new Error('Missing image generation test button');
   return button;
 }
 function checkbox(): HTMLInputElement {
@@ -149,5 +168,114 @@ describe('image response preference UI', () => {
       expect.objectContaining({ variant: 'error', description: 'Gateway settings unavailable' }),
     );
     expect(pushToast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'success' }));
+  });
+});
+
+describe('explicit saved-settings image test UI', () => {
+  it('discloses possible credit use and waits for an explicit click even when generation is disabled', async () => {
+    settings.enabled = false;
+    await mount();
+    expect(testButton().disabled).toBe(false);
+    expect(container.textContent).toContain('settings.imageGen.testHint');
+    expect(testProvider).not.toHaveBeenCalled();
+    await act(async () => testButton().click());
+    expect(testProvider).toHaveBeenCalledExactlyOnceWith();
+    expect(update).not.toHaveBeenCalled();
+    expect(pushToast).toHaveBeenCalledWith({
+      variant: 'success',
+      title: 'settings.imageGen.testOk',
+      description: 'gpt-image-2',
+    });
+  });
+
+  it('shows progress, disables every control and prevents another click while the request is pending', async () => {
+    settings.credentialMode = 'custom';
+    settings.hasCustomKey = true;
+    let finish: ((result: ImageGenerationTestResult) => void) | undefined;
+    testProvider.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await mount();
+    await act(async () => testButton().click());
+    expect(testButton().textContent).toBe('settings.imageGen.testing');
+    expect(testProvider).toHaveBeenCalledOnce();
+    for (const control of container.querySelectorAll<
+      HTMLInputElement | HTMLButtonElement | HTMLSelectElement
+    >('input,button,select')) {
+      expect(control.disabled).toBe(true);
+    }
+    await act(async () => testButton().click());
+    expect(testProvider).toHaveBeenCalledOnce();
+    await act(async () => {
+      finish?.({ provider: 'openai', model: 'gpt-image-2', mimeType: 'image/png' });
+    });
+    expect(testButton().textContent).toBe('settings.imageGen.testConnection');
+    expect(testButton().disabled).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed invocation and allows a subsequent explicit retry', async () => {
+    testProvider.mockRejectedValueOnce(new Error('Image endpoint rejected the saved model'));
+    await mount();
+    await act(async () => testButton().click());
+    expect(pushToast).toHaveBeenCalledWith({
+      variant: 'error',
+      title: 'settings.imageGen.testFailed',
+      description: 'Image endpoint rejected the saved model',
+    });
+    expect(pushToast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'success' }));
+    expect(testButton().disabled).toBe(false);
+    await act(async () => testButton().click());
+    expect(testProvider).toHaveBeenCalledTimes(2);
+    expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'success' }));
+  });
+
+  it.each([
+    'input[type="text"]',
+    'input[type="url"]',
+  ])('requires a draft edit in %s to be saved or reverted before testing', async (selector) => {
+    await mount();
+    const original = container.querySelector<HTMLInputElement>(selector)?.value ?? '';
+    await edit(selector, 'https://unsaved.example/v1');
+    expect(testButton().disabled).toBe(true);
+    await act(async () => testButton().click());
+    expect(testProvider).not.toHaveBeenCalled();
+    await edit(selector, original);
+    expect(testButton().disabled).toBe(false);
+  });
+
+  it('blocks unsaved image response preferences and resumes after saving', async () => {
+    await mount();
+    await act(async () => checkbox().click());
+    expect(testButton().disabled).toBe(true);
+    await act(async () => saveButton().click());
+    expect(testButton().disabled).toBe(false);
+    expect(testProvider).not.toHaveBeenCalled();
+  });
+
+  it('does not test a typed custom key until it is saved', async () => {
+    settings.credentialMode = 'custom';
+    settings.hasCustomKey = true;
+    await mount();
+    await edit('input[type="password"]', 'unsaved-key-fixture');
+    expect(testButton().disabled).toBe(true);
+    await act(async () => testButton().click());
+    expect(testProvider).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'inherit',
+    'custom',
+  ] as const)('keeps the test disabled when the %s credential is missing', async (mode) => {
+    settings.credentialMode = mode;
+    settings.hasCustomKey = false;
+    settings.inheritedKeyAvailable = false;
+    await mount();
+    expect(testButton().disabled).toBe(true);
+    await act(async () => testButton().click());
+    expect(testProvider).not.toHaveBeenCalled();
   });
 });

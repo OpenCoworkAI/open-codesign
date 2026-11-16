@@ -22,10 +22,33 @@ function ImageGenerationPanel() {
   const pushToast = useCodesignStore((s) => s.pushToast);
   const [settings, setSettings] = useState<ImageGenerationSettingsView | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [requestBase64, setRequestBase64] = useState(false);
+  const busy = saving || testing;
+
+  async function testImageProvider() {
+    if (!window.codesign?.imageGeneration || busy) return;
+    setTesting(true);
+    try {
+      const result = await window.codesign.imageGeneration.test();
+      pushToast({
+        variant: 'success',
+        title: t('settings.imageGen.testOk'),
+        description: result.model,
+      });
+    } catch (error) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.imageGen.testFailed'),
+        description: error instanceof Error ? error.message : t('settings.common.unknownError'),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   useEffect(() => {
     if (!window.codesign?.imageGeneration) return;
@@ -49,7 +72,7 @@ function ImageGenerationPanel() {
   }, [pushToast, t]);
 
   async function save(patch: Partial<ImageGenerationSettingsView> & { apiKey?: string }) {
-    if (!window.codesign?.imageGeneration) return;
+    if (!window.codesign?.imageGeneration || busy) return;
     setSaving(true);
     try {
       const next = await window.codesign.imageGeneration.update(patch);
@@ -85,6 +108,11 @@ function ImageGenerationPanel() {
 
   const keyAvailable =
     settings.credentialMode === 'custom' ? settings.hasCustomKey : settings.inheritedKeyAvailable;
+  const unsaved =
+    apiKey.trim().length > 0 ||
+    model !== settings.model ||
+    baseUrl !== settings.baseUrl ||
+    requestBase64 !== settings.requestBase64;
   const status: 'ready' | 'needsKey' | 'disabled' = !settings.enabled
     ? 'disabled'
     : keyAvailable
@@ -130,7 +158,7 @@ function ImageGenerationPanel() {
           <input
             type="checkbox"
             checked={settings.enabled}
-            disabled={saving}
+            disabled={busy}
             onChange={(e) => void save({ enabled: e.target.checked })}
             className="h-4 w-4 accent-[var(--color-accent)]"
           />
@@ -141,7 +169,7 @@ function ImageGenerationPanel() {
         <Row label={t('settings.imageGen.provider')}>
           <NativeSelect
             value={settings.provider}
-            disabled={saving}
+            disabled={busy}
             options={[
               { value: 'openai', label: 'OpenAI' },
               {
@@ -166,7 +194,7 @@ function ImageGenerationPanel() {
         <Row label={t('settings.imageGen.credentials')}>
           <SegmentedControl
             value={settings.credentialMode}
-            disabled={saving || settings.provider === 'chatgpt-codex'}
+            disabled={busy || settings.provider === 'chatgpt-codex'}
             options={[
               { value: 'inherit', label: t('settings.imageGen.inherit') },
               { value: 'custom', label: t('settings.imageGen.customKey') },
@@ -181,7 +209,7 @@ function ImageGenerationPanel() {
           <input
             type="password"
             value={apiKey}
-            disabled={saving}
+            disabled={busy}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={
               settings.maskedKey
@@ -192,7 +220,7 @@ function ImageGenerationPanel() {
           />
           <button
             type="button"
-            disabled={saving || apiKey.trim().length === 0}
+            disabled={busy || apiKey.trim().length === 0}
             onClick={() => void save({ apiKey })}
             className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -207,7 +235,7 @@ function ImageGenerationPanel() {
           <input
             type="text"
             value={model}
-            disabled={saving}
+            disabled={busy}
             onChange={(e) => setModel(e.target.value)}
             className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
           />
@@ -217,7 +245,7 @@ function ImageGenerationPanel() {
           <input
             type="url"
             value={baseUrl}
-            disabled={saving}
+            disabled={busy}
             onChange={(e) => setBaseUrl(e.target.value)}
             className="mt-1 w-full h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
           />
@@ -230,7 +258,7 @@ function ImageGenerationPanel() {
             type="checkbox"
             aria-label={t('settings.imageGen.requestBase64')}
             checked={requestBase64}
-            disabled={saving}
+            disabled={busy}
             onChange={(e) => setRequestBase64(e.target.checked)}
             className="h-4 w-4 accent-[var(--color-accent)]"
           />
@@ -241,7 +269,7 @@ function ImageGenerationPanel() {
         <Row label={t('settings.imageGen.quality')}>
           <NativeSelect
             value={settings.quality}
-            disabled={saving}
+            disabled={busy}
             options={[
               { value: 'auto', label: 'Auto' },
               { value: 'low', label: 'Low' },
@@ -256,7 +284,7 @@ function ImageGenerationPanel() {
         <Row label={t('settings.imageGen.size')}>
           <NativeSelect
             value={settings.size}
-            disabled={saving}
+            disabled={busy}
             options={[
               { value: 'auto', label: 'Auto' },
               { value: '1024x1024', label: '1024 x 1024' },
@@ -268,11 +296,22 @@ function ImageGenerationPanel() {
         </Row>
       </div>
 
-      <div className="flex justify-end pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)]">
+        {t('settings.imageGen.testHint')}
+      </p>
+      <div className="flex justify-end gap-[var(--space-2)] pt-[var(--space-1)] border-t border-[var(--color-border-muted)]">
+        <button
+          type="button"
+          disabled={busy || !keyAvailable || unsaved}
+          onClick={() => void testImageProvider()}
+          className="h-8 px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {testing ? t('settings.imageGen.testing') : t('settings.imageGen.testConnection')}
+        </button>
         <button
           type="button"
           disabled={
-            saving ||
+            busy ||
             model.trim().length === 0 ||
             baseUrl.trim().length === 0 ||
             (model === settings.model &&
