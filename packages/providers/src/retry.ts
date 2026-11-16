@@ -60,6 +60,9 @@ const RETRYABLE_NET_CODES = new Set([
 
 function classifyByStatus(status: number, err: unknown, wire?: WireApi): RetryDecision | undefined {
   if (status === 429) {
+    if (normalizeProviderError(err, '', 0, wire).recovery_category === 'billing') {
+      return { retry: false, reason: 'provider quota exhausted (429)' };
+    }
     const retryAfterMs = extractRetryAfterMs(err);
     const decision: RetryDecision = { retry: true, reason: 'rate-limited (429)' };
     if (retryAfterMs !== undefined) decision.retryAfterMs = retryAfterMs;
@@ -148,7 +151,7 @@ export function isProviderAbortedTransportError(errorMessage: string | undefined
 function classifyByNetwork(err: unknown): RetryDecision | undefined {
   if (err instanceof TypeError) return { retry: true, reason: 'network error' };
   if (!(err instanceof Error)) return undefined;
-  const code = (err as Error & { code?: unknown }).code;
+  const code = normalizeProviderError(err, '', 0).upstream_code;
   if (typeof code === 'string' && RETRYABLE_NET_CODES.has(code)) {
     return { retry: true, reason: `network error (${code})` };
   }
@@ -162,7 +165,7 @@ export function classifyError(err: unknown, wire?: WireApi): RetryDecision {
   if (err instanceof Error && (err.name === 'AbortError' || err.message === 'aborted')) {
     return { retry: false, reason: 'aborted' };
   }
-  const status = extractStatus(err);
+  const status = extractStatus(err) ?? normalizeProviderError(err, '', 0, wire).upstream_status;
   if (status !== undefined) {
     const byStatus = classifyByStatus(status, err, wire);
     if (byStatus) return byStatus;
@@ -364,7 +367,7 @@ export async function completeWithRetry(
     classify: (err) => {
       const decision = classifyError(err, retryOpts.wire);
       const retryCount = Math.max(0, attemptForLog - 1);
-      const normalized = normalizeProviderError(err, provider, retryCount);
+      const normalized = normalizeProviderError(err, provider, retryCount, retryOpts.wire);
       if (shouldStop(decision, attemptForLog, maxRetries)) {
         logger?.warn('provider.error.final', normalized as unknown as Record<string, unknown>);
       } else {

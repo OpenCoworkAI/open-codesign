@@ -1,3 +1,4 @@
+import { RECOVERY_CATEGORIES } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
   availableLocales,
@@ -7,6 +8,21 @@ import {
   normalizeLocale,
   setLocale,
 } from './index';
+
+describe('provider recovery translations', () => {
+  it.each(
+    availableLocales,
+  )('has a recovery hint for every category in %s without fallback', async (locale) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    for (const category of RECOVERY_CATEGORIES) {
+      const text = i18n.getResource(locale, 'translation', `diagnostics.recovery.${category}`);
+      expect(typeof text).toBe('string');
+      expect(text.trim().length).toBeGreaterThan(0);
+    }
+    await setLocale('en');
+  });
+});
 
 describe('image response preference labels', () => {
   it.each([

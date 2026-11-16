@@ -1,5 +1,140 @@
+import { CodesignError } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
-import { type NormalizedProviderError, normalizeProviderError } from './errors';
+import {
+  classifyRecoveryCategory,
+  type NormalizedProviderError,
+  normalizeProviderError,
+  recoveryHintFor,
+} from './errors';
+
+describe('provider recovery classification', () => {
+  it.each([
+    [400, undefined, 'unsupported role: developer', 'model_not_supported_role'],
+    [400, undefined, 'model does not support system role', 'model_not_supported_role'],
+    [400, undefined, 'unsupported model not found', 'model_not_found'],
+    [400, undefined, 'unsupported response_format', 'unknown'],
+    [undefined, undefined, 'request ID 15012', 'unknown'],
+    [undefined, 'ECONNREFUSED', 'fetch failed', 'network_unreachable'],
+    [undefined, 'ENOTFOUND', 'fetch failed', 'network_unreachable'],
+    [undefined, 'ECONNRESET', 'fetch failed', 'network_unreachable'],
+    [undefined, 'ETIMEDOUT', 'fetch failed', 'network_timeout'],
+    [undefined, 'CERT_HAS_EXPIRED', 'certificate expired', 'tls_error'],
+    [401, undefined, 'expired token', 'auth_key_expired'],
+    [401, undefined, 'invalid key', 'auth_key_invalid'],
+    [403, undefined, 'insufficient permissions', 'auth_permission'],
+    [402, undefined, 'payment required', 'billing'],
+    [429, 'insufficient_quota', 'quota exhausted', 'billing'],
+    [429, undefined, 'too many requests', 'rate_limit'],
+    [429, undefined, 'per-minute request quota reached', 'rate_limit'],
+    [
+      429,
+      'rate_limit_exceeded',
+      'Quota exhausted for per-minute requests; retry in 60 seconds',
+      'rate_limit',
+    ],
+    [401, 'insufficient_quota', 'quota exhausted', 'billing'],
+    [403, undefined, 'credit balance is too low', 'billing'],
+    [403, 'unsupported_country_region_territory', 'Forbidden', 'region_restricted'],
+    [403, undefined, 'Country, region, or territory not supported', 'region_restricted'],
+    [404, undefined, 'model not found', 'model_not_found'],
+    [404, undefined, 'page not found', 'endpoint_not_found'],
+    [413, undefined, 'body too large', 'request_too_large'],
+    [501, undefined, 'not implemented', 'gateway_incompatible'],
+    [503, undefined, 'unavailable', 'upstream_server_error'],
+    [503, undefined, 'unsupported response_format', 'upstream_server_error'],
+    [undefined, undefined, 'base URL must include /v1', 'endpoint_missing_v1'],
+    [undefined, undefined, 'The /v1 path is required in the base URL', 'endpoint_missing_v1'],
+    [undefined, undefined, 'unsupported wire', 'wire_incompatible'],
+    [undefined, undefined, 'protocol openai-responses is not supported', 'wire_incompatible'],
+  ])('classifies status %s / %s / %s as %s', (status, code, message, category) => {
+    expect(classifyRecoveryCategory(status, code, message)).toBe(category);
+    expect(recoveryHintFor(category as Parameters<typeof recoveryHintFor>[0])).toBeTruthy();
+  });
+
+  it('preserves a nested fetch failure code through normalization', () => {
+    const err = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('socket timeout'), { code: 'ETIMEDOUT' }),
+    });
+    expect(normalizeProviderError(err, 'custom-relay', 2)).toMatchObject({
+      upstream_code: 'ETIMEDOUT',
+      recovery_category: 'network_timeout',
+      retry_count: 2,
+    });
+  });
+
+  it('handles long upstream text without guessing a missing version or incompatible wire', () => {
+    const message = 'baseurlmissing include wire '.repeat(10_000);
+    expect(classifyRecoveryCategory(undefined, undefined, message)).toBe('unknown');
+  });
+
+  it('preserves wrapped upstream status, code, request ID and scrubbed body', () => {
+    const cause = {
+      status: 429,
+      code: 'insufficient_quota',
+      message: 'quota exhausted',
+      headers: { 'x-request-id': 'wrapped-request' },
+      responseBody: 'quota exhausted for sk-aaaaaaaaaaaaaaaaaaaaa',
+    };
+    const error = new CodesignError('Provider request failed', 'PROVIDER_ERROR', { cause });
+    expect(normalizeProviderError(error, 'custom-relay', 0)).toMatchObject({
+      upstream_status: 429,
+      upstream_code: 'insufficient_quota',
+      upstream_request_id: 'wrapped-request',
+      upstream_message: 'Provider request failed',
+      recovery_category: 'billing',
+      redacted_body_head: 'quota exhausted for ***REDACTED***',
+    });
+  });
+
+  it('uses nested provider text rather than a generic wrapper for recovery', () => {
+    const cause = Object.assign(new Error('unsupported role: developer'), { status: 400 });
+    expect(
+      normalizeProviderError(
+        new CodesignError('Request failed', 'PROVIDER_ERROR', { cause }),
+        'relay',
+        0,
+      ),
+    ).toMatchObject({ upstream_status: 400, recovery_category: 'model_not_supported_role' });
+  });
+
+  it.each([
+    ['429 Provider returned error: temporarily rate-limited upstream', 429, 'rate_limit'],
+    ['HTTP 401 invalid key', 401, 'auth_key_invalid'],
+    ['Request ID 401 was not found', undefined, 'unknown'],
+  ] as const)('extracts only an explicit pi HTTP status from %s', (message, status, category) => {
+    expect(
+      normalizeProviderError(new CodesignError(message, 'PROVIDER_ERROR'), 'relay', 0),
+    ).toMatchObject({
+      upstream_status: status,
+      recovery_category: category,
+    });
+  });
+
+  it('does not follow a cyclic error cause forever', () => {
+    const err = { message: 'fetch failed', cause: {} };
+    err.cause = err;
+    expect(normalizeProviderError(err, 'custom-relay', 0).recovery_category).toBe('unknown');
+  });
+
+  it('keeps logged identity and messages scrubbed when tagging recovery', () => {
+    const result = normalizeProviderError(
+      {
+        status: 401,
+        message: 'Invalid api key sk-aaaaaaaaaaaaaaaaaaaaa',
+        headers: { 'x-request-id': 'req_recovery' },
+      },
+      'custom-relay',
+      1,
+    );
+    expect(result).toMatchObject({
+      recovery_category: 'auth_key_invalid',
+      upstream_request_id: 'req_recovery',
+      retry_count: 1,
+    });
+    expect(result.upstream_message).not.toContain('sk-aaaaaaaaaaaaaaaaaaaaa');
+    expect(result.upstream_message).toContain('***REDACTED***');
+  });
+});
 
 describe('normalizeProviderError', () => {
   it('extracts status, request id, and message from OpenAI-style error', () => {

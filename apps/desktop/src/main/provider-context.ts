@@ -16,6 +16,35 @@ export interface ProviderContextStore {
   size(): number;
 }
 
+/** Final normalized identity wins; retry logging fills only unavailable fields. */
+export function mergeFinalProviderContext(
+  normalized: Record<string, unknown> | undefined,
+  remembered: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!normalized) return remembered;
+  const context = { ...remembered };
+  const changedAttempt = ['upstream_status', 'upstream_code'].some(
+    (key) =>
+      normalized[key] !== undefined &&
+      remembered?.[key] !== undefined &&
+      normalized[key] !== remembered[key],
+  );
+  if (changedAttempt) {
+    delete context['upstream_request_id'];
+    delete context['redacted_body_head'];
+  }
+  for (const [key, value] of Object.entries(normalized)) {
+    if (
+      value !== undefined &&
+      !(key === 'recovery_category' && value === 'unknown' && context[key] !== undefined)
+    ) {
+      context[key] = value;
+    }
+  }
+  if (remembered?.['retry_count'] !== undefined) context['retry_count'] = remembered['retry_count'];
+  return context;
+}
+
 export function createProviderContextStore(maxEntries = 50): ProviderContextStore {
   const map = new Map<string, Record<string, unknown>>();
   return {

@@ -20,7 +20,12 @@ import {
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
-import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import {
+  complete,
+  detectProviderFromKey,
+  generateImage,
+  normalizeProviderError,
+} from '@open-codesign/providers';
 import {
   ActiveRunMessageInputV1,
   ApplyCommentPayload,
@@ -30,6 +35,7 @@ import {
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
   ListActiveMessagesInputV1,
+  readProviderFailureContext,
   summarizeUsageBudget,
   type UsageTotals,
 } from '@open-codesign/shared';
@@ -67,7 +73,7 @@ import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
-import { createProviderContextStore } from '../provider-context';
+import { createProviderContextStore, mergeFinalProviderContext } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
 import { makeUiKitRenderer } from '../render-ui-kit';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
@@ -251,15 +257,18 @@ function extractUpstreamHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-function normalizeGenerationFailure(opts: {
+export function normalizeGenerationFailure(opts: {
   err: unknown;
   signal: AbortSignal;
   provider: string;
   modelId: string;
   baseUrl: string | undefined;
   wire: string | undefined;
-}): { error: unknown; upstreamStatus: number | undefined } {
-  const upstreamStatus = extractUpstreamHttpStatus(opts.err);
+}): { error: unknown; upstreamStatus: number | undefined; context: Record<string, unknown> } {
+  const normalized = normalizeProviderError(opts.err, opts.provider, 0, opts.wire);
+  const upstreamStatus = normalized.upstream_status ?? extractUpstreamHttpStatus(opts.err);
+  const upstreamCode = normalized.upstream_code;
+  const recoveryCategory = normalized.recovery_category;
   if (opts.err !== null && typeof opts.err === 'object') {
     const errAsRec = opts.err as Record<string, unknown>;
     if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
@@ -277,10 +286,17 @@ function normalizeGenerationFailure(opts: {
     if (errAsRec['upstream_wire'] === undefined && opts.wire !== undefined) {
       errAsRec['upstream_wire'] = opts.wire;
     }
+    if (upstreamCode !== undefined && errAsRec['upstream_code'] === undefined) {
+      errAsRec['upstream_code'] = upstreamCode;
+    }
+    if (errAsRec['upstream_recovery_category'] === undefined) {
+      errAsRec['upstream_recovery_category'] = recoveryCategory;
+    }
   }
   return {
     error: extractGenerationTimeoutError(opts.signal) ?? opts.err,
     upstreamStatus,
+    context: { ...normalized },
   };
 }
 
@@ -421,6 +437,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       return { ...response, ...(journal ? { chatPersisted: true } : {}) };
     } catch (error) {
+      const record =
+        error !== null && typeof error === 'object' ? (error as Record<string, unknown>) : {};
+      const providerFailure = readProviderFailureContext({
+        recoveryCategory: record['upstream_recovery_category'],
+        status: record['upstream_status'],
+      });
       publishEvent({
         designId,
         generationId: id,
@@ -433,6 +455,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             : 'failed',
         message: error instanceof Error ? error.message : String(error),
         ...(error instanceof CodesignError ? { code: error.code } : {}),
+        ...(providerFailure ? { providerFailure } : {}),
       });
       await eventDelivery;
       throw error;
@@ -535,12 +558,18 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     };
   });
 
-  const recordFinalError = (scope: string, runId: string, err: unknown): void => {
+  const recordFinalError = (
+    scope: string,
+    runId: string,
+    err: unknown,
+    normalized?: Record<string, unknown>,
+  ): void => {
     if (db === null) return;
     const code = err instanceof CodesignError ? (err.code as string) : 'PROVIDER_UPSTREAM_ERROR';
     const stack = err instanceof Error ? err.stack : undefined;
     const message = err instanceof Error ? err.message : String(err);
-    const context = providerContext.consume(runId);
+    const remembered = providerContext.consume(runId);
+    const context = mergeFinalProviderContext(normalized, remembered);
     recordDiagnosticEvent(db, {
       level: 'error',
       code,
@@ -566,6 +595,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
     warn: (event, data) => {
       logIpc.warn(event, { generationId: id, ...(data ?? {}) });
+      if ((event === 'provider.error' || event === 'provider.error.final') && data !== undefined) {
+        providerContext.remember(id, data);
+      }
       if (event === 'provider.error' && db !== null) {
         const code = 'PROVIDER_UPSTREAM_ERROR';
         const upstream =
@@ -582,7 +614,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         const upstreamCode =
           typeof data?.['upstream_code'] === 'string' ? data['upstream_code'] : 'unknown';
         const syntheticFrame = `    at provider (${status}:${upstreamCode})`;
-        if (data !== undefined) providerContext.remember(id, data);
         recordDiagnosticEvent(db, {
           level: 'warn',
           code,
@@ -1681,7 +1712,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               message: rethrow instanceof Error ? rethrow.message : String(rethrow),
               code: rethrow instanceof CodesignError ? rethrow.code : undefined,
             });
-            recordFinalError('generate', id, rethrow);
+            recordFinalError('generate', id, rethrow, failure.context);
             throw rethrow;
           } finally {
             clearTimeoutGuard();
@@ -1850,7 +1881,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               message: rethrow instanceof Error ? rethrow.message : String(rethrow),
               code: rethrow instanceof CodesignError ? rethrow.code : undefined,
             });
-            recordFinalError('apply-comment', id, rethrow);
+            recordFinalError('apply-comment', id, rethrow, failure.context);
             throw rethrow;
           } finally {
             clearTimeoutGuard();

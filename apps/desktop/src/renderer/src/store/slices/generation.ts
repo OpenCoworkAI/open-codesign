@@ -11,6 +11,7 @@ import {
   commentContentFingerprint,
   DEFAULT_SOURCE_ENTRY,
   LEGACY_SOURCE_ENTRY,
+  readProviderFailureContext,
 } from '@open-codesign/shared';
 import type { CodesignApi, ExportFormat } from '../../../../preload/index.js';
 import { recordAction } from '../../lib/action-timeline.js';
@@ -519,6 +520,17 @@ function applyGenerateError(
   if (!isCurrentGenerationForDesign(stateBefore, designId, generationId)) return;
 
   const rawMsg = err instanceof Error ? err.message : tr('errors.unknown');
+  // Electron's invoke rejection preserves only the message. The committed
+  // terminal event arrives first and carries bounded, validated recovery data.
+  const failure = readProviderFailureContext(
+    designId === null ? undefined : stateBefore.generationByDesign[designId]?.providerFailure,
+  );
+  if (failure) {
+    err = Object.assign(new Error(rawMsg), extractUpstreamContext(err), {
+      upstream_recovery_category: failure.recoveryCategory,
+      ...(failure.status !== undefined ? { upstream_status: failure.status } : {}),
+    });
+  }
   const cfg = get().config;
   const hypothesis = deriveGenerateHypothesis(err, cfg);
   const displayMsg = buildGenerateDisplayMessage(rawMsg, hypothesis);
