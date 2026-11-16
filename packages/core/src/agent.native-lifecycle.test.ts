@@ -1,13 +1,13 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@mariozechner/pi-agent-core';
-import { type AssistantMessage, createAssistantMessageEventStream } from '@mariozechner/pi-ai';
-import type { ActiveRunMessageV1 } from '@open-codesign/shared';
+import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@earendil-works/pi-agent-core';
+import { type AssistantMessage, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { type ActiveRunMessageV1, CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveRunMessages } from './active-messages';
 import { generateViaAgent } from './agent';
-import type { GenerateInput } from './index';
+import type { AgentEvent, GenerateInput } from './index';
 import type { AskResult } from './tools/ask';
 import type { DoneDetails } from './tools/done';
 import type { RunPreviewFn } from './tools/preview';
@@ -16,8 +16,8 @@ import type { TextEditorFsCallbacks } from './tools/text-editor';
 const native = vi.hoisted(() => ({ stream: vi.fn<StreamFn>(), agents: [] as Agent[] }));
 
 // Substitute only pi's streaming boundary; Agent scheduling, tools and recovery are real.
-vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@mariozechner/pi-agent-core')>();
+vi.mock('@earendil-works/pi-agent-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@earendil-works/pi-agent-core')>();
   return {
     ...actual,
     Agent: class extends actual.Agent {
@@ -491,6 +491,30 @@ describe('production generateViaAgent with installed pi', () => {
       native.agents[0]?.state.messages.filter((message) => message.role === 'user'),
     ).toHaveLength(1);
   });
+  it.each([
+    new CodesignError('Observer failed', ERROR_CODES.GENERATION_INCOMPLETE),
+    null,
+    undefined,
+  ])('propagates unrelated observer failure %s without treating it as a controlled halt', async (failure) => {
+    seed();
+    const onComplete = vi.fn();
+    const ended: AgentEvent[] = [];
+    script([[todos()], 'Must not continue']);
+    const running = generateViaAgent(input, {
+      fs,
+      onComplete,
+      onEvent: (event) => {
+        if (event.type === 'agent_end') ended.push(event);
+        if (event.type === 'turn_end') throw failure;
+      },
+    });
+    if (failure instanceof Error) await expect(running).rejects.toBe(failure);
+    else await expect(running).rejects.toThrow(String(failure));
+    expect(native.stream).toHaveBeenCalledOnce();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(ended).toHaveLength(0);
+  });
+
   describe('repeated tool calls', () => {
     // Only the repeated call reads this file, so its view count is the number of executions.
     const PROBE = 'probe.txt';

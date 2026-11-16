@@ -188,7 +188,7 @@ scoop install opencoworkai/open-codesign
 首次启动时，Open CoDesign 会直接打开设置页。按你已有的模型入口选择即可：
 
 - **ChatGPT 订阅登录**：直接登录 ChatGPT，使用 Codex 模型，无需粘贴 API Key。
-- **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Atlas Cloud、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
+- **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Atlas Cloud、LLMTR、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
 - **本地 / Keyless**：使用 Ollama，或使用 IP 白名单的 OpenAI 兼容网关。
 
 凭证会保存在 `~/.config/open-codesign/config.toml`，ChatGPT OAuth token 会保存在应用配置目录下的 token store 中。除非你选择的模型入口本身需要联网，请求内容不会额外离开你的机器。
@@ -220,7 +220,7 @@ scoop install opencoworkai/open-codesign
 ## 你能得到什么
 
 ### 模型与提供商
-- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Atlas Cloud、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
+- **统一的 provider 抽象**：支持 Anthropic、OpenAI、Atlas Cloud、LLMTR、Gemini、DeepSeek、OpenRouter、SiliconFlow、本地 Ollama，以及任意 OpenAI-compatible relay；同时支持无 key 的 IP 白名单代理
 - **一键导入和登录**：Claude Code / Codex 的 API key provider 配置可以直接带进来，也可以用 ChatGPT 订阅登录使用 Codex 模型
 - **动态模型选择器**：每个 provider 都会展示真实模型列表，而不是一小撮写死的选项
 
@@ -303,7 +303,7 @@ v0.2 已经把 Open CoDesign 从一次性生成器升级成一个本地设计 ag
 ## 基于这些技术构建
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- `@mariozechner/pi-ai` 与 `pi-coding-agent`（模型 / provider 与 agent loop 基础能力）
+- `@earendil-works/pi-ai` 与 `pi-coding-agent`（模型 / provider 与 agent loop 基础能力）
 - `electron-builder`
 
 ## 社群
@@ -325,6 +325,16 @@ Open CoDesign 在 [LINUX DO](https://linux.do/) 社区首发，感谢佬友们�
 英文或异步讨论：[GitHub Issues](https://github.com/OpenCoworkAI/open-codesign/issues) · 安全问题：[SECURITY.md](./SECURITY.md)。
 
 ## 参与贡献
+
+需要脱离桌面窗口进行自动化时，可以使用 [Agent-native CLI](./apps/cli/README.md)
+检查环境、读取工作区设计状态和导出 HTML。在源码仓库根目录运行
+`pnpm --silent cli --help`，文档包含 Windows PowerShell 调用方式。
+
+调试 Open CoDesign 自身界面时，可使用 [`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md)
+启动隔离的离屏 Electron 副本，执行截图、点击、输入和错误收集，并在 Windows 下检查
+是否出现可见窗口、抢占焦点或系统合成输入。
+需要 Agent 连续观察和操作时，使用 `debug session`，通过 JSONL 多轮截图、点击和输入；
+整个会话保留同一个隔离实例，关闭连接或超时后自动清理。
 
 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。开始写代码前建议先开 issue，发 PR 前请先运行 `pnpm lint && pnpm typecheck && pnpm test`。
 

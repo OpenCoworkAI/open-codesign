@@ -1,6 +1,6 @@
 {
   "name": "@open-codesign/providers",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -14,7 +14,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.72.1",
+    "@earendil-works/pi-ai": "^0.79.0",
     "@open-codesign/shared": "workspace:*"
   },
   "devDependencies": {

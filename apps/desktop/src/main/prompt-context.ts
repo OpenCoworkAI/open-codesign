@@ -3,7 +3,7 @@ import { open, readFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
-import { extname, isAbsolute } from 'node:path';
+import { extname, isAbsolute, relative as relativePath, sep } from 'node:path';
 import type { AttachmentContext, ProjectContext, ReferenceUrlContext } from '@open-codesign/core';
 import {
   CodesignError,
@@ -52,6 +52,42 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.webp': 'image/webp',
 };
+
+function sniffImageMimeType(buffer: Buffer): string | null {
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (
+    buffer.length >= 6 &&
+    (buffer.toString('ascii', 0, 6) === 'GIF87a' || buffer.toString('ascii', 0, 6) === 'GIF89a')
+  ) {
+    return 'image/gif';
+  }
+  if (buffer.length >= 2 && buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return 'image/bmp';
+  }
+  return null;
+}
 
 const MAX_ATTACHMENT_CHARS = 6_000;
 const MAX_TEXT_ATTACHMENT_BYTES = 256_000;
@@ -491,13 +527,24 @@ async function openAttachment(
       candidates.push({ readPath: file.path, promptPath: file.path });
     }
   } else {
-    candidates.push({ readPath: file.path, promptPath: file.path });
+    const relative = workspaceRoot === undefined ? null : relativePath(workspaceRoot, file.path);
+    const ownedPromptPath =
+      relative !== null &&
+      relative.length > 0 &&
+      relative !== '..' &&
+      !relative.startsWith(`..${sep}`) &&
+      !isAbsolute(relative)
+        ? normalizePromptPath(relative)
+        : file.name;
+    // An explicit existing attachment wins over a same-named workspace file.
+    // Keep host paths out of prompt text without changing which bytes are read.
+    candidates.push({ readPath: file.path, promptPath: ownedPromptPath });
     if (workspaceRoot !== undefined) {
-      const promptPath = workspaceAttachmentRelativePath(file.path);
-      if (promptPath !== null) {
+      const rebasedPath = workspaceAttachmentRelativePath(file.path);
+      if (rebasedPath !== null) {
         candidates.push({
-          readPath: await resolveSafeWorkspaceChildPath(workspaceRoot, promptPath),
-          promptPath,
+          readPath: await resolveSafeWorkspaceChildPath(workspaceRoot, rebasedPath),
+          promptPath: rebasedPath,
         });
       }
     }
@@ -646,7 +693,9 @@ async function readAttachment(
     }
 
     if (!looksText) {
-      if (imageMimeType) {
+      // Read the full binary when the extension is a known image OR the probe
+      // looks like image bytes (clipboard pastes sometimes lack a useful name).
+      if (imageMimeType || sniffImageMimeType(probe) !== null) {
         const length = Math.max(
           1,
           Math.min(file.size || MAX_BINARY_ATTACHMENT_BYTES, maxFileBytes),
@@ -686,13 +735,14 @@ async function readAttachment(
   }
 
   if (!isProbablyText(buffer, extension)) {
-    if (imageMimeType) {
+    const resolvedImageMime = sniffImageMimeType(buffer) ?? imageMimeType;
+    if (resolvedImageMime) {
       return {
         name: file.name,
         path: promptPath,
-        note: 'Image attachment metadata is available; visual pixels may only be available on vision-capable provider paths. If image content is unavailable, use the filename and user prompt as hints.',
-        mediaType: imageMimeType,
-        imageDataUrl: `data:${imageMimeType};base64,${buffer.toString('base64')}`,
+        note: 'Image bytes are embedded as multimodal content when the active model accepts image input; otherwise only the filename is available as a hint.',
+        mediaType: resolvedImageMime,
+        imageDataUrl: `data:${resolvedImageMime};base64,${buffer.toString('base64')}`,
       };
     }
     return {

@@ -2,8 +2,8 @@ import { EventEmitter } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentOptions, StreamFn } from '@mariozechner/pi-agent-core';
-import { type AssistantMessage, createAssistantMessageEventStream } from '@mariozechner/pi-ai';
+import type { AgentOptions, StreamFn } from '@earendil-works/pi-agent-core';
+import { type AssistantMessage, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { generateViaAgent } from '@open-codesign/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -24,8 +24,8 @@ const native = vi.hoisted(() => ({
   stream: vi.fn<StreamFn>(),
   windows: [] as Electron.BrowserWindow[],
 }));
-vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@mariozechner/pi-agent-core')>();
+vi.mock('@earendil-works/pi-agent-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@earendil-works/pi-agent-core')>();
   return {
     ...actual,
     Agent: class extends actual.Agent {

@@ -16,7 +16,7 @@
  * own turn so it can self-correct before calling done.
  */
 
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import { Type } from '@sinclair/typebox';
 import { type CoreLogger, NOOP_LOGGER } from '../logger.js';
 import type { TextEditorFsCallbacks } from './text-editor';

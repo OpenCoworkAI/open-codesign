@@ -44,6 +44,8 @@ import type { BrowserWindow as ElectronBrowserWindow, WebContents } from 'electr
 import type { AgentStreamEvent, GenerateResponse } from '../../preload/index';
 import { requestAsk } from '../ask-ipc';
 import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ipc';
+import { designSystemEditingContext } from '../design-system-editing';
+import { registerDesignSystemLibraryBusyCheck } from '../design-system-library-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
 import { app, ipcMain } from '../electron-runtime';
 import {
@@ -82,10 +84,12 @@ import {
   appendSessionActiveMessage,
   appendSessionChatMessage,
   appendSessionDesignBrief,
+  appendSessionNativeSearchMessage,
   appendSessionRunPreferences,
   listSessionActiveMessages,
   listSessionChatMessages,
   readSessionDesignBrief,
+  readSessionNativeSearchMessages,
   readSessionRunPreferences,
   type SessionChatStoreOptions,
 } from '../session-chat';
@@ -99,6 +103,7 @@ import {
 import { registerSourceEditBusyCheck } from '../source-edits-ipc';
 import { withTlsBypass } from '../tls-override';
 import { createResearchHost, createWebResearchAuthorization } from '../web-research';
+import { publicWebUrl, sourceFor } from '../web-research-network';
 import { createWebResearchRun } from '../web-research-run';
 import { withStableWorkspacePath } from '../workspace-path-lock';
 import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
@@ -768,15 +773,24 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       frames,
       designSkills,
     });
-    const research = createResearchHost({
-      network,
-      inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
-      authorize: createWebResearchAuthorization(researchSettings, (questions, signal) =>
+    const isNativeSearch = researchSettings.enabled && researchRun.route.mode === 'native-tool';
+    const nativeRequestsStarted = new Set<number>();
+    const authorizeResearch = createWebResearchAuthorization(
+      {
+        ...researchSettings,
+        service: researchRun.route.service,
+        ...(isNativeSearch ? { maxNativeRequests: researchRun.maxNativeRequests } : {}),
+      },
+      (questions, signal) =>
         requestAsk(id, questions, () => getMainWindow(), {
           designId,
           ...(signal ? { signal } : {}),
         }),
-      ),
+    );
+    const research = createResearchHost({
+      network,
+      inWorkspace: (fn) => withStableWorkspacePath(designId, () => fn(currentWorkspaceRoot())),
+      authorize: authorizeResearch,
     });
     const imageConfig = cfg ? await resolveImageGenerationConfig(cfg) : null;
     const imageLog = getLogger('image-generation');
@@ -910,6 +924,70 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       {
         fs,
         research,
+        ...(isNativeSearch &&
+        (researchRun.route.service === 'openai' || researchRun.route.service === 'anthropic')
+          ? {
+              nativeSearchHistory: chatStoreOptions()
+                ? readSessionNativeSearchMessages(requireChatStore(), designId)
+                : [],
+              nativeSearch: {
+                provider: researchRun.route.service,
+                maxRequests: researchRun.maxNativeRequests,
+                authorize: authorizeResearch,
+                saveSources: async (
+                  sources: import('@open-codesign/providers').NativeSearchSource[],
+                ) => {
+                  const records = sources.flatMap((source) => {
+                    try {
+                      return [
+                        {
+                          ...sourceFor(publicWebUrl(source.url).href, new Date().toISOString()),
+                          title: source.title,
+                          excerpt: source.excerpt,
+                          provider: researchRun.route.service ?? '',
+                          retrieval: 'native-tool' as const,
+                          ...(source.callId ? { callId: source.callId } : {}),
+                          ...(source.citations ? { citations: source.citations } : {}),
+                        },
+                      ];
+                    } catch {
+                      return [];
+                    }
+                  });
+                  await research.saveNativeSources?.(records, input.signal);
+                },
+                persistMessage: (message: import('@earendil-works/pi-ai').AssistantMessage) => {
+                  const store = chatStoreOptions();
+                  if (store) appendSessionNativeSearchMessage(store, designId, message);
+                },
+                onUpdate: (update: import('@open-codesign/providers').NativeSearchUpdate) => {
+                  const toolCallId = `${id}-native-search-${update.requests}`;
+                  if (!nativeRequestsStarted.has(update.requests)) {
+                    nativeRequestsStarted.add(update.requests);
+                    sendEvent({
+                      ...baseCtx,
+                      type: 'tool_call_start',
+                      toolName: 'native_web_search',
+                      toolCallId,
+                      args: {
+                        provider: update.provider,
+                        requests: update.requests,
+                        maxRequests: update.maxRequests,
+                      },
+                    });
+                  }
+                  sendEvent({
+                    ...baseCtx,
+                    type: 'tool_call_result',
+                    toolName: 'native_web_search',
+                    toolCallId,
+                    status: 'done',
+                    result: update,
+                  });
+                },
+              },
+            }
+          : {}),
         activeMessages,
         runtimeVerify: (source, context) =>
           withStableWorkspacePath(designId, () =>
@@ -1064,6 +1142,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   const inFlight = new Map<string, AbortController>();
   const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
   const inFlightByWorkspace = new Map<string, { generationId: string; startedAt: number }>();
+  const unregisterDesignSystemBusyCheck = registerDesignSystemLibraryBusyCheck((id) =>
+    inFlightByDesign.has(id),
+  );
   const unregisterSourceEditBusyCheck = registerSourceEditBusyCheck(
     async (designId, workspacePath) => {
       if (inFlightByDesign.has(designId)) return true;
@@ -1365,7 +1446,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   attachments: promptContext.attachments,
                   referenceUrl: promptContext.referenceUrl,
                   designSystem: promptContext.designSystem ?? null,
-                  sessionContext: contextPack.contextSections,
+                  sessionContext: [
+                    ...contextPack.contextSections,
+                    ...designSystemEditingContext(
+                      db ? getDesign(db, designId)?.designSystemId : undefined,
+                    ),
+                  ],
                   ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
                   projectContext: promptContext.projectContext,
                   currentDesignName,
@@ -1720,6 +1806,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 {
                   prompt: userPrompt,
                   systemPrompt,
+                  sessionContext: designSystemEditingContext(
+                    db ? getDesign(db, payload.designId)?.designSystemId : undefined,
+                  ),
                   history: [],
                   model: active.model,
                   apiKey,
@@ -1849,6 +1938,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   });
 
   return () => {
+    unregisterDesignSystemBusyCheck();
     unregisterSourceEditBusyCheck();
     for (const controller of inFlight.values()) {
       try {

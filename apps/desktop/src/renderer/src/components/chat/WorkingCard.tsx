@@ -48,6 +48,13 @@ export interface ActivityRow {
   durationMs?: number;
   todos?: TodoItem[];
   editCount?: number;
+  nativeUsage?: {
+    provider: string;
+    requests: number;
+    maxRequests: number;
+    actualSearches: number | null;
+    searchCostUsd: number | null;
+  };
 }
 
 export interface TodoItem {
@@ -378,6 +385,31 @@ function pushTodoRow(rows: ActivityRow[], call: ChatToolCallPayload, index: numb
 }
 
 function pushGenericToolRow(rows: ActivityRow[], call: ChatToolCallPayload, index: number) {
+  if (call.toolName === 'native_web_search') {
+    const result =
+      call.result && typeof call.result === 'object'
+        ? (call.result as Record<string, unknown>)
+        : {};
+    rows.push({
+      key: `native-${index}`,
+      Icon: Search,
+      label: 'Native web search',
+      labelKey: 'sidebar.chat.activity.nativeSearch',
+      detail: null,
+      status: call.status,
+      kind: 'row',
+      title: 'Native web search',
+      nativeUsage: {
+        provider: String(result['provider'] ?? call.args?.['provider'] ?? ''),
+        requests: Number(result['requests'] ?? call.args?.['requests'] ?? 0),
+        maxRequests: Number(result['maxRequests'] ?? call.args?.['maxRequests'] ?? 12),
+        actualSearches:
+          typeof result['actualSearches'] === 'number' ? result['actualSearches'] : null,
+        searchCostUsd: typeof result['searchCostUsd'] === 'number' ? result['searchCostUsd'] : null,
+      },
+    });
+    return;
+  }
   const manifestEntry = getToolManifestEntry(call.toolName);
   const Icon = manifestEntry ? ICONS_BY_KEY[manifestEntry.iconKey] : Wrench;
   const label = LEGACY_TOOL_NAMES.has(call.toolName)
@@ -646,10 +678,14 @@ function ActivityTodoBlock({ row }: { row: ActivityRow }) {
 
 function ActivityRowView({ row }: { row: ActivityRow }) {
   const t = useT();
+  const unknown = t('sidebar.chat.activity.unknown');
+  const nativeDetail = row.nativeUsage
+    ? `${row.nativeUsage.provider} · ${t('sidebar.chat.activity.nativeRequests')} ${row.nativeUsage.requests}/${row.nativeUsage.maxRequests} · ${t('sidebar.chat.activity.actualSearches')} ${row.nativeUsage.actualSearches ?? unknown} · ${t('sidebar.chat.activity.searchCost')} ${row.nativeUsage.searchCostUsd === null ? unknown : `$${row.nativeUsage.searchCostUsd}`}`
+    : null;
   const detailText =
     row.detail && row.editCount && row.editCount > 1
       ? `${row.detail} (${row.editCount} edits)`
-      : row.detail;
+      : (nativeDetail ?? row.detail);
   const durationText =
     row.durationMs !== undefined && row.durationMs >= 1000
       ? `${(row.durationMs / 1000).toFixed(row.durationMs >= 10_000 ? 0 : 1)}s`

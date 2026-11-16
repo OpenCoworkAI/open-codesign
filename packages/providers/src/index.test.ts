@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const getModelMock = vi.fn();
 const completeSimpleMock = vi.fn();
 
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock('@earendil-works/pi-ai', () => ({
   getModel: (...args: unknown[]) => getModelMock(...args),
   completeSimple: (...args: unknown[]) => completeSimpleMock(...args),
 }));
@@ -21,6 +21,10 @@ afterEach(() => {
 describe('detectProviderFromKey', () => {
   it('recognizes Atlas Cloud API keys', () => {
     expect(detectProviderFromKey(' apikey-test ')).toBe('atlascloud');
+  });
+
+  it('recognizes LLMTR API keys', () => {
+    expect(detectProviderFromKey(' llmtr-test ')).toBe('llmtr');
   });
 });
 

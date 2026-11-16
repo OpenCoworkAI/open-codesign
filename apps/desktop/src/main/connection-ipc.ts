@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   canonicalBaseUrl,
+  connectionTestProbesModelsEndpoint,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
@@ -12,11 +14,15 @@ import {
   liteLlmHintKeyForHttpStatus,
   liteLlmHintKeyForTransportError,
   type ProviderEntry,
+  type ProviderModelDiscoveryMode,
+  resolveListForProviderPlan,
+  resolveProviderCapabilities,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
   type WireApi,
 } from '@open-codesign/shared';
 import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
+import { getCodexModelOptions } from './codex-models';
 import { getCodexTokenStore } from './codex-oauth-ipc';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
@@ -76,6 +82,8 @@ export interface ConnectionTestResult {
   ok: true;
   /**
    * `models` when the standard GET /models probe succeeded.
+   * `inference` when the provider's discovery mode does not expect /models
+   * and the real invoke path answered.
    * `chat_completion_degraded` when /models 404'd but POST /chat/completions
    * proved the openai-chat wire is alive (e.g. Zhipu GLM — no public /models).
    * `responses_degraded` when /models 404'd but POST /responses proved the
@@ -85,6 +93,7 @@ export interface ConnectionTestResult {
    */
   probeMethod?:
     | 'models'
+    | 'inference'
     | 'chat_completion_degraded'
     | 'responses_degraded'
     | 'anthropic_messages_degraded';
@@ -99,6 +108,12 @@ export interface ConnectionTestError {
   hint: string;
   /** i18n key for a provider-specific hint. The renderer translates it. */
   hintKey?: string;
+  /**
+   * Absolute URL that was actually requested for this failure. Settings
+   * diagnostics prefer this over a guessed `/models` URL so infer-only /
+   * manual providers do not mis-attribute an inference 404 as a listing miss.
+   */
+  attemptedUrl?: string;
   compatibility?: 'incompatible';
   reasonCategory?: DiagnosticCategory;
 }
@@ -106,12 +121,18 @@ export interface ConnectionTestError {
 export type ConnectionTestResponse = ConnectionTestResult | ConnectionTestError;
 
 export type ModelsListResponse =
-  | { ok: true; models: string[] }
+  | {
+      ok: true;
+      models: string[];
+      discoveryMode?: ProviderModelDiscoveryMode;
+      source?: 'remote' | 'static-hint' | 'local';
+    }
   | {
       ok: false;
       code: 'IPC_BAD_INPUT' | 'NETWORK' | 'HTTP' | 'PARSE';
       message: string;
       hint: string;
+      discoveryMode?: ProviderModelDiscoveryMode;
       /** i18n key for a provider-specific hint. The renderer translates it. */
       hintKey?: string;
     };
@@ -302,6 +323,16 @@ function buildEndpointForWire(
   const url =
     wire === 'anthropic' ? `${normalizedBaseUrl}/v1/models` : `${normalizedBaseUrl}/models`;
   return { url, normalizedBaseUrl };
+}
+
+/** Absolute URL used by probeInferenceEndpoint / probeDeclaredInference. */
+function inferenceProbeUrl(
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
+  normalizedBaseUrl: string,
+): string {
+  if (wire === 'anthropic') return `${normalizedBaseUrl}/v1/messages`;
+  if (wire === 'openai-responses') return `${normalizedBaseUrl}/responses`;
+  return `${normalizedBaseUrl}/chat/completions`;
 }
 
 function buildModelsEndpoint(
@@ -516,6 +547,9 @@ export interface ActiveProviderCredentials {
   builtin?: boolean;
   /** Opt-in TLS verification bypass; only honored when `builtin === false`. */
   tlsRejectUnauthorized?: boolean;
+  /** Listing strategy for this provider. Defaults to `models` when omitted so
+   *  existing tests and older callers keep probing GET /models. */
+  modelDiscoveryMode?: ProviderModelDiscoveryMode;
   /** Display name, used to recognize presets that are stored as custom providers. */
   name?: string;
 }
@@ -566,6 +600,7 @@ function resolveCredentialsForProvider(
     apiKey,
     baseUrl: entry.baseUrl,
     builtin: entry.builtin === true,
+    modelDiscoveryMode: resolveProviderCapabilities(providerId, entry).modelDiscoveryMode,
     ...(entry.httpHeaders !== undefined ? { httpHeaders: entry.httpHeaders } : {}),
     ...(entry.tlsRejectUnauthorized !== undefined
       ? { tlsRejectUnauthorized: entry.tlsRejectUnauthorized }
@@ -634,6 +669,11 @@ export async function runProviderTest(
     return testChatGPTCodexOAuth();
   }
 
+  const discoveryMode = creds.modelDiscoveryMode ?? 'models';
+  const bypass = creds.builtin !== true && creds.tlsRejectUnauthorized === true;
+  if (!connectionTestProbesModelsEndpoint(discoveryMode)) {
+    return withTlsBypass(bypass, () => probeDeclaredInference(creds));
+  }
   const litellm = isLiteLlmConnectionTarget({
     providerId: creds.provider,
     name: creds.name,
@@ -643,7 +683,6 @@ export async function runProviderTest(
   // Bypass is the per-provider opt-in, force-gated so a tampered config can
   // never weaken TLS for built-in providers. Wrapping the whole body covers
   // both the GET /models probe and the inner POST inside tryDegradeProbe.
-  const bypass = creds.builtin !== true && creds.tlsRejectUnauthorized === true;
   return withTlsBypass(bypass, async () => {
     const { url, normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
     const headers = buildAuthHeadersForWire(
@@ -664,6 +703,7 @@ export async function runProviderTest(
           code,
           message: err instanceof Error ? err.message : 'Network request failed',
           hint,
+          attemptedUrl: url,
           compatibility: 'incompatible' as const,
           reasonCategory:
             code === 'ECONNREFUSED' ? ('network-unreachable' as const) : ('unknown' as const),
@@ -702,6 +742,7 @@ export async function runProviderTest(
           code,
           message: `HTTP ${res.status}`,
           hint,
+          attemptedUrl: url,
           compatibility: 'incompatible' as const,
           reasonCategory: connectionCategoryForStatus(res.status, normalizedBaseUrl),
         },
@@ -710,6 +751,58 @@ export async function runProviderTest(
     }
     return { ok: true, probeMethod: 'models', compatibility: 'compatible' };
   });
+}
+
+async function probeDeclaredInference(
+  creds: ActiveProviderCredentials,
+): Promise<ConnectionTestResponse> {
+  if (
+    creds.wire !== 'openai-chat' &&
+    creds.wire !== 'openai-responses' &&
+    creds.wire !== 'anthropic'
+  ) {
+    return {
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: `Discovery mode does not probe /models for wire "${creds.wire}"`,
+      hint: 'Use a listed model id or switch this provider to a listing-capable endpoint',
+      compatibility: 'incompatible',
+      reasonCategory: 'unknown',
+    };
+  }
+  const { normalizedBaseUrl } = buildEndpointForWire(creds.wire, creds.baseUrl);
+  const attemptedUrl = inferenceProbeUrl(creds.wire, normalizedBaseUrl);
+  const headers = buildAuthHeadersForWire(
+    creds.wire,
+    creds.apiKey,
+    creds.httpHeaders,
+    creds.baseUrl,
+  );
+  const probe = await probeInferenceEndpoint(creds.wire, normalizedBaseUrl, headers);
+  if (probe.kind === 'pass') {
+    return { ok: true, probeMethod: 'inference', compatibility: 'compatible' };
+  }
+  if (probe.kind === 'network') {
+    return {
+      ok: false,
+      code: 'NETWORK',
+      message: probe.message,
+      hint: 'Cannot reach provider inference endpoint',
+      attemptedUrl,
+      compatibility: 'incompatible',
+      reasonCategory: 'unknown',
+    };
+  }
+  const { code, hint } = classifyHttpError(probe.status);
+  return {
+    ok: false,
+    code,
+    message: `HTTP ${probe.status}`,
+    hint,
+    attemptedUrl,
+    compatibility: 'incompatible',
+    reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
+  };
 }
 
 async function tryDegradeProbe(
@@ -741,6 +834,7 @@ async function tryDegradeProbe(
         code,
         message: `HTTP ${probe.status}`,
         hint,
+        attemptedUrl: inferenceProbeUrl(wire, normalizedBaseUrl),
         compatibility: 'incompatible' as const,
         reasonCategory: connectionCategoryForStatus(probe.status, normalizedBaseUrl),
       },
@@ -771,12 +865,7 @@ async function probeInferenceEndpoint(
   normalizedBaseUrl: string,
   headers: Record<string, string>,
 ): Promise<ProbeResult> {
-  const url =
-    wire === 'anthropic'
-      ? `${normalizedBaseUrl}/v1/messages`
-      : wire === 'openai-responses'
-        ? `${normalizedBaseUrl}/responses`
-        : `${normalizedBaseUrl}/chat/completions`;
+  const url = inferenceProbeUrl(wire, normalizedBaseUrl);
   const body =
     wire === 'anthropic'
       ? JSON.stringify({
@@ -1028,11 +1117,45 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
   if ('ok' in resolved) return resolved;
   const { providerId, entry } = resolved;
 
-  // Providers that expose a static hint (e.g. chatgpt-codex, whose /models
-  // endpoint requires OAuth bearer + ChatGPT-Account-Id headers that this
-  // keyless discovery path cannot supply) short-circuit with modelsHint.
-  if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
-    return { ok: true, models: entry.modelsHint };
+  // Use the maintained pi catalog and local Codex selection as suggestions.
+  // Never use persisted legacy hints as an allowlist or an entitlement check.
+  if (providerId === CHATGPT_CODEX_PROVIDER_ID && entry.wire === 'openai-codex-responses') {
+    try {
+      const options = await getCodexModelOptions();
+      const cfg = getCachedConfig();
+      return {
+        ok: true,
+        models: [
+          ...new Set(
+            [
+              ...(cfg?.activeProvider === providerId ? [cfg.activeModel] : []),
+              entry.defaultModel,
+              ...options.models,
+            ].filter(Boolean),
+          ),
+        ],
+        discoveryMode: 'static-hint',
+        source: 'static-hint',
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'PARSE',
+        message: err instanceof Error ? err.message : String(err),
+        hint: 'Edit the model ID in Settings > Models, or repair your local Codex config.',
+        discoveryMode: 'static-hint',
+      };
+    }
+  }
+
+  const plan = resolveListForProviderPlan(providerId, entry);
+  if (plan.action === 'return') {
+    return {
+      ok: true,
+      models: plan.models,
+      discoveryMode: plan.discoveryMode,
+      source: plan.source,
+    };
   }
 
   const keyResult = resolveApiKeyForListing(providerId, entry);
@@ -1040,7 +1163,9 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
   const { apiKey } = keyResult;
 
   const cached = getCachedModels(providerId, entry.baseUrl, apiKey);
-  if (cached !== null) return { ok: true, models: cached };
+  if (cached !== null) {
+    return { ok: true, models: cached, discoveryMode: 'models', source: 'remote' };
+  }
 
   const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
   const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
@@ -1063,8 +1188,11 @@ export async function handleModelsV1ListForProvider(raw: unknown): Promise<Model
       entry.baseUrl,
     ),
   );
-  if (result.ok) setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
-  return result;
+  if (result.ok) {
+    setCachedModels(providerId, entry.baseUrl, apiKey, result.models);
+    return { ...result, discoveryMode: 'models', source: 'remote' };
+  }
+  return { ...result, discoveryMode: 'models' };
 }
 
 async function fetchModelListResponse(

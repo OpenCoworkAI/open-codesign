@@ -1444,6 +1444,28 @@ describe('useCodesignStore design management', () => {
     ]);
   });
 
+  it('resumes system editors from the current workspace rather than an old JSX snapshot', async () => {
+    const design = { ...DEFAULT_DESIGN, id: 'system-editor', designSystemId: 'my-system' };
+    const latest = 'function App(){return <main>New tokens</main>;}';
+    const stale = 'function App(){return <main>Old tokens</main>;}';
+    vi.stubGlobal('window', {
+      codesign: {
+        files: { read: vi.fn(async (_id: string, path: string) => ({ path, content: latest })) },
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: {
+          ...mockSnapshotsApi(),
+          list: vi.fn(async () => [{ id: 'old', artifactSource: stale }]),
+          listDesigns: vi.fn(async () => [design]),
+        },
+      },
+      setTimeout,
+    });
+    useCodesignStore.setState({ designs: [design], currentDesignId: null });
+    await useCodesignStore.getState().switchDesign(design.id);
+    await vi.waitFor(() => expect(useCodesignStore.getState().previewSource).toBe(latest));
+  });
+
   it('selects a cold generating design before preview hydration resolves', async () => {
     const designA = { ...DEFAULT_DESIGN, id: 'design-a', workspacePath: '/tmp/design-a' };
     const designB = { ...DEFAULT_DESIGN, id: 'design-b', workspacePath: '/tmp/design-b' };

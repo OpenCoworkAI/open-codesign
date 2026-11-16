@@ -1,5 +1,5 @@
 /**
- * Wrappers around @mariozechner/pi-ai that fill capability gaps documented
+ * Wrappers around @earendil-works/pi-ai that fill capability gaps documented
  * in docs/research/05-pi-ai-boundary.md. App code MUST go through this
  * package - never import a provider SDK directly.
  *
@@ -378,7 +378,7 @@ export async function complete(
   // keeps the prefixed form so provider/model UX stays in sync with /models.
   const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
 
-  const pi = (await import('@mariozechner/pi-ai')) as unknown as {
+  const pi = (await import('@earendil-works/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
     completeSimple: (
       model: PiModel,
@@ -598,6 +598,7 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
   if (trimmed.startsWith('sk-ant-')) return 'anthropic';
   if (trimmed.startsWith('sk-or-')) return 'openrouter';
   if (trimmed.startsWith('apikey-')) return 'atlascloud';
+  if (trimmed.startsWith('llmtr-')) return 'llmtr';
   if (trimmed.startsWith('sk-')) return 'openai';
   if (trimmed.startsWith('AIza')) return 'google';
   if (trimmed.startsWith('xai-')) return 'xai';
@@ -630,6 +631,8 @@ export type {
   ImageSize,
 } from './images';
 export { defaultImageBaseUrl, defaultImageModel, generateImage } from './images';
+export type { NativeSearchOptions, NativeSearchSource, NativeSearchUpdate } from './native-search';
+export { createNativeSearchStream } from './native-search';
 export type {
   BackoffOptions,
   CompleteWithRetryOptions,

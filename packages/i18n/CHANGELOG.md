@@ -1,5 +1,45 @@
 # @open-codesign/i18n
 
+## 0.2.3
+
+### Patch Changes
+
+- 89fe5cd: Preserve ChatGPT subscription model selections on upgrade and re-login. Suggest models from local Codex configuration and pi's maintained catalog, require an editable initial selection, and keep upstream model-access errors with recovery guidance.
+- 029128d: Fit each generation run into the model's context window. Before the request, the system prompt, tool definitions and the prompt are measured in tokens, and a quarter of the window (at most the 32,000 tokens a run requests) stays free for the reply; the request asks for no more output than that, so models with a window under 128k tokens request less than 32,000. If those parts do not fit, the run stops with an error that names the window and points to the context window setting in Settings → Models, instead of sending a request the model would truncate. Chat history keeps its newest messages that fit what remains.
+- 0d3d63e: Add an opt-in base64 response setting for OpenAI-compatible image gateways so generated assets can be saved locally. Keep existing and strict GPT image requests unchanged by default, and reset the compatibility setting when switching image providers.
+- 3b03e7a: Add deterministic, local source-definition editing for supported workspace JSX/TSX previews. Select a native element in the Files tab and save an existing static text, allowlisted attribute, or inline-style literal without an LLM call. Keep comments and tweaks separate, and explicitly refuse unsupported or ambiguous targets.
+
+  Bind edits to exact source hashes and preview revisions, validate and reparse a single AST-derived patch in the main process, preserve JSX/TSX BOM bytes, and stage atomic single-file writes with conflict checks. Surface saved-but-refresh-failed warnings without rolling back later external changes. Add preview-only provenance, typed IPC contracts, localized editing controls, and focused safety and lifecycle tests; do not add undo/version UI or session history state.
+
+- 24815f3: Show LiteLLM-specific hints when a LiteLLM Gateway connection test or model discovery fails. A 401 says to set the master or virtual key or turn off keyless mode, a 404 says to check that the base URL ends with /v1, and only a localhost URL also mentions port 4000. A connection refusal says to start the LiteLLM proxy.
+- 6799d55: Add a LiteLLM Gateway preset to Settings → Add provider. It pre-fills an OpenAI-compatible endpoint at `http://localhost:4000/v1`, starts in keyless mode for proxies without a master key, and explains how to switch to a master/virtual key. LiteLLM is not bundled.
+- 634c1b7: Add a beta editable PPTX export that renders HTML/JSX slides into native measured-line text boxes, basic shapes, and independent images while preserving the existing image-first default and legacy text-only library mode. Normalize preview ancestors to design coordinates, support inactive slide containers, resolve actual platform fonts without embedding them, and keep ordinary text editable alongside isolated backgrounds, nonuniform borders, and generated decorations. Multiline text is edited as separate line objects; unsupported compositing, clipping, and complex content can still require warned subtree rasterization.
+
+  Preserve CSS paint order between translucent decoration and positioned `z-index:auto` content so background grids do not cover editable text. Recognize a unique explicitly marked or proportioned poster and export its actual page aspect ratio without the preview stage, while retaining ordinary deck sizing.
+
+  Fit unstructured root/body content into one page with a warning when no slide containers or unique poster artboard are found, and reject explicit custom selectors with no matches. Add descriptive model validation, XML-character sanitation, a persistent PptxGenJS 4.0.1 XML/package repair patch, and browser plus dev-only XML-parser regression coverage. A private deck and portrait poster were opened, rendered, saved, and reopened in installed Windows PowerPoint with their objects and text retained. Document the Beta compatibility matrix, manual acceptance checklist, and synthetic fallback regressions; macOS PowerPoint and WPS remain unverified. Arbitrary CSS fidelity is not guaranteed, and small clipping/font differences can remain.
+
+- 75f1e22: Add 6-hour, 12-hour, 24-hour, and disabled generation timeout options so slow local models can finish overnight runs. Preserve these settings when saving and reopening preferences.
+- e331e69: Add PNG to the Export menu. It renders the active design with the installed Chrome, like PDF export, and saves a full-page screenshot at 2x. Decks that show one slide at a time are expanded so every slide appears in order.
+- 856dba8: Use each model's real context window. A generation run takes the window from a new per-provider "Context window" setting in Settings → Models, then from pi-ai's model catalog, and falls back to 200k tokens only when neither knows the model. Set it for local runtimes such as Ollama or LM Studio and for relays the catalog does not know. The chat history sent with each run follows the resolved window.
+- ec7f76d: Formalize provider `modelDiscoveryMode` (`models`, `static-hint`, `manual`, `infer-only`) so listing, Settings pickers, imports, and diagnostics no longer treat GET `/models` as universal.
+- 719d089: Keep the source editing toolbar and panel outside the artifact's mouse hit area. When effects or imperative execution prevent reliable preview selection, offer explicit selection of direct static source fields by line, tag and value. This mode never instruments the preview or trusts its selection messages; saves retain literal validation, exact source hashes and atomic conflict checks. Dynamic, repeated and indirect definitions remain unsupported.
+- c7b0f23: Send a system notification when a design run completes or fails, or when the agent asks a question, while the window is in the background. Clicking it brings the window back and opens that design. New installs start with notifications on. Installs upgraded from an earlier version keep them off until you turn on Settings → Advanced → System notifications; the same switch turns them off. On macOS, notifications stop after the last window is closed, until it is opened again. Preferences move to schema version 10.
+- 143cf96: Add bilingual Tavily web-search settings with safe key save/replace/clear operations and explicit bounded connection testing. Apply settings to new runs without restarting while retaining per-run networking consent and active-run snapshots. Keep direct webpage reading independent of Tavily credentials, and exclude search-only credentials from the model API service list without deleting them.
+- 4cf3393: Add a local design system library with built-in previews, personal forks, DESIGN.md imports, session-backed editing and optional system selection when creating designs. Preserve independent workspace copies and connect component annotations to canonical design rules.
+
+  Present system details as a full content view with sidebar actions, a fitted interactive overview and an expandable specification reader. Resolve built-ins from the current app bundle so legacy user-owned references cannot disable shipped systems.
+
+  Initialize the optional library only when handling a request, so unavailable bundled references do not prevent the desktop application from starting.
+
+- 787a8e4: Improve deterministic text editing for generated JSX/TSX: edit independent mixed-child segments, shared local component literals, and lexically traced const/object/static-array string definitions. Display exact source origins and shared-definition scope, bind individual preview fields, and refuse unresolved instance data rather than guessing. Preserve hash conflicts, path safety, and atomic span writes without a model call.
+
+  Unify editing into preview selection and one field panel, removing the separate source picker. Support static segments beside dynamic content, disabled control selection, explicit containing-element navigation, and fresh field validation before saving. Retired source-mode IPC requests are explicitly rejected rather than acting as a bypass. Localize editability reasons, source-definition explanations and inspect/save/refresh messages for Chinese and English interfaces, keeping backend reason codes in collapsed diagnostics.
+
+  Bind resolved HTML-to-JSX previews to the requested file/design/workspace and refresh sources outside the expanded file tree. Add data-driven browser persistence, shared-reference, mutation/escape, mixed-text, ambiguous-mapping and source-conflict regressions.
+
+- 09f21c3: Show recorded token and USD totals for the current design, including today and the local week, beside the existing per-run token count.
+
 ## 0.2.2
 
 ### Patch Changes

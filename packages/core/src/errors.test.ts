@@ -37,6 +37,13 @@ describe('rewriteUpstreamMessage', () => {
     expect(result.message).toContain('atlascloud.ai');
   });
 
+  it('rewrites leaked openai URL to LLMTR URL', () => {
+    const result = rewriteUpstreamMessage(LEAKED, 'llmtr', 401);
+    expect(result.rewritten).toBe(true);
+    expect(result.message).not.toContain('openai.com');
+    expect(result.message).toContain('llmtr.com/docs/en/api-keys/');
+  });
+
   it('rewrites to deepseek URL even though it is not in the typed enum', () => {
     const result = rewriteUpstreamMessage(LEAKED, 'deepseek', 401);
     expect(result.message).toContain('platform.deepseek.com/api_keys');
@@ -61,6 +68,21 @@ describe('rewriteUpstreamMessage', () => {
 });
 
 describe('remapProviderError', () => {
+  it('handles long non-model access errors without a backtracking model matcher', () => {
+    const err = new Error(`don't haveaccess${'access'.repeat(20_000)}`);
+    expect(remapProviderError(err, 'chatgpt-codex', 'openai-codex-responses')).toBe(err);
+  });
+  it('preserves the unsupported Codex model error and adds a model recovery path', () => {
+    const message =
+      "HTTP 400: The 'account-model' model is not supported when using Codex with a ChatGPT account.";
+    const err = new CodesignError(message, 'PROVIDER_ERROR');
+    const out = remapProviderError(err, 'chatgpt-codex', 'openai-codex-responses') as CodesignError;
+    expect(out.message).toContain(message);
+    expect(out.message).toContain('Settings > Models');
+    expect(out.cause).toBe(err);
+    expect(out.code).toBe('PROVIDER_ERROR');
+    expect(remapProviderError(err, 'openai', 'openai-responses')).toBe(err);
+  });
   it('passes openai 401 through verbatim', () => {
     const err = httpError(401, LEAKED);
     const out = remapProviderError(err, 'openai');

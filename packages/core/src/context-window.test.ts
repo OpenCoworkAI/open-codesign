@@ -6,7 +6,7 @@ const catalog: Record<string, Array<{ id: string; contextWindow: number }>> = {
   google: [{ id: 'gemini-2.5-pro', contextWindow: 1_048_576 }],
 };
 
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock('@earendil-works/pi-ai', () => ({
   getProviders: () => Object.keys(catalog),
   getModels: (provider: string) => catalog[provider] ?? [],
 }));

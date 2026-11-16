@@ -57,6 +57,31 @@ const store = (): ResearchStore => ({ schemaVersion: 1, sources: [], evidence: [
 const slide = (id: string): ResearchSlide => ({ id, title: id, fingerprint: `${id}-content` });
 
 describe('research records and deterministic export', () => {
+  it('merges native citation ranges across saves and restores them without upgrading evidence', async () => {
+    const root = await workspace();
+    const records = store();
+    const first = {
+      ...source,
+      originalRead: false,
+      provider: 'openai',
+      retrieval: 'native-tool' as const,
+      citations: [{ type: 'url_citation', startIndex: 0, endIndex: 8 }],
+    };
+    const second = {
+      ...first,
+      excerpt: null,
+      citations: [{ type: 'url_citation', startIndex: 20, endIndex: 30 }],
+    };
+    saveSources(records, [first, second, first]);
+    await saveResearchStore(root, records);
+    const saved = (await loadResearchStore(root)).sources[0];
+    expect(saved).toMatchObject({
+      originalRead: false,
+      citations: [...first.citations, ...second.citations],
+    });
+    expect(recordEvidence(records, input()).originalRead).toBe(false);
+  });
+
   it('persists and restores structured source/evidence/usage and rejects unknown references', async () => {
     const root = await workspace();
     const records = store();

@@ -40,8 +40,7 @@ export function DesignsView() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return designs;
-    return designs.filter((d) => d.name.toLowerCase().includes(q));
+    return designs.filter((d) => !d.designSystemId && (!q || d.name.toLowerCase().includes(q)));
   }, [designs, query]);
 
   if (!open) return null;

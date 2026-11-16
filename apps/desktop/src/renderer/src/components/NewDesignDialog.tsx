@@ -1,6 +1,7 @@
 import { useT } from '@open-codesign/i18n';
+import type { LibraryDesignSystem } from '@open-codesign/shared';
 import { FolderOpen } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCodesignStore } from '../store';
 
 export function NewDesignDialog() {
@@ -9,10 +10,35 @@ export function NewDesignDialog() {
   const close = useCodesignStore((s) => s.closeNewDesignDialog);
   const createNewDesign = useCodesignStore((s) => s.createNewDesign);
   const setView = useCodesignStore((s) => s.setView);
+  const systemId = useCodesignStore((s) => s.selectedLibrarySystemId);
+  const [systems, setSystems] = useState<LibraryDesignSystem[]>([]);
+  const [error, setError] = useState('');
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setError('');
+      setSystems([]);
+      setSelectedPath(null);
+      return;
+    }
+    let live = true;
+    if (window.codesign?.designSystems)
+      void window.codesign.designSystems
+        .list()
+        .then((items) => {
+          if (live) setSystems(items);
+        })
+        .catch((err) => {
+          if (live) setError(String(err));
+        });
+    return () => {
+      live = false;
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -30,10 +56,18 @@ export function NewDesignDialog() {
   async function handleCreate(withPath: string | null) {
     setCreating(true);
     try {
-      const design = await createNewDesign(withPath);
-      close();
-      setSelectedPath(null);
-      if (design) setView('workspace');
+      setError('');
+      const design = systemId
+        ? await createNewDesign(withPath, undefined, systemId)
+        : await createNewDesign(withPath);
+      if (design) {
+        close();
+        setSelectedPath(null);
+        setView('workspace');
+      } else
+        setError(
+          useCodesignStore.getState().toasts.at(-1)?.description ?? t('library.createFailed'),
+        );
     } finally {
       setCreating(false);
     }
@@ -72,6 +106,34 @@ export function NewDesignDialog() {
             {t('canvas.newDesignDialog.subtitle')}
           </p>
         </div>
+
+        <label className="grid gap-2 text-[var(--text-sm)] text-[var(--color-text-secondary)]">
+          {t('library.optional')}
+          <select
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-[var(--color-text-primary)]"
+            value={systemId ?? ''}
+            disabled={busy}
+            onChange={(event) =>
+              useCodesignStore.setState({ selectedLibrarySystemId: event.target.value || null })
+            }
+          >
+            <option value="">{t('library.none')}</option>
+            {systemId && !systems.some((system) => system.id === systemId) && (
+              <option value={systemId}>{t('library.loading')}</option>
+            )}
+            {systems.map((system) => (
+              <option key={system.id} value={system.id} disabled={system.status !== 'ready'}>
+                {system.name}
+                {system.status === 'draft' ? ` · ${t('library.draft')}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        {error && (
+          <p role="alert" className="text-[var(--text-sm)] text-[var(--color-error)]">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
           <span className="flex-1 text-[var(--text-sm)] text-[var(--color-text-secondary)] font-mono truncate">

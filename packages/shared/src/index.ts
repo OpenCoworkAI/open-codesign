@@ -12,6 +12,21 @@ export {
   commentContentFingerprint,
 } from './comment-content';
 export { isRecoveryCategory, RECOVERY_CATEGORIES, type RecoveryCategory } from './recovery';
+export type {
+  WebSearchBackend,
+  WebSearchMode,
+  WebSearchRoute,
+  WebSearchService,
+  WebSearchUnavailableReason,
+} from './web-search-routing';
+export {
+  ANTHROPIC_NATIVE_WEB_SEARCH_MODELS,
+  OPENAI_NATIVE_WEB_SEARCH_MODELS,
+  resolveWebSearchRoute,
+  WebSearchBackendSchema,
+  WebSearchServiceSchema,
+} from './web-search-routing';
+export type { SaveWebSearchSettingsResult } from './web-search-settings';
 export {
   SaveWebSearchSettingsInput,
   WEB_SEARCH_SETTINGS_CHANNELS,
@@ -23,6 +38,7 @@ export const ProviderId = z.enum([
   'anthropic',
   'openai',
   'atlascloud',
+  'llmtr',
   'google',
   'openrouter',
   'groq',
@@ -321,10 +337,12 @@ export type {
   ImageGenerationSize,
   OnboardingState,
   ProviderCapabilities,
+  ProviderCapabilityInput,
   ProviderEntry,
   ProviderModelDiscoveryMode,
   ProviderShortlist,
   ReasoningLevel,
+  ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
   WireApi,
 } from './config';
@@ -334,6 +352,7 @@ export {
   ConfigSchema,
   ConfigV3Schema,
   defaultProviderCapabilities,
+  deriveModelDiscoveryMode,
   detectWireFromBaseUrl,
   hydrateConfig,
   IMAGE_GENERATION_SCHEMA_VERSION,
@@ -394,6 +413,27 @@ export {
   liteLlmHintKeyForHttpStatus,
   liteLlmHintKeyForTransportError,
 } from './litellm-hints';
+export type {
+  ImportedProviderSource,
+  ListForProviderPlan,
+  ModelsListSource,
+  SettingsModelPickerKind,
+} from './model-discovery';
+export {
+  capabilitiesForDiscoveryMode,
+  capabilitiesForImportedProvider,
+  connectionTestProbesModelsEndpoint,
+  discoveryModeForCustomProvider,
+  discoveryModeForImport,
+  isDefaultAnthropicApiHost,
+  isListingCapableOfficialHost,
+  localModelsForDiscoveryMode,
+  looksLikeModelsListingUrl,
+  mergeDiscoveryMode,
+  resolveListForProviderPlan,
+  settingsModelPickerKind,
+  usesRemoteModelsListing,
+} from './model-discovery';
 export type { ProxyPresetId } from './proxy-presets';
 export {
   getPresetById,
@@ -621,6 +661,7 @@ export interface RecordRendererErrorResult {
   fingerprint: string | null;
 }
 
+export * from './design-system-library';
 export type {
   EditmodeBlock,
   EditmodeTokens,
@@ -636,7 +677,6 @@ export {
   replaceEditmodeBlock,
   replaceTweakSchema,
 } from './editmode';
-
 export {
   formatUsageCost,
   formatUsageTokens,
@@ -646,5 +686,4 @@ export {
   type UsageRecord,
   type UsageTotals,
 } from './usage-budget';
-
 export * from './web-research';

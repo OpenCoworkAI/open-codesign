@@ -1,5 +1,5 @@
 /**
- * v0.2 agent-session wrapper around `@mariozechner/pi-coding-agent`.
+ * v0.2 agent-session wrapper around `@earendil-works/pi-coding-agent`.
  *
  * Spike result (docs/spike-pi-results.md, 2026-04-24):
  *   pi-coding-agent satisfies all v0.2 hard needs (bash hook, session
@@ -13,7 +13,7 @@
  */
 
 import path from 'node:path';
-import type { Api, Model } from '@mariozechner/pi-ai';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import {
   type AgentSession,
   type AuthStorage,
@@ -25,7 +25,7 @@ import {
   isToolCallEventType,
   ModelRegistry,
   SessionManager,
-} from '@mariozechner/pi-coding-agent';
+} from '@earendil-works/pi-coding-agent';
 
 export interface PermissionDecision {
   /** Allow this command to run. */
@@ -95,4 +95,4 @@ export async function createCodesignSession(options: CreateSessionOptions): Prom
   return { session: result.session, result, sessionFile };
 }
 
-export { AuthStorage, ModelRegistry, SessionManager } from '@mariozechner/pi-coding-agent';
+export { AuthStorage, ModelRegistry, SessionManager } from '@earendil-works/pi-coding-agent';

@@ -16,7 +16,7 @@ import type { ProviderRow } from '../provider-settings';
 import type { AppPaths } from '../storage-settings';
 import {
   getWebSearchSettings,
-  saveWebSearchSettings,
+  saveWebSearchSettingsForIpc,
   testWebSearchSettings,
 } from '../web-search-settings';
 import { getCachedConfig, toState } from './config-cache';
@@ -55,7 +55,7 @@ const logger = getLogger('settings-ipc');
 export function registerOnboardingIpc(): void {
   ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.get, () => getWebSearchSettings());
   ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.save, (_event, raw: unknown) =>
-    saveWebSearchSettings(raw),
+    saveWebSearchSettingsForIpc(raw),
   );
   ipcMain.handle(WEB_SEARCH_SETTINGS_CHANNELS.test, () => testWebSearchSettings());
 

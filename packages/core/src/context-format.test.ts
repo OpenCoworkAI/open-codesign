@@ -57,11 +57,11 @@ describe('context formatting', () => {
         path: '/tmp/shot.png',
         mediaType: 'image/png',
         imageDataUrl: 'data:image/png;base64,aW1n',
-        note: 'Image attachment metadata is available; visual pixels may only be available on vision-capable provider paths.',
+        note: 'Image bytes are embedded as multimodal content when the active model accepts image input; otherwise only the filename is available as a hint.',
       },
     ]);
 
-    expect(formatted).toContain('visual pixels may only be available');
+    expect(formatted).toContain('embedded as multimodal content');
     expect(formatted).not.toContain('Use the visual content directly');
   });
 

@@ -6,22 +6,29 @@ import { cleanIpcError, NativeSelect, Row, SegmentedControl } from './primitives
 
 /**
  * Canonical timeout choices. Default prefs value is 1200s (20 min); long
- * generations need 30-60 min, dropdown tops out at 2h. The old 60-300s
- * ceiling silently clamped the stored value when the UI couldn't represent it.
+ * local-model runs need 6h/12h/24h. `0` disables the run timeout (Settings ->
+ * Advanced). The old 60-300s ceiling silently clamped the stored value.
  */
-export const TIMEOUT_OPTION_SECONDS = [60, 120, 180, 300, 600, 1200, 1800, 3600, 7200] as const;
+export const TIMEOUT_OPTION_SECONDS = [
+  60, 120, 180, 300, 600, 1200, 1800, 3600, 7200, 21600, 43200, 86400, 0,
+] as const;
 
 /**
- * Returns the canonical list with `currentSec` merged in when it is a positive
- * finite value that isn't already present. Prevents a blank select and silent
- * downgrade on save.
+ * Returns the canonical list with `currentSec` merged in when it is a
+ * non-negative finite value that isn't already present. Prevents a blank
+ * select and silent downgrade on save. `0` (no timeout) sorts last.
  */
 export function resolveTimeoutOptions(currentSec: number): number[] {
   const base: number[] = [...TIMEOUT_OPTION_SECONDS];
-  if (Number.isFinite(currentSec) && currentSec > 0 && !base.includes(currentSec)) {
+  // 0 means "no timeout" (disabled). Merge unknown positive customs; keep 0 last.
+  if (Number.isFinite(currentSec) && currentSec >= 0 && !base.includes(currentSec)) {
     base.push(currentSec);
-    base.sort((a, b) => a - b);
   }
+  base.sort((a, b) => {
+    if (a === 0) return 1;
+    if (b === 0) return -1;
+    return a - b;
+  });
   return base;
 }
 
@@ -162,7 +169,10 @@ export function AdvancedTab() {
           onChange={(v) => void updatePref({ generationTimeoutSec: Number(v) })}
           options={resolveTimeoutOptions(prefs.generationTimeoutSec).map((sec) => ({
             value: String(sec),
-            label: t('settings.advanced.timeoutSeconds', { value: sec }),
+            label:
+              sec === 0
+                ? t('settings.advanced.timeoutDisabled')
+                : t('settings.advanced.timeoutSeconds', { value: sec }),
           }))}
         />
       </Row>

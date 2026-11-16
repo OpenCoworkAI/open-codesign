@@ -28,7 +28,13 @@ export function HubView({ onUseExamplePrompt }: HubViewProps = {}) {
         data-codesign-hub-scroll-root
         className="codesign-scroll-area flex-1 min-h-0 overflow-y-auto"
       >
-        <div className="mx-auto max-w-[1600px] px-[clamp(var(--space-4),3vw,var(--space-8))] py-[clamp(var(--space-4),3vw,var(--space-8))]">
+        <div
+          className={
+            hubTab === 'resources'
+              ? 'h-full px-[clamp(var(--space-4),2vw,var(--space-6))] py-[var(--space-4)]'
+              : 'mx-auto max-w-[1600px] px-[clamp(var(--space-4),3vw,var(--space-8))] py-[clamp(var(--space-4),3vw,var(--space-8))]'
+          }
+        >
           {mounted.has('recent') ? (
             <div hidden={hubTab !== 'recent'}>
               <RecentTab />
@@ -45,7 +51,7 @@ export function HubView({ onUseExamplePrompt }: HubViewProps = {}) {
             </div>
           ) : null}
           {mounted.has('resources') ? (
-            <div hidden={hubTab !== 'resources'}>
+            <div hidden={hubTab !== 'resources'} className="h-full">
               <DesignSystemsTab />
             </div>
           ) : null}

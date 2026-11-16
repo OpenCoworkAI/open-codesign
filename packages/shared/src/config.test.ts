@@ -154,6 +154,29 @@ describe('config v3 schema', () => {
     expect(PROVIDER_SHORTLIST.atlascloud.primary).toContain('deepseek-ai/deepseek-v4-pro');
   });
 
+  it('includes LLMTR as an OpenAI-compatible builtin provider', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('llmtr');
+    expect(BUILTIN_PROVIDERS.llmtr).toMatchObject({
+      id: 'llmtr',
+      name: 'LLMTR',
+      wire: 'openai-chat',
+      baseUrl: 'https://llmtr.com/v1',
+      envKey: 'LLMTR_API_KEY',
+      defaultModel: 'qwen/qwen3.8-27b-free',
+      capabilities: {
+        supportsKeyless: false,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    });
+    expect(PROVIDER_SHORTLIST.llmtr).toMatchObject({
+      provider: 'llmtr',
+      label: 'LLMTR',
+      defaultPrimary: 'qwen/qwen3.8-27b-free',
+    });
+    expect(PROVIDER_SHORTLIST.llmtr.primary).toContain('llmtr/qwen3-8-27b');
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,
@@ -568,6 +591,57 @@ describe('provider capability helpers', () => {
     expect(caps.supportsKeyless).toBe(true);
     expect(caps.supportsModelsEndpoint).toBe(false);
     expect(caps.modelDiscoveryMode).toBe('manual');
+  });
+
+  it('accepts infer-only as a declared discovery mode', () => {
+    const parsed = ConfigV3Schema.parse({
+      version: 3,
+      activeProvider: 'glm',
+      activeModel: 'glm-4.6',
+      secrets: {},
+      providers: {
+        glm: {
+          id: 'glm',
+          name: 'GLM',
+          builtin: false,
+          wire: 'openai-chat',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          defaultModel: 'glm-4.6',
+          capabilities: {
+            supportsModelsEndpoint: false,
+            modelDiscoveryMode: 'infer-only',
+          },
+        },
+      },
+    });
+    expect(parsed.providers['glm']?.capabilities?.modelDiscoveryMode).toBe('infer-only');
+  });
+
+  it('derives infer-only when listing is explicitly disabled without a hint', () => {
+    const caps = resolveProviderCapabilities('custom-proxy', {
+      wire: 'openai-chat',
+      capabilities: { supportsModelsEndpoint: false },
+    });
+    expect(caps.modelDiscoveryMode).toBe('infer-only');
+    expect(caps.supportsModelsEndpoint).toBe(false);
+  });
+
+  it('derives static-hint for openai-codex-responses even without modelsHint', () => {
+    const caps = defaultProviderCapabilities('chatgpt-codex', {
+      wire: 'openai-codex-responses',
+      requiresApiKey: false,
+    });
+    expect(caps.modelDiscoveryMode).toBe('static-hint');
+    expect(caps.supportsModelsEndpoint).toBe(false);
+  });
+
+  it('syncs supportsModelsEndpoint when only modelDiscoveryMode is overridden', () => {
+    const caps = resolveProviderCapabilities('custom-lite', {
+      wire: 'openai-chat',
+      capabilities: { modelDiscoveryMode: 'infer-only' },
+    });
+    expect(caps.modelDiscoveryMode).toBe('infer-only');
+    expect(caps.supportsModelsEndpoint).toBe(false);
   });
 });
 

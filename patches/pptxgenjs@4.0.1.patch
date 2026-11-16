@@ -11,6 +11,23 @@ index 55ae0b9eb49b1c87dc2ac2ec9d7c1fa215ddab8d..b3287011e893a0baeed6320fa75a47b6
          }
      }
      // Hyperlink support
+@@ -3769,6 +3769,15 @@ function genXmlDataChart(data, opts) {
+                         strXml += '  </c:numRef>';
+                     }
+-                    else {
++                    else if (obj.labels.length === 1) {
++                        strXml += '  <c:strRef>';
++                        strXml += `    <c:f>Sheet1!$A$2:$A$${obj.labels[0].length + 1}</c:f>`;
++                        strXml += '    <c:strCache>';
++                        strXml += `      <c:ptCount val="${obj.labels[0].length}"/>`;
++                        obj.labels[0].forEach((label, idx) => (strXml += `<c:pt idx="${idx}"><c:v>${encodeXmlEntities(label)}</c:v></c:pt>`));
++                        strXml += '    </c:strCache>';
++                        strXml += '  </c:strRef>';
++                    }
++                    else {
+                         strXml += '  <c:multiLvlStrRef>';
+                         strXml += `    <c:f>Sheet1!$A$2:$${getExcelColName(obj.labels.length)}$${obj.labels[0].length + 1}</c:f>`;
+                         strXml += '    <c:multiLvlStrCache>';
 @@ -6349,8 +6349,8 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
      // STEP 2: Add presentation and slide master(s)/slide(s)
      strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';
@@ -34,6 +51,23 @@ index cac9ba92a862c3e9e0e52c2319138d78596e5309..5e8818df6ec1410a0595a7756c30064c
          }
      }
      // Hyperlink support
+@@ -3767,6 +3767,15 @@ function genXmlDataChart(data, opts) {
+                         strXml += '  </c:numRef>';
+                     }
+-                    else {
++                    else if (obj.labels.length === 1) {
++                        strXml += '  <c:strRef>';
++                        strXml += `    <c:f>Sheet1!$A$2:$A$${obj.labels[0].length + 1}</c:f>`;
++                        strXml += '    <c:strCache>';
++                        strXml += `      <c:ptCount val="${obj.labels[0].length}"/>`;
++                        obj.labels[0].forEach((label, idx) => (strXml += `<c:pt idx="${idx}"><c:v>${encodeXmlEntities(label)}</c:v></c:pt>`));
++                        strXml += '    </c:strCache>';
++                        strXml += '  </c:strRef>';
++                    }
++                    else {
+                         strXml += '  <c:multiLvlStrRef>';
+                         strXml += `    <c:f>Sheet1!$A$2:$${getExcelColName(obj.labels.length)}$${obj.labels[0].length + 1}</c:f>`;
+                         strXml += '    <c:multiLvlStrCache>';
 @@ -6347,8 +6347,8 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
      // STEP 2: Add presentation and slide master(s)/slide(s)
      strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';

@@ -239,9 +239,8 @@ describe('composeSystemPrompt()', () => {
   it('create mode whitelists cdnjs.cloudflare.com for permitted JS libraries', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
     expect(prompt).toContain('cdnjs.cloudflare.com');
-    expect(prompt).toContain('exact-version URLs');
     // Open hosts must be explicitly forbidden so the model does not use them.
-    expect(prompt).toContain('No arbitrary external scripts');
+    expect(prompt).toContain('External JS: only exact-version `cdnjs.cloudflare.com` URLs');
     expect(prompt).toContain('No external API fetches from artifacts');
   });
 
@@ -367,8 +366,9 @@ describe('composeSystemPrompt()', () => {
 
   it('describes App.jsx as the default visual source without forcing document outputs into it', () => {
     const p = composeSystemPrompt({ mode: 'create' });
-    expect(p).toContain('Match the deliverable shape to the request');
-    expect(p).toContain('multi-file packages are allowed when needed');
+    expect(p).toContain('Match the requested format');
+    expect(p).toContain('Markdown/data for documents');
+    expect(p).toContain('Add supporting files when needed');
     expect(p).toContain('`App.jsx`');
     expect(p).toContain('not standalone HTML');
   });

@@ -1,5 +1,5 @@
-import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@mariozechner/pi-agent-core';
-import { type AssistantMessage, createAssistantMessageEventStream } from '@mariozechner/pi-ai';
+import type { Agent, AgentMessage, AgentOptions, StreamFn } from '@earendil-works/pi-agent-core';
+import { type AssistantMessage, createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import type { ActiveRunMessageV1 } from '@open-codesign/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveRunMessages } from './active-messages';
@@ -10,8 +10,8 @@ const native = vi.hoisted(() => ({
   agents: [] as Agent[],
 }));
 
-vi.mock('@mariozechner/pi-agent-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@mariozechner/pi-agent-core')>();
+vi.mock('@earendil-works/pi-agent-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@earendil-works/pi-agent-core')>();
   return {
     ...actual,
     Agent: class extends actual.Agent {

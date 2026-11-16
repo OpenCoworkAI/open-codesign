@@ -226,7 +226,7 @@ After each stable tag push, CI syncs SHAs back into `packaging/` and publishes d
 On first launch, Open CoDesign opens the Settings page. Pick the path that matches how you already use models:
 
 - **ChatGPT subscription** — sign in with ChatGPT to use Codex models without pasting an API key.
-- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
+- **API key** — paste Anthropic (`sk-ant-...`), OpenAI (`sk-...`), Atlas Cloud, LLMTR, Google Gemini, OpenRouter, SiliconFlow, DeepSeek, or another supported provider key.
 - **Local / keyless** — use Ollama or an IP-allowlisted OpenAI-compatible gateway.
 
 For a custom endpoint that accepts requests without an API key, select **No API key required** in the custom-provider form. Choose the endpoint's wire protocol (including **OpenAI Responses** when appropriate), enter its base URL and default model, and leave the key empty. Local/private endpoint testing still requires the separate network confirmation. Automatic model discovery never sends API keys; for authenticated endpoints, enter a key and click **Test connection**. Switching an existing provider to keyless removes its stored key on save; switching back requires a stored or newly entered key.
@@ -278,7 +278,7 @@ Contract tests check loaded instructions, supported source examples, preference 
 ## What you get
 
 ### Models and providers
-- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
+- **Unified provider model** — Anthropic, OpenAI, Atlas Cloud, LLMTR, Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, or any OpenAI-compatible relay; keyless (IP-allowlisted) proxies supported
 - **One-click import and sign-in** — bring Claude Code / Codex API-key provider configs across, or sign in with ChatGPT subscription for Codex models
 - **Dynamic model picker** — every provider exposes its real model catalogue, not a hardcoded shortlist
 
@@ -378,7 +378,7 @@ Have a different priority in mind? [Open an issue](https://github.com/OpenCowork
 ## Built on
 
 - Electron + React 19 + Vite 6 + Tailwind v4
-- `@mariozechner/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
+- `@earendil-works/pi-ai` and `pi-coding-agent` (model/provider and agent-loop primitives)
 - `electron-builder`
 
 ## Reporting issues
@@ -420,6 +420,16 @@ For Chinese-speaking users, we also keep a WeChat group for product updates, usa
 See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%BE%E7%BE%A4).
 
 ## Contributing
+
+For automation without the desktop window, the [Agent-native CLI](./apps/cli/README.md)
+provides diagnostics, workspace inspection and HTML export. Start with
+`pnpm --silent cli --help` from a source checkout.
+
+To verify Open CoDesign's own interface in an isolated offscreen Electron instance, use
+[`debug ui`](./apps/desktop/BACKGROUND_DEBUG.md). It captures screenshots, runs page
+interactions, collects errors, and checks Windows window/focus/input observations.
+Use `debug session` for a continuous agent screenshot/decision/action loop in the same
+isolated instance, with JSONL requests and automatic cleanup on close or timeout.
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). Open an issue before writing code and run `pnpm lint && pnpm typecheck && pnpm test` before a PR.
 Desktop tests use at most two workers on Windows so concurrent Chromium and

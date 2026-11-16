@@ -1,4 +1,4 @@
-import { getModels, getProviders, type KnownProvider } from '@mariozechner/pi-ai';
+import { getModels, getProviders, type KnownProvider } from '@earendil-works/pi-ai';
 import { normalizeGeminiModelId } from '@open-codesign/providers';
 import type { ModelRef } from '@open-codesign/shared';
 

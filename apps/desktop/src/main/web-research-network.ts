@@ -3,7 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { request as httpRequest, type RequestOptions } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { BlockList, isIP } from 'node:net';
-import type { WebResearchNetwork, WebSource } from '@open-codesign/shared';
+import type { WebResearchNetwork, WebSearchService, WebSource } from '@open-codesign/shared';
 import type { DefaultTreeAdapterTypes } from 'parse5';
 
 const blocked = new BlockList();
@@ -150,7 +150,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 function stringField(value: unknown, limit: number): string | null {
   return typeof value === 'string' && value.trim() ? value.slice(0, limit) : null;
 }
-function sourceFor(url: string, retrievedAt: string): WebSource {
+export function sourceFor(url: string, retrievedAt: string): WebSource {
   return {
     id: `src_${createHash('sha256').update(url).digest('hex').slice(0, 24)}`,
     url,
@@ -319,6 +319,101 @@ function tavilyRequest(apiKey: string, query: string, count: number, signal: Abo
   };
 }
 
+const SEARCH_ENDPOINTS = {
+  tavily: 'https://api.tavily.com/search',
+  deepseek: 'https://api.deepseek.com/v1/tools/search',
+  kimi: 'https://api.moonshot.cn/v1/tools/search_pro',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4/web_search',
+} as const;
+type SearchApiService = keyof typeof SEARCH_ENDPOINTS;
+
+function normalizeProviderResults(
+  raw: unknown,
+  service: SearchApiService,
+  count: number,
+  maxChars: number,
+): WebSource[] {
+  if (service === 'tavily')
+    return normalizeSearchResults(raw, count, maxChars, new Date().toISOString());
+  const body = raw as Record<string, unknown> | null;
+  const rows =
+    body?.[
+      service === 'kimi' ? 'search_results' : service === 'zhipu' ? 'search_result' : 'results'
+    ];
+  if (!Array.isArray(rows)) throw new Error('Search service returned an invalid result structure.');
+  const result: WebSource[] = [];
+  for (const value of rows) {
+    if (!value || typeof value !== 'object') continue;
+    const row = value as Record<string, unknown>;
+    let url: string;
+    try {
+      url = publicWebUrl(String(row[service === 'zhipu' ? 'link' : 'url'] ?? '')).href;
+    } catch {
+      continue;
+    }
+    if (result.some((source) => source.url === url)) continue;
+    const chunks = Array.isArray(row['chunks'])
+      ? row['chunks']
+          .flatMap((chunk: unknown) => {
+            if (!chunk || typeof chunk !== 'object') return [];
+            const text = (chunk as Record<string, unknown>)['text'];
+            return typeof text === 'string' ? [text] : [];
+          })
+          .join('\n')
+      : '';
+    result.push({
+      ...sourceFor(url, new Date().toISOString()),
+      title: stringField(row['title'], 500),
+      publisher: stringField(row[service === 'zhipu' ? 'media' : 'site_name'], 500),
+      publishedAt: stringField(row[service === 'zhipu' ? 'publish_date' : 'date'], 200),
+      excerpt: stringField(
+        service === 'deepseek'
+          ? (row['summary'] ?? row['snippet'])
+          : service === 'kimi'
+            ? chunks || row['snippet']
+            : row['content'],
+        Math.min(maxChars, 2000),
+      ),
+    });
+    if (result.length >= count) break;
+  }
+  return result;
+}
+
+export async function testSearchConnection(
+  service: SearchApiService,
+  apiKey: string,
+  timeoutMs: number,
+  deps: NetworkDependencies = {},
+): Promise<TavilyConnectionResult> {
+  if (service === 'tavily') return testTavilyConnection(apiKey, timeoutMs, deps);
+  try {
+    await createWebResearchNetwork(
+      { enabled: true, service, apiKey, timeoutMs, maxCalls: 1, maxChars: 1000 },
+      deps,
+    ).search('Open CoDesign', 1);
+    return { status: 'ok' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const httpStatus = Number(/^HTTP (\d+)/.exec(message)?.[1]);
+    const status =
+      httpStatus === 401 || httpStatus === 403
+        ? 'invalid-key'
+        : httpStatus === 429
+          ? 'rate-limit'
+          : httpStatus === 402
+            ? 'quota'
+            : /timed out/.test(message)
+              ? 'timeout'
+              : httpStatus >= 500
+                ? 'service-error'
+                : /invalid result/.test(message)
+                  ? 'unexpected-response'
+                  : 'network-error';
+    return { status, ...(httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {}) };
+  }
+}
+
 export interface TavilyConnectionResult {
   status:
     | 'ok'
@@ -380,7 +475,8 @@ export function createWebResearchNetwork(
   options: {
     enabled: boolean;
     apiKey?: string;
-    getApiKey?: () => string | undefined;
+    getApiKey?: () => string | undefined | Promise<string | undefined>;
+    service?: WebSearchService | null;
     timeoutMs: number;
     maxChars: number;
     maxCalls: number;
@@ -430,10 +526,15 @@ export function createWebResearchNetwork(
         throw new Error(
           'Web access is disabled for web_search and web_fetch. Enable it in Settings > Web Search, then start a new turn; no app restart is needed. A Tavily key alone does not enable web access.',
         );
-      const apiKey = options.getApiKey ? options.getApiKey() : options.apiKey;
+      const service = options.service === undefined ? 'tavily' : options.service;
+      if (!service || service === 'openai' || service === 'anthropic')
+        throw new Error(
+          'Search service is not configured or unavailable. Check Settings > Web Search.',
+        );
+      const apiKey = options.getApiKey ? await options.getApiKey() : options.apiKey;
       if (!apiKey)
         throw new Error(
-          'Tavily credentials are not configured. Add a key in Settings > Web Search, then start a new turn; no app restart is needed. Never paste keys into chat.',
+          'Search service credentials are not configured. Check Settings > Web Search, then start a new turn. Never paste keys into chat.',
         );
       if (
         !query.trim() ||
@@ -443,21 +544,36 @@ export function createWebResearchNetwork(
         count > 5
       )
         throw new Error('Invalid search query or count (1–5).');
+      const maxQuery = service === 'deepseek' ? 128 : service === 'zhipu' ? 70 : 1000;
+      if ([...query].length > maxQuery)
+        throw new Error(
+          `Search query exceeds ${maxQuery} characters for ${service}. Shorten the query.`,
+        );
       return run(async (combined) => {
+        const body =
+          service === 'deepseek'
+            ? { query, count, need_content: false }
+            : service === 'kimi'
+              ? { text_query: query, limit: count }
+              : service === 'zhipu'
+                ? { search_query: query, search_engine: 'search_std', search_intent: false, count }
+                : null;
         const response = await requestPublicUrl(
-          new URL('https://api.tavily.com/search'),
-          tavilyRequest(apiKey, query, count, combined),
+          new URL(SEARCH_ENDPOINTS[service]),
+          body
+            ? { signal: combined, authorization: `Bearer ${apiKey}`, body: JSON.stringify(body) }
+            : tavilyRequest(apiKey, query, count, combined),
           deps,
         );
         if (response.status < 200 || response.status >= 300)
           throw new Error(
             `HTTP ${response.status}: search service failed. Check the key, quota or service availability.`,
           );
-        return normalizeSearchResults(
+        return normalizeProviderResults(
           JSON.parse(response.body),
+          service,
           count,
           options.maxChars,
-          new Date().toISOString(),
         );
       }, signal);
     },

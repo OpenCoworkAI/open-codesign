@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ProviderEntry } from '@open-codesign/shared';
+import { capabilitiesForImportedProvider, type ProviderEntry } from '@open-codesign/shared';
 import { safeReadImportFile } from './safe-read';
 
 /**
@@ -300,6 +300,9 @@ export async function readGeminiCliConfig(
     baseUrl: GEMINI_OPENAI_COMPAT_BASE_URL,
     defaultModel: GEMINI_DEFAULT_MODEL,
     envKey: 'GEMINI_API_KEY',
+    capabilities: capabilitiesForImportedProvider('gemini', {
+      baseUrl: GEMINI_OPENAI_COMPAT_BASE_URL,
+    }),
   };
 
   return {

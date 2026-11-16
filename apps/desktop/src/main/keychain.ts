@@ -6,24 +6,45 @@ const ENCRYPTED_PREFIX = 'safe:';
 const PLAIN_PREFIX = 'plain:';
 const logger = getLogger('keychain');
 
-let warnedPlaintextFallback = false;
+/**
+ * Electron reports encryption as available for the Linux "basic_text" backend,
+ * but that backend uses a hardcoded key and does not protect secrets at rest.
+ * Fail closed on write for that backend; existing rows remain readable so users
+ * can migrate once a real Secret Service provider is available.
+ */
+function isInsecureStorageBackend(): boolean {
+  const getter = (safeStorage as { getSelectedStorageBackend?: () => string })
+    .getSelectedStorageBackend;
+  if (typeof getter !== 'function') return false;
+  try {
+    return getter.call(safeStorage) === 'basic_text';
+  } catch {
+    return false;
+  }
+}
 
-function warnPlaintextFallback(): void {
-  if (warnedPlaintextFallback) return;
-  warnedPlaintextFallback = true;
-  logger.warn('keychain.safeStorage.unavailable_plaintext_fallback');
+function assertEncryptionAvailableForStore(): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new CodesignError(
+      'OS keychain (secure storage) is not available. API keys cannot be stored. Finish installing the app (do not run from a mounted DMG) or enable your OS secret service, then try again.',
+      ERROR_CODES.KEYCHAIN_UNAVAILABLE,
+    );
+  }
+  if (isInsecureStorageBackend()) {
+    throw new CodesignError(
+      'OS keychain is using Electron basic_text backend, which does not protect API keys. Install a Secret Service provider (e.g. gnome-keyring or KWallet) and restart.',
+      ERROR_CODES.KEYCHAIN_UNAVAILABLE,
+    );
+  }
 }
 
 export function encryptSecret(plaintext: string): string {
   if (plaintext.length === 0) {
     throw new CodesignError('Cannot store empty secret', ERROR_CODES.KEYCHAIN_EMPTY_INPUT);
   }
-  if (safeStorage.isEncryptionAvailable()) {
-    const ciphertext = safeStorage.encryptString(plaintext).toString('base64');
-    return `${ENCRYPTED_PREFIX}${ciphertext}`;
-  }
-  warnPlaintextFallback();
-  return `${PLAIN_PREFIX}${plaintext}`;
+  assertEncryptionAvailableForStore();
+  const ciphertext = safeStorage.encryptString(plaintext).toString('base64');
+  return `${ENCRYPTED_PREFIX}${ciphertext}`;
 }
 
 export function decryptSecret(stored: string): string {
@@ -79,8 +100,11 @@ function migrateSecretRef(ref: SecretRef): SecretRef | null {
   if (isEncrypted && !needsMask) return null;
 
   const plaintext = decryptSecret(ref.ciphertext);
-  const nextCiphertext =
-    safeStorage.isEncryptionAvailable() && !isEncrypted ? encryptSecret(plaintext) : ref.ciphertext;
+  // Prefer upgrading plaintext rows when a real OS backend is available.
+  // Skip encryptSecret when unavailable/insecure so migration stays non-blocking.
+  const canUpgrade =
+    safeStorage.isEncryptionAvailable() && !isEncrypted && !isInsecureStorageBackend();
+  const nextCiphertext = canUpgrade ? encryptSecret(plaintext) : ref.ciphertext;
 
   return {
     ciphertext: nextCiphertext,

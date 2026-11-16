@@ -72,6 +72,7 @@ describe('performLogin', () => {
 
     await performLogin({
       api,
+      model: 'my-account-model',
       setStatus,
       setLoading,
       pushToast,
@@ -80,6 +81,7 @@ describe('performLogin', () => {
     });
 
     expect(api.login).toHaveBeenCalledTimes(1);
+    expect(api.login).toHaveBeenCalledWith('my-account-model');
     expect(setStatus).toHaveBeenCalledWith(next);
     expect(onStatusChange).toHaveBeenCalledTimes(1);
     expect(pushToast).not.toHaveBeenCalled();

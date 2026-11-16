@@ -14,7 +14,7 @@
  * scanner results neither register controls nor bind values to the preview.
  */
 
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import {
   type EditmodeTokens,
   type EditmodeTokenValue,

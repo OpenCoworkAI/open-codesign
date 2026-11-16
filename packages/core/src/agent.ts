@@ -1,7 +1,7 @@
 /**
  * Agent runtime wrapper — the live generate path in v0.2.
  *
- * Routes a `generate()`-shaped request through `@mariozechner/pi-agent-core`
+ * Routes a `generate()`-shaped request through `@earendil-works/pi-agent-core`
  * with the v0.2 design tool set (set_title, set_todos,
  * str_replace_based_edit_tool, done, generate_image_asset, skill, scaffold,
  * preview, tweaks, ask — see `defaultTools` below). Streams `turn_start` /
@@ -26,21 +26,23 @@ import {
   type AgentMessage,
   type AgentTool,
   type AgentToolResult,
-} from '@mariozechner/pi-agent-core';
+} from '@earendil-works/pi-agent-core';
 import {
   type ImageContent as PiAiImageContent,
   type Message as PiAiMessage,
   type Model as PiAiModel,
   streamSimple,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
   claudeCodeIdentityHeaders,
+  createNativeSearchStream,
   inferReasoning,
   isProviderAbortedTransportError,
   isTransportLevelError,
   looksLikeClaudeOAuthToken,
+  type NativeSearchOptions,
   normalizeGeminiModelId,
   shouldForceClaudeCodeIdentity,
   withBackoff,
@@ -127,7 +129,7 @@ import { makeWebResearchTools, WEB_RESEARCH_GUIDANCE } from './tools/web-researc
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
- *  `@mariozechner/pi-ai`'s types; keep this shape in lockstep with the real
+ *  `@earendil-works/pi-ai`'s types; keep this shape in lockstep with the real
  *  pi-ai `AssistantMessage` whenever pi-agent-core is upgraded. */
 interface PiAssistantMessage {
   role: 'assistant';
@@ -276,6 +278,7 @@ const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
   atlascloud: 'https://api.atlascloud.ai/v1',
+  llmtr: 'https://llmtr.com/v1',
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
@@ -907,6 +910,8 @@ function buildTurnPrompt(input: GenerateInput, fs: TextEditorFsCallbacks | undef
 export type { AgentEvent };
 
 export interface GenerateViaAgentDeps {
+  nativeSearch?: NativeSearchOptions;
+  nativeSearchHistory?: Array<import('@earendil-works/pi-ai').AssistantMessage>;
   research?: ResearchHost | undefined;
   activeMessages?: ActiveRunMessages | undefined;
   /** Optional subscriber for Agent lifecycle + streaming events. */
@@ -1236,7 +1241,11 @@ async function generateViaAgentInternal(
       makeAskTool(input.askBridge) as unknown as AgentTool<TSchema, unknown>,
     );
   }
-  const researchTools = deps.research ? makeWebResearchTools(deps.research) : [];
+  const researchTools = deps.research
+    ? makeWebResearchTools(deps.research).filter(
+        (tool) => !deps.nativeSearch || tool.name !== 'web_search',
+      )
+    : [];
   for (const tool of researchTools) defaultToolsByName.set(tool.name, tool);
   const defaultTools = availableToolNames({
     research: deps.research !== undefined,
@@ -1249,18 +1258,20 @@ async function generateViaAgentInternal(
   })
     .map((name) => defaultToolsByName.get(name))
     .filter((tool): tool is AgentTool<TSchema, unknown> => tool !== undefined);
-  const tools = (deps.tools ?? defaultTools).map((tool) => ({
-    ...tool,
-    async execute(...args: Parameters<typeof tool.execute>) {
-      assertNotCancelled(args[2]);
-      return tool.execute(...args);
-    },
-  }));
+  const tools = (deps.tools ?? defaultTools)
+    .filter((tool) => !deps.nativeSearch || tool.name !== 'web_search')
+    .map((tool) => ({
+      ...tool,
+      async execute(...args: Parameters<typeof tool.execute>) {
+        assertNotCancelled(args[2]);
+        return tool.execute(...args);
+      },
+    }));
   const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
   const researchGuidance =
     researchTools.length > 0 &&
     researchTools.every((researchTool) => tools.some((tool) => tool.name === researchTool.name))
-      ? `${WEB_RESEARCH_GUIDANCE}\n\n`
+      ? `${WEB_RESEARCH_GUIDANCE}\n\n${deps.nativeSearch ? 'Native web search is enabled on this model. Sources are archived automatically. Use research_records to obtain saved source IDs before recording evidence; use web_fetch for original text. Search request budget and actual search counts are separate.\n\n' : ''}`
       : '';
   const baseAgenticGuidance =
     researchGuidance +
@@ -1281,9 +1292,52 @@ async function generateViaAgentInternal(
   ].join('\n\n');
 
   // Seed the transcript with prior history (already in ChatMessage shape).
-  const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) =>
-    chatMessageToAgentMessage(m, idx + 1, piModel),
-  );
+  // Persisted native search blocks only make sense attached to the exact
+  // assistant turn that produced them. Chat history carries no stable message
+  // IDs to link the two, so any visible text that appears more than once (on
+  // either the history or the native side) is ambiguous and must fall back to
+  // the ordinary translated history rather than replaying a wrong search.
+  const savedNativeByText = new Map<
+    string,
+    Array<import('@earendil-works/pi-ai').AssistantMessage>
+  >();
+  for (const message of deps.nativeSearch ? (deps.nativeSearchHistory ?? []) : []) {
+    if (
+      message.provider !== piModel.provider ||
+      message.api !== piModel.api ||
+      message.model !== piModel.id
+    ) {
+      continue;
+    }
+    const text = assistantTextOf(message.content);
+    if (text === undefined) continue;
+    const entries = savedNativeByText.get(text);
+    if (entries) entries.push(message);
+    else savedNativeByText.set(text, [message]);
+  }
+  const historyAssistantTextCounts = new Map<string, number>();
+  for (const message of input.history) {
+    if (message.role !== 'assistant') continue;
+    historyAssistantTextCounts.set(
+      message.content,
+      (historyAssistantTextCounts.get(message.content) ?? 0) + 1,
+    );
+  }
+  const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) => {
+    const translated = chatMessageToAgentMessage(m, idx + 1, piModel);
+    if (m.role !== 'assistant' || !deps.nativeSearch) return translated;
+    if (historyAssistantTextCounts.get(m.content) !== 1) return translated;
+    const candidates = savedNativeByText.get(m.content);
+    const saved = candidates?.length === 1 ? candidates[0] : undefined;
+    if (!saved) return translated;
+    const hasClientCalls = saved.content.some((block) => block.type === 'toolCall');
+    return saved.nativeSearch &&
+      !saved.nativeSearch.paused &&
+      saved.stopReason === 'stop' &&
+      !hasClientCalls
+      ? { ...translated, nativeSearch: saved.nativeSearch }
+      : translated;
+  });
   log.info('[generate] step=build_request.ok', {
     ...ctx,
     ms: Date.now() - buildStart,
@@ -1331,10 +1385,23 @@ async function generateViaAgentInternal(
   // original lets the post-agent branch rethrow it as-is, so the renderer
   // sees the same code the initial IPC-level resolution would emit.
   let capturedGetApiKeyError: unknown = null;
+  let turnBoundaryHalt: CodesignError | null = null;
+  const agentsWithEndEvent = new WeakSet<Agent>();
+  const forwardAgentEvent = (event: AgentEvent): void => {
+    deps.activeMessages?.handleEvent(event, () => {
+      resourceState.lastDone = null;
+      runProtocolState.todosSet = false;
+      lastDoneDetails = undefined;
+      doneProgress.errorRounds = 0;
+      toolLoopGuard.reset();
+    });
+    deps.onEvent?.(event);
+  };
   const requestTimeoutMs = input.requestTimeoutMs;
 
   // Factory for creating agents with a given message history. Used for both
   // the initial agent and retry agents that continue the interrupted transcript.
+  const nativeStream = deps.nativeSearch ? createNativeSearchStream(deps.nativeSearch) : undefined;
   const createRetryAgent = (
     messages: AgentMessage[],
     retryThinkingLevel = thinkingLevel,
@@ -1401,34 +1468,36 @@ async function generateViaAgentInternal(
             return initialApiKey || 'open-codesign-keyless';
           },
       ...(onPayload !== undefined ? { onPayload } : {}),
-      ...(requestTimeoutMs !== undefined
+      ...(requestTimeoutMs !== undefined || nativeStream !== undefined
         ? {
             streamFn: (model, context, options) =>
-              streamSimple(model, context, { ...options, timeoutMs: requestTimeoutMs }),
+              (nativeStream ?? streamSimple)(model, context, {
+                ...options,
+                ...(requestTimeoutMs !== undefined ? { timeoutMs: requestTimeoutMs } : {}),
+              }),
           }
         : {}),
     });
     retryAgent.subscribe((event) => {
-      deps.activeMessages?.handleEvent(event, () => {
-        resourceState.lastDone = null;
-        runProtocolState.todosSet = false;
-        lastDoneDetails = undefined;
-        doneProgress.errorRounds = 0;
-        toolLoopGuard.reset();
-      });
-      deps.onEvent?.(event);
+      if (event.type === 'agent_end') agentsWithEndEvent.add(retryAgent);
+      forwardAgentEvent(event);
       if (event.type === 'turn_end') {
         assertNotCancelled();
         // Agent does not expose the low-level shouldStopAfterTurn hook. Fail the
         // settled batch at its native event boundary, before pi drains queues.
         if (repairLimitReached()) {
-          throw new CodesignError('Done repair limit reached', ERROR_CODES.GENERATION_INCOMPLETE);
+          turnBoundaryHalt = new CodesignError(
+            'Done repair limit reached',
+            ERROR_CODES.GENERATION_INCOMPLETE,
+          );
+          throw turnBoundaryHalt;
         }
         if (toolLoop.halt !== null) {
-          throw new CodesignError(
+          turnBoundaryHalt = new CodesignError(
             formatToolLoopIncomplete(toolLoop.halt),
             ERROR_CODES.GENERATION_INCOMPLETE,
           );
+          throw turnBoundaryHalt;
         }
       }
     });
@@ -1454,10 +1523,23 @@ async function generateViaAgentInternal(
     const target = agent;
     const abort = () => target.abort();
     input.signal?.addEventListener('abort', abort, { once: true });
+    let controlledHalt = false;
     try {
       assertNotCancelled();
-      await run();
+      try {
+        await run();
+      } catch (err) {
+        // pi now propagates listener exceptions. Our own turn-boundary halt
+        // still needs transcript completion before the normal incomplete result.
+        if (turnBoundaryHalt === null || err !== turnBoundaryHalt) throw err;
+        controlledHalt = true;
+      }
       await target.waitForIdle();
+      if (controlledHalt && !agentsWithEndEvent.has(target)) {
+        // The subscriber exception also bypasses pi's native agent_end event.
+        agentsWithEndEvent.add(target);
+        forwardAgentEvent({ type: 'agent_end', messages: target.state.messages });
+      }
       assertNotCancelled();
     } finally {
       input.signal?.removeEventListener('abort', abort);
@@ -1756,6 +1838,14 @@ function messageForIncompleteStop(stopReason: 'length' | 'toolUse' | 'error' | '
   }
   if (stopReason === 'aborted') return 'Generation aborted by provider';
   return 'Provider returned an error';
+}
+
+function assistantTextOf(content: PiAssistantMessage['content']): string | undefined {
+  const text = content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+  return text.length > 0 ? text : undefined;
 }
 
 function chatMessageToAgentMessage(

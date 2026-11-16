@@ -1,6 +1,11 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { detectWireFromBaseUrl, type ProviderEntry, type WireApi } from '@open-codesign/shared';
+import {
+  capabilitiesForImportedProvider,
+  detectWireFromBaseUrl,
+  type ProviderEntry,
+  type WireApi,
+} from '@open-codesign/shared';
 import { safeReadImportFile } from './safe-read';
 
 /**
@@ -233,6 +238,7 @@ function parseProviderBlock(
       activeModel,
       warnings,
     ),
+    capabilities: capabilitiesForImportedProvider('codex', { baseUrl, wire }),
   };
   const declaresEnvKey = block.env_key !== undefined;
   applyEnvKey(entry, block, id, envKeyMap, warnings);

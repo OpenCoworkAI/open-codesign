@@ -1,7 +1,7 @@
 import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ProviderEntry } from '@open-codesign/shared';
+import { capabilitiesForImportedProvider, type ProviderEntry } from '@open-codesign/shared';
 import { safeReadImportFile } from './safe-read';
 
 // test comment sentinel
@@ -262,6 +262,7 @@ export function parseClaudeCodeSettings(
     // imports just work; higher-tier users can raise it in Settings →
     // Providers → Reasoning depth.
     reasoningLevel: 'medium',
+    capabilities: capabilitiesForImportedProvider('claude-code', { baseUrl }),
   };
 
   if (apiKey === null && userType !== 'local-proxy' && userType !== 'remote-gateway') {
