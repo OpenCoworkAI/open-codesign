@@ -70,7 +70,12 @@ export interface NetworkDependencies {
 
 export async function requestPublicUrl(
   url: URL,
-  options: { signal: AbortSignal; body?: string; authorization?: string },
+  options: {
+    signal: AbortSignal;
+    body?: string;
+    authorization?: string;
+    headers?: Record<string, string>;
+  },
   deps: NetworkDependencies = {},
 ): Promise<HttpResult> {
   publicWebUrl(url.href);
@@ -104,6 +109,7 @@ export async function requestPublicUrl(
               'Content-Length': Buffer.byteLength(options.body),
             }
           : {}),
+        ...options.headers,
         ...(options.authorization ? { Authorization: options.authorization } : {}),
       },
       // Resolve once, validate all answers, then pin the actual socket to the validated IP.
@@ -321,6 +327,7 @@ function tavilyRequest(apiKey: string, query: string, count: number, signal: Abo
 
 const SEARCH_ENDPOINTS = {
   tavily: 'https://api.tavily.com/search',
+  keenable: 'https://api.keenable.ai/v1/search/public',
   deepseek: 'https://api.deepseek.com/v1/tools/search',
   kimi: 'https://api.moonshot.cn/v1/tools/search_pro',
   zhipu: 'https://open.bigmodel.cn/api/paas/v4/web_search',
@@ -365,13 +372,20 @@ function normalizeProviderResults(
       ...sourceFor(url, new Date().toISOString()),
       title: stringField(row['title'], 500),
       publisher: stringField(row[service === 'zhipu' ? 'media' : 'site_name'], 500),
-      publishedAt: stringField(row[service === 'zhipu' ? 'publish_date' : 'date'], 200),
+      publishedAt: stringField(
+        row[
+          service === 'zhipu' ? 'publish_date' : service === 'keenable' ? 'published_at' : 'date'
+        ],
+        200,
+      ),
       excerpt: stringField(
         service === 'deepseek'
           ? (row['summary'] ?? row['snippet'])
           : service === 'kimi'
             ? chunks || row['snippet']
-            : row['content'],
+            : service === 'keenable'
+              ? (row['snippet'] ?? row['description'])
+              : row['content'],
         Math.min(maxChars, 2000),
       ),
     });
@@ -398,7 +412,9 @@ export async function testSearchConnection(
     const httpStatus = Number(/^HTTP (\d+)/.exec(message)?.[1]);
     const status =
       httpStatus === 401 || httpStatus === 403
-        ? 'invalid-key'
+        ? service === 'keenable'
+          ? 'service-error'
+          : 'invalid-key'
         : httpStatus === 429
           ? 'rate-limit'
           : httpStatus === 402
@@ -531,8 +547,13 @@ export function createWebResearchNetwork(
         throw new Error(
           'Search service is not configured or unavailable. Check Settings > Web Search.',
         );
-      const apiKey = options.getApiKey ? await options.getApiKey() : options.apiKey;
-      if (!apiKey)
+      const apiKey =
+        service === 'keenable'
+          ? undefined
+          : options.getApiKey
+            ? await options.getApiKey()
+            : options.apiKey;
+      if (service !== 'keenable' && !apiKey)
         throw new Error(
           'Search service credentials are not configured. Check Settings > Web Search, then start a new turn. Never paste keys into chat.',
         );
@@ -560,9 +581,15 @@ export function createWebResearchNetwork(
                 : null;
         const response = await requestPublicUrl(
           new URL(SEARCH_ENDPOINTS[service]),
-          body
-            ? { signal: combined, authorization: `Bearer ${apiKey}`, body: JSON.stringify(body) }
-            : tavilyRequest(apiKey, query, count, combined),
+          service === 'keenable'
+            ? {
+                signal: combined,
+                headers: { 'X-Keenable-Title': 'Open CoDesign' },
+                body: JSON.stringify({ query, max_results: count }),
+              }
+            : body
+              ? { signal: combined, authorization: `Bearer ${apiKey}`, body: JSON.stringify(body) }
+              : tavilyRequest(apiKey ?? '', query, count, combined),
           deps,
         );
         if (response.status < 200 || response.status >= 300)

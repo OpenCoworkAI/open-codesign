@@ -29,7 +29,8 @@ export function createWebResearchRun(
     }),
   );
   const credentialId = route.providerId ?? 'tavily';
-  const ciphertext = config?.secrets[credentialId]?.ciphertext;
+  const ciphertext =
+    route.service === 'keenable' ? undefined : config?.secrets[credentialId]?.ciphertext;
   let credential: Promise<string | undefined> | undefined;
   const network = createWebResearchNetwork(
     {

@@ -314,6 +314,12 @@
   },
   "settings": {
     "title": "Configurações",
+    "webSearch": {
+      "backendKeenable": "Keenable (sem chave de API)",
+      "keenableNoKey": "Keenable não precisa de chave",
+      "keenableHint": "Usado apenas quando selecionado. As consultas são enviadas ao Keenable e podem ser armazenadas com os resultados. O uso sem chave tem limites por IP.",
+      "keenableTestHint": "Executa uma busca no Keenable com as configurações salvas e sem chave. Não ativa a busca nem autoriza uma tarefa. Sem novas tentativas ou troca automática de serviço."
+    },
     "imageGen": {
       "tabTitle": "Geração de imagens",
       "tabHint": "Permita que o agente de design use modelos de imagem pela OpenAI, OpenRouter ou assinatura do ChatGPT para criar imagens de destaque, pôsteres e fundos. As credenciais ficam neste dispositivo.",

@@ -10,6 +10,21 @@ import {
 
 describe('image response preference labels', () => {
   it.each([
+    'en',
+    'zh-CN',
+    'es',
+    'pt-BR',
+  ])('has Keenable labels directly in %s without fallback', async (locale) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    for (const name of ['backendKeenable', 'keenableNoKey', 'keenableHint', 'keenableTestHint']) {
+      const value: unknown = i18n.getResource(locale, 'translation', `settings.webSearch.${name}`);
+      expect(typeof value).toBe('string');
+      expect(value).not.toBe('');
+    }
+    await setLocale('en');
+  });
+  it.each([
     ['en', 'Request base64 response'],
     ['zh-CN', '请求 base64 响应'],
     ['es', 'Solicitar respuesta en base64'],

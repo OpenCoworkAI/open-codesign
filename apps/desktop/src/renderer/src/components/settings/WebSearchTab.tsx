@@ -173,6 +173,7 @@ export function WebSearchTab() {
           <option value="auto">{t('settings.webSearch.backendAuto')}</option>
           <option value="provider">{t('settings.webSearch.backendProvider')}</option>
           <option value="tavily">Tavily</option>
+          <option value="keenable">{t('settings.webSearch.backendKeenable')}</option>
         </select>
       </Row>
       <p className={hintClass} role="status">
@@ -184,6 +185,9 @@ export function WebSearchTab() {
           ? ` · ${t(WEB_SEARCH_TEST_MESSAGES[settings.unavailableReason])}`
           : ''}
       </p>
+      {settings?.backend === 'keenable' ? (
+        <p className={hintClass}>{t('settings.webSearch.keenableHint')}</p>
+      ) : null}
       <Row label={t('settings.webSearch.nativeEnabled')} hint={t('settings.webSearch.nativeHint')}>
         <input
           type="checkbox"
@@ -217,16 +221,18 @@ export function WebSearchTab() {
           {t(
             !settings
               ? 'settings.common.loading'
-              : settings.inheritsCredential
-                ? 'settings.webSearch.inherited'
-                : settings.hasKey
-                  ? 'settings.webSearch.configured'
-                  : 'settings.webSearch.notConfigured',
+              : settings.backend === 'keenable'
+                ? 'settings.webSearch.keenableNoKey'
+                : settings.inheritsCredential
+                  ? 'settings.webSearch.inherited'
+                  : settings.hasKey
+                    ? 'settings.webSearch.configured'
+                    : 'settings.webSearch.notConfigured',
           )}
         </span>
       </Row>
 
-      {(settings?.backend ?? 'tavily') !== 'provider' ? (
+      {(settings?.backend ?? 'tavily') !== 'provider' && settings?.backend !== 'keenable' ? (
         <form
           className="space-y-2"
           onSubmit={(event) => {
@@ -315,7 +321,13 @@ export function WebSearchTab() {
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           {t('settings.webSearch.test')}
         </button>
-        <p className={hintClass}>{t('settings.webSearch.testHint')}</p>
+        <p className={hintClass}>
+          {t(
+            settings?.backend === 'keenable'
+              ? 'settings.webSearch.keenableTestHint'
+              : 'settings.webSearch.testHint',
+          )}
+        </p>
       </div>
       {notice ? (
         <div className="space-y-2">
