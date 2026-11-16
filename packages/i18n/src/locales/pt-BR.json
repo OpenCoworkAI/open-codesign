@@ -342,7 +342,12 @@
         "loadFailed": "Falha ao carregar as configurações de geração de imagens",
         "saved": "Configurações de geração de imagens salvas",
         "saveFailed": "Falha ao salvar as configurações de geração de imagens"
-      }
+      },
+      "testConnection": "Testar geração de imagens",
+      "testing": "Gerando imagem de teste…",
+      "testHint": "Gera uma imagem com as configurações salvas e pode consumir créditos do provedor. Salve as alterações antes de testar.",
+      "testOk": "Teste de geração de imagens concluído",
+      "testFailed": "Falha no teste de geração de imagens"
     },
     "tabs": {
       "models": "Modelos",

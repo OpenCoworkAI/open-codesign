@@ -432,6 +432,11 @@ export async function updateImageGenerationSettings(
 }
 
 export function registerImageGenerationSettingsIpc(): void {
+  ipcMain.handle('image-generation:v1:test', async () => {
+    const { testImageGenerationProvider } = await import('./image-generation-test');
+    return testImageGenerationProvider();
+  });
+
   ipcMain.handle('image-generation:v1:get', async (): Promise<ImageGenerationSettingsView> => {
     const cfg = getCachedConfig();
     return imageSettingsToView(cfg?.imageGeneration, cfg?.providers);

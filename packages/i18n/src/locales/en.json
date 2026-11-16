@@ -523,7 +523,12 @@
         "loadFailed": "Failed to load image generation settings",
         "saved": "Image generation settings saved",
         "saveFailed": "Failed to save image generation settings"
-      }
+      },
+      "testConnection": "Test image generation",
+      "testing": "Generating test image…",
+      "testHint": "Uses saved settings to generate one image and may use provider credits. Save changes before testing.",
+      "testOk": "Image generation test succeeded",
+      "testFailed": "Image generation test failed"
     },
     "memory": {
       "userFile": "User memory file",

@@ -613,6 +613,7 @@ export {
   shouldForceClaudeCodeIdentity,
   withClaudeCodeIdentity,
 } from './claude-code-compat';
+export { normalizeProviderError } from './errors';
 export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 export { isGeminiOpenAICompat, normalizeGeminiModelId } from './gemini-compat';
 export type {
