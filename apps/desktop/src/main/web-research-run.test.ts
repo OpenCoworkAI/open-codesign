@@ -23,7 +23,11 @@ function transport() {
         callback(response);
         response.emit(
           'data',
-          Buffer.from(options.method === 'POST' ? '{"results":[]}' : 'x'.repeat(4000)),
+          Buffer.from(
+            options.method === 'POST' || (options.headers as Record<string, unknown>)?.['X-Api-Key']
+              ? '{"results":[]}'
+              : 'x'.repeat(4000),
+          ),
         );
         response.emit('end');
       });
@@ -42,6 +46,25 @@ function config(): Pick<Config, 'webSearch' | 'secrets'> {
 }
 
 describe('per-generation web research snapshot', () => {
+  it('snapshots only the Serply credential and never borrows a Tavily key', async () => {
+    const cached = config();
+    if (cached.webSearch) cached.webSearch.backend = 'serply';
+    const fake = transport();
+    const decrypt = vi.fn((value: string) => value);
+    const missing = createWebResearchRun(cached, decrypt, fake);
+    await expect(missing.network.search('query', 1)).rejects.toThrow('not configured');
+    expect(decrypt).not.toHaveBeenCalled();
+    cached.secrets['serply'] = { ciphertext: 'serply-original-fixture' };
+    const active = createWebResearchRun(cached, decrypt, fake);
+    cached.secrets['serply'].ciphertext = 'serply-updated-fixture';
+    if (cached.webSearch) cached.webSearch.backend = 'tavily';
+    await active.network.search('query', 1);
+    expect(decrypt).toHaveBeenCalledExactlyOnceWith('serply-original-fixture');
+    expect(fake.seen[0]?.headers).toMatchObject({ 'X-Api-Key': 'serply-original-fixture' });
+    await active.network.fetch('https://example.com');
+    expect(fake.seen[1]?.headers).not.toHaveProperty('X-Api-Key');
+    expect(fake.seen[1]?.headers).not.toHaveProperty('Authorization');
+  });
   it('shares first credential resolution between concurrent searches', async () => {
     const fake = transport();
     const decrypt = vi.fn((value: string) => value);

@@ -70,7 +70,12 @@ export interface NetworkDependencies {
 
 export async function requestPublicUrl(
   url: URL,
-  options: { signal: AbortSignal; body?: string; authorization?: string },
+  options: {
+    signal: AbortSignal;
+    body?: string;
+    authorization?: string;
+    headers?: Record<string, string>;
+  },
   deps: NetworkDependencies = {},
 ): Promise<HttpResult> {
   publicWebUrl(url.href);
@@ -104,6 +109,7 @@ export async function requestPublicUrl(
               'Content-Length': Buffer.byteLength(options.body),
             }
           : {}),
+        ...options.headers,
         ...(options.authorization ? { Authorization: options.authorization } : {}),
       },
       // Resolve once, validate all answers, then pin the actual socket to the validated IP.
@@ -321,11 +327,28 @@ function tavilyRequest(apiKey: string, query: string, count: number, signal: Abo
 
 const SEARCH_ENDPOINTS = {
   tavily: 'https://api.tavily.com/search',
+  serply: 'https://api.serply.io/v1/search/',
   deepseek: 'https://api.deepseek.com/v1/tools/search',
   kimi: 'https://api.moonshot.cn/v1/tools/search_pro',
   zhipu: 'https://open.bigmodel.cn/api/paas/v4/web_search',
 } as const;
 type SearchApiService = keyof typeof SEARCH_ENDPOINTS;
+
+const SAFE_WEB_FAILURES = new Set([
+  'Blocked non-public web address.',
+  'Blocked non-public DNS address.',
+  'Only public HTTP(S) URLs on ports 80/443 without credentials are supported.',
+  'Web URL is too long.',
+  'Web hostname could not be resolved.',
+  'Web response exceeded the 1 MiB limit.',
+  'Web response contained no readable text (JavaScript-only pages are unsupported).',
+  'Search service returned an invalid result structure.',
+  'HTTP redirect limit exceeded or Location missing.',
+  'HTTP redirect limit exceeded.',
+  'Unsupported compressed response.',
+  'Unsupported content type: PDF is not supported in v1.',
+  'Unsupported content type: expected HTML or plain text.',
+]);
 
 function normalizeProviderResults(
   raw: unknown,
@@ -347,7 +370,9 @@ function normalizeProviderResults(
     const row = value as Record<string, unknown>;
     let url: string;
     try {
-      url = publicWebUrl(String(row[service === 'zhipu' ? 'link' : 'url'] ?? '')).href;
+      url = publicWebUrl(
+        String(row[service === 'zhipu' || service === 'serply' ? 'link' : 'url'] ?? ''),
+      ).href;
     } catch {
       continue;
     }
@@ -371,7 +396,9 @@ function normalizeProviderResults(
           ? (row['summary'] ?? row['snippet'])
           : service === 'kimi'
             ? chunks || row['snippet']
-            : row['content'],
+            : service === 'serply'
+              ? row['description']
+              : row['content'],
         Math.min(maxChars, 2000),
       ),
     });
@@ -407,7 +434,7 @@ export async function testSearchConnection(
               ? 'timeout'
               : httpStatus >= 500
                 ? 'service-error'
-                : /invalid result/.test(message)
+                : (httpStatus >= 300 && httpStatus < 500) || /invalid result/.test(message)
                   ? 'unexpected-response'
                   : 'network-error';
     return { status, ...(httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {}) };
@@ -508,7 +535,8 @@ export function createWebResearchNetwork(
       if (timeout.signal.aborted) throw new Error('Web request timed out.');
       const message = error instanceof Error ? error.message : '';
       if (
-        /^(Blocked |Only public |Web response |Unsupported |HTTP |Search service |Web hostname )/.test(
+        SAFE_WEB_FAILURES.has(message) ||
+        /^HTTP [1-5]\d{2}: (?:search service failed\. Check the key, quota or service availability\.|could not read webpage\.)$/.test(
           message,
         )
       )
@@ -550,6 +578,11 @@ export function createWebResearchNetwork(
           `Search query exceeds ${maxQuery} characters for ${service}. Shorten the query.`,
         );
       return run(async (combined) => {
+        const endpoint = new URL(SEARCH_ENDPOINTS[service]);
+        if (service === 'serply') {
+          endpoint.searchParams.set('q', query);
+          endpoint.searchParams.set('num', String(count));
+        }
         const body =
           service === 'deepseek'
             ? { query, count, need_content: false }
@@ -559,22 +592,25 @@ export function createWebResearchNetwork(
                 ? { search_query: query, search_engine: 'search_std', search_intent: false, count }
                 : null;
         const response = await requestPublicUrl(
-          new URL(SEARCH_ENDPOINTS[service]),
-          body
-            ? { signal: combined, authorization: `Bearer ${apiKey}`, body: JSON.stringify(body) }
-            : tavilyRequest(apiKey, query, count, combined),
+          endpoint,
+          service === 'serply'
+            ? { signal: combined, headers: { Accept: 'application/json', 'X-Api-Key': apiKey } }
+            : body
+              ? { signal: combined, authorization: `Bearer ${apiKey}`, body: JSON.stringify(body) }
+              : tavilyRequest(apiKey, query, count, combined),
           deps,
         );
         if (response.status < 200 || response.status >= 300)
           throw new Error(
             `HTTP ${response.status}: search service failed. Check the key, quota or service availability.`,
           );
-        return normalizeProviderResults(
-          JSON.parse(response.body),
-          service,
-          count,
-          options.maxChars,
-        );
+        let raw: unknown;
+        try {
+          raw = JSON.parse(response.body);
+        } catch {
+          throw new Error('Search service returned an invalid result structure.');
+        }
+        return normalizeProviderResults(raw, service, count, options.maxChars);
       }, signal);
     },
     fetch(rawUrl, signal) {

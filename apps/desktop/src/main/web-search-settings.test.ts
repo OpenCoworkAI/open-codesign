@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   configDir: '',
   encrypted: false,
   probe: vi.fn(),
+  searchProbe: vi.fn(),
   log: vi.fn(),
 }));
 vi.mock('./storage-settings', async (importOriginal) => ({
@@ -37,7 +38,10 @@ vi.mock('./electron-runtime', () => ({
 vi.mock('./logger', () => ({
   getLogger: () => ({ warn: mocks.log, info: mocks.log, error: mocks.log, debug: mocks.log }),
 }));
-vi.mock('./web-research-network', () => ({ testTavilyConnection: mocks.probe }));
+vi.mock('./web-research-network', () => ({
+  testTavilyConnection: mocks.probe,
+  testSearchConnection: mocks.searchProbe,
+}));
 
 const key = 'tvly-settings-test-fixture';
 const limits = { enabled: true, maxCalls: 7, timeoutMs: 4000, maxChars: 3000 };
@@ -57,6 +61,7 @@ beforeEach(async () => {
   mocks.configDir = await mkdtemp(join(tmpdir(), 'codesign-search-settings-'));
   mocks.encrypted = false;
   mocks.probe.mockReset().mockResolvedValue({ status: 'ok' });
+  mocks.searchProbe.mockReset().mockResolvedValue({ status: 'ok' });
   mocks.log.mockClear();
   setCachedConfig(fixture());
 });
@@ -66,6 +71,50 @@ afterEach(async () => {
 });
 
 describe('web search settings persistence', () => {
+  it('keeps saved Serply and Tavily keys isolated across select, replace, test and clear', async () => {
+    mocks.encrypted = true;
+    const tavily = getCachedConfig()?.secrets['tavily'];
+    expect(await saveWebSearchSettings({ backend: 'serply' })).toMatchObject({
+      backend: 'serply',
+      hasKey: false,
+    });
+    expect(await testWebSearchSettings()).toEqual({ status: 'missing-key' });
+    expect(mocks.probe).not.toHaveBeenCalled();
+    await saveWebSearchSettings({ apiKey: 'serply-first-fixture' });
+    await saveWebSearchSettings({ apiKey: 'serply-replaced-fixture' });
+    expect(getCachedConfig()?.secrets['tavily']).toEqual(tavily);
+    expect(decryptSecret(getCachedConfig()?.secrets['serply']?.ciphertext ?? '')).toBe(
+      'serply-replaced-fixture',
+    );
+    expect(await testWebSearchSettings()).toEqual({ status: 'ok' });
+    expect(mocks.searchProbe).toHaveBeenCalledExactlyOnceWith(
+      'serply',
+      'serply-replaced-fixture',
+      limits.timeoutMs,
+    );
+    const state = getWebSearchSettings();
+    expect(JSON.stringify(state)).not.toContain('fixture');
+    expect(state).toMatchObject({ service: 'serply', hasKey: true, inheritsCredential: false });
+    await saveWebSearchSettings({ backend: 'tavily' });
+    expect(getWebSearchSettings()).toMatchObject({ service: 'tavily', hasKey: true });
+    await saveWebSearchSettings({ backend: 'serply', clearKey: true });
+    expect(getCachedConfig()?.secrets['serply']).toBeUndefined();
+    expect(getCachedConfig()?.secrets['tavily']).toEqual(tavily);
+    expect(getWebSearchSettings().hasKey).toBe(false);
+  });
+
+  it('serializes backend selection before its key save without overwriting the other backend', async () => {
+    mocks.encrypted = true;
+    await Promise.all([
+      saveWebSearchSettings({ backend: 'serply' }),
+      saveWebSearchSettings({ apiKey: 'serply-concurrent-fixture' }),
+    ]);
+    expect(decryptSecret(getCachedConfig()?.secrets['serply']?.ciphertext ?? '')).toBe(
+      'serply-concurrent-fixture',
+    );
+    expect(getCachedConfig()?.secrets['tavily']).toEqual(fixture().secrets['tavily']);
+    expect(mocks.searchProbe).not.toHaveBeenCalled();
+  });
   it('reads only configured status, without decrypting or returning any credential', () => {
     setCachedConfig(fixture('safe:unreadable-fixture'));
     expect(getWebSearchSettings()).toMatchObject({ enabled: true, hasKey: true });

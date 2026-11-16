@@ -25,6 +25,26 @@ function config(
 }
 
 describe('web search routing and configuration', () => {
+  it('selects Serply explicitly using only its own saved credential', () => {
+    const cfg = config('https://api.deepseek.com/v1');
+    if (cfg.webSearch) cfg.webSearch.backend = 'serply';
+    cfg.secrets['tavily'] = { ciphertext: 'plain:tavily-fixture' };
+    expect(resolveWebSearchRoute(cfg)).toMatchObject({ service: null, reason: 'missing-key' });
+    cfg.secrets['serply'] = { ciphertext: 'plain:serply-fixture' };
+    expect(resolveWebSearchRoute(cfg)).toEqual({
+      service: 'serply',
+      mode: 'search-api',
+      providerId: null,
+      endpoint: 'https://api.serply.io/v1/search/',
+      reason: null,
+    });
+    if (cfg.webSearch) cfg.webSearch.backend = 'auto';
+    expect(resolveWebSearchRoute(cfg).service).toBe('deepseek');
+    cfg.activeProvider = '';
+    expect(resolveWebSearchRoute(cfg).service).toBe('tavily');
+    delete cfg.secrets['tavily'];
+    expect(resolveWebSearchRoute(cfg).service).toBeNull();
+  });
   it.each([
     ['https://api.deepseek.com/v1', 'deepseek', 'https://api.deepseek.com/v1/tools/search'],
     ['https://api.moonshot.cn/v1', 'kimi', 'https://api.moonshot.cn/v1/tools/search_pro'],

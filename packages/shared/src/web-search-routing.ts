@@ -25,13 +25,14 @@ import type { Config } from './config';
 
 /** How the user asked us to choose a backend. `auto` may fall back at
  *  selection time; `provider` never does. */
-export const WebSearchBackendSchema = z.enum(['auto', 'provider', 'tavily']);
+export const WebSearchBackendSchema = z.enum(['auto', 'provider', 'tavily', 'serply']);
 export type WebSearchBackend = z.infer<typeof WebSearchBackendSchema>;
 
 /** Downstream search capability. `tavily` is the standalone vendor API; the
  *  rest are inherited from the configured provider. */
 export const WebSearchServiceSchema = z.enum([
   'tavily',
+  'serply',
   'deepseek',
   'kimi',
   'zhipu',
@@ -285,6 +286,16 @@ export function resolveWebSearchRoute(config: Config | null | undefined): WebSea
   };
 
   if (backend === 'tavily') return tavilyRoute();
+  if (backend === 'serply') {
+    if (!hasStoredKey(config, 'serply')) return unavailable('missing-key');
+    return {
+      service: 'serply',
+      mode: 'search-api',
+      providerId: null,
+      endpoint: 'https://api.serply.io/v1/search/',
+      reason: null,
+    };
+  }
 
   // Resolve once before authorization; failures during execution never change services.
   const native = resolveNativeRoute(config);

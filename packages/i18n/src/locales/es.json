@@ -313,6 +313,18 @@
     }
   },
   "settings": {
+    "webSearch": {
+      "serply": {
+        "newKey": "Clave API de Serply",
+        "replaceKey": "Reemplazar la clave API de Serply",
+        "getKey": "Obtener una clave en app.serply.io",
+        "clearConfirm": "¿Eliminar la clave guardada de Serply? Se conservará la clave de Tavily.",
+        "openFailed": "No se pudo abrir la página de claves de Serply. Visita https://app.serply.io en tu navegador."
+      },
+      "result": {
+        "missingKey": "No hay una clave guardada para el servicio de búsqueda seleccionado. Guarda su clave API primero."
+      }
+    },
     "title": "Configuración",
     "tabs": {
       "models": "Modelos",
