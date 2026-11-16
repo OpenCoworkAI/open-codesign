@@ -59,6 +59,8 @@ export interface GenerateOptions {
   allowKeyless?: boolean;
   /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
   timeoutMs?: number;
+  /** Retry budget for explicit bounded checks; normal calls keep pi defaults. */
+  maxRetries?: number;
 }
 
 export interface GenerateResult {
@@ -397,6 +399,7 @@ export async function complete(
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
         timeoutMs?: number;
+        maxRetries?: number;
       },
     ) => Promise<PiAssistantMessage>;
   };
@@ -415,6 +418,27 @@ export async function complete(
     }
   }
 
+  // A catalog hit supplies capabilities, not permission to override the
+  // configured transport. SDK adapters read model.api/baseUrl, not piOpts.
+  if (opts.wire !== undefined) {
+    const routed = synthesizeWireModel(
+      model.provider,
+      effectiveModelId,
+      opts.wire,
+      baseUrl ?? piModel.baseUrl,
+    );
+    const { compat: _catalogCompat, ...catalog } = piModel;
+    piModel = {
+      ...catalog,
+      api: routed.api,
+      ...(routed.baseUrl !== undefined ? { baseUrl: routed.baseUrl } : {}),
+      ...(routed.reasoning !== undefined ? { reasoning: routed.reasoning } : {}),
+    };
+    if (routed.compat !== undefined) piModel.compat = routed.compat;
+  } else if (baseUrl !== undefined) {
+    piModel = { ...piModel, baseUrl };
+  }
+
   const piContext = toPiContext(messages, piModel, opts);
 
   const piOpts: {
@@ -426,6 +450,7 @@ export async function complete(
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
     timeoutMs?: number;
+    maxRetries?: number;
   } = {
     apiKey,
   };
@@ -433,6 +458,7 @@ export async function complete(
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
+  if (opts.maxRetries !== undefined) piOpts.maxRetries = opts.maxRetries;
   const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };

@@ -1159,7 +1159,10 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(calls[0]?.url).toMatch(/\/models$/);
       expect(calls[1]?.method).toBe('POST');
       expect(calls[1]?.url).toMatch(/\/chat\/completions$/);
-      if (res.ok) expect(res.invokeParity).toBe('aligned');
+      if (res.ok) {
+        expect(res.invokeParity).toBe('unverified');
+        expect(res.invokeValidation).toBe('route-only');
+      }
     } finally {
       restore();
     }
@@ -1334,7 +1337,7 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
     }
   });
 
-  it('chatgpt codex: resolved OAuth token is treated as aligned invoke auth (no /models probe)', async () => {
+  it('legacy chatgpt codex credential-only check does not claim saved-model readiness', async () => {
     const { calls, restore } = installFakeFetch(() => {
       throw new Error('Codex connection test must not HTTP-probe /models or /codex/responses');
     });
@@ -1348,7 +1351,8 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.probeMethod).toBe('codex_oauth');
-        expect(res.invokeParity).toBe('aligned');
+        expect(res.invokeParity).toBe('unverified');
+        expect(res.invokeValidation).toBe('route-only');
         expect(res.modelsProbeRelation).toBe('unavailable');
         expect(res.invokeContract?.authMode).toBe('codex-oauth');
         expect(res.invokeContract?.invokeUrl).toBe(
@@ -1377,7 +1381,8 @@ describe('runProviderTest degrade-probe (issue #179)', () => {
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.compatibility).toBe('degraded');
-        expect(res.invokeParity).toBe('degraded-discovery');
+        expect(res.invokeParity).toBe('unverified');
+        expect(res.invokeValidation).toBe('route-only');
         expect(res.invokeContract?.authMode).toBe('keyless');
         expect(res.invokeContract?.allowKeyless).toBe(true);
       }

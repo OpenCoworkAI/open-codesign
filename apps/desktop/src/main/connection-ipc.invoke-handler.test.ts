@@ -33,75 +33,184 @@ function seed(id: string, overrides: Partial<ProviderEntry> = {}) {
     }),
   );
 }
-
+function chatResponse() {
+  const chunk = (delta: object, finish_reason: string | null) => ({
+    id: 'fixture',
+    object: 'chat.completion.chunk',
+    created: 1,
+    model: 'configured-model',
+    choices: [{ index: 0, delta, finish_reason }],
+  });
+  return new Response(
+    `${[chunk({ role: 'assistant', content: 'OK' }, null), chunk({}, 'stop')]
+      .map((value) => `data: ${JSON.stringify(value)}\n\n`)
+      .join('')}data: [DONE]\n\n`,
+    { headers: { 'content-type': 'text/event-stream' } },
+  );
+}
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
-
 describe('saved-provider connection invocation handler', () => {
-  it('resolves keyless credentials and default discovery capabilities through the production path', async () => {
-    seed('custom-relay', { capabilities: { modelDiscoveryMode: 'models' } });
-    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      const headers = init?.headers as Record<string, string>;
-      expect(headers['authorization']).toBeUndefined();
-      if (url.endsWith('/models')) return Response.json({ data: [{ id: 'configured-model' }] });
-      expect(url).toBe('https://relay.example/v1/chat/completions');
-      // This is a route/auth probe; model availability is checked by generation.
-      expect(JSON.parse(String(init?.body)).model).toBe('probe');
-      return Response.json({ choices: [] });
+  it('applies the runtime default before deciding whether Anthropic inference can stay bounded', async () => {
+    seed('anthropic', {
+      wire: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      baseUrl: 'https://api.anthropic.com',
     });
+    const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
+    expect(await handleConnectionV1TestProvider('anthropic')).toMatchObject({
+      ok: false,
+      code: 'INVOKE_UNVERIFIED',
+      validationUnavailableReason: 'reasoning-budget-unsupported',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('does not let Anthropic reasoning expand the tiny probe into a large request', async () => {
+    seed('custom-relay', { wire: 'anthropic', reasoningLevel: 'high' });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({
+      ok: false,
+      code: 'INVOKE_UNVERIFIED',
+      invokeParity: 'unverified',
+      validationUnavailableReason: 'reasoning-budget-unsupported',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('runs production pi with saved model, headers and reasoning instead of a probe model', async () => {
+    seed('custom-relay', {
+      capabilities: { modelDiscoveryMode: 'models' },
+      reasoningLevel: 'off',
+      httpHeaders: { 'x-fixture-auth': 'fixture-static-secret' },
+    });
+    const requests: Request[] = [];
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.url.endsWith('/models'))
+          return Response.json({ data: [{ id: 'configured-model' }] });
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return chatResponse();
+      }),
+    );
     expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({
       ok: true,
       invokeParity: 'aligned',
       invokeContract: { authMode: 'keyless', modelsProbeRelation: 'optional-discovery' },
     });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.url).toBe('https://relay.example/v1/chat/completions');
+    expect(requests[1]?.headers.get('x-fixture-auth')).toBe('fixture-static-secret');
+    expect(bodies[0]).toMatchObject({ model: 'configured-model', stream: true });
+    expect(bodies[0]?.['max_tokens'] ?? bodies[0]?.['max_completion_tokens']).toBe(16);
+    expect(bodies[0]?.['tools']).toBeUndefined();
+    expect(bodies[0]?.['reasoning_effort']).toBeUndefined();
   });
-
-  it('reports a working model list and failing invoke endpoint as divergent', async () => {
+  it.each([
+    400, 402, 404, 422, 429,
+  ])('does not turn HTTP %i into ready merely because models are reachable', async (status) => {
     seed('custom-relay');
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) =>
-        url.endsWith('/models')
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        new Request(input, init).url.endsWith('/models')
           ? Response.json({ data: [] })
-          : new Response('not found', { status: 404 }),
+          : Response.json(
+              {
+                error: { message: `HTTP ${status}: model rejected`, type: 'invalid_request_error' },
+              },
+              { status },
+            ),
       ),
     );
     expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({
       ok: false,
       code: 'INVOKE_DIVERGED',
       invokeParity: 'diverged',
-      invokeContract: { invokeUrl: 'https://relay.example/v1/chat/completions' },
+      reachableVia: 'models',
+      attemptedUrl: 'https://relay.example/v1/chat/completions',
     });
   });
-
-  it('refreshes Codex OAuth instead of asking for a stored API key or model list', async () => {
+  it('accepts actual inference when discovery is missing', async () => {
+    seed('custom-relay');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        new Request(input, init).url.endsWith('/models')
+          ? new Response('', { status: 404 })
+          : chatResponse(),
+      ),
+    );
+    expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({
+      ok: true,
+      compatibility: 'degraded',
+      invokeParity: 'degraded-discovery',
+    });
+  });
+  it('does not accept an empty model response as successful inference', async () => {
+    seed('custom-relay', { capabilities: { modelDiscoveryMode: 'manual' } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }),
+      ),
+    );
+    expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({ ok: false });
+  });
+  it('reports signed-out OAuth without claiming invocation parity', async () => {
     seed('chatgpt-codex', {
-      builtin: true,
       wire: 'openai-codex-responses',
       baseUrl: 'https://chatgpt.com/backend-api',
       requiresApiKey: true,
     });
-    oauth.getValidAccessToken.mockResolvedValue('refreshed-token');
+    oauth.getValidAccessToken.mockRejectedValue(new Error('ChatGPT login expired'));
+    expect(await handleConnectionV1TestProvider('chatgpt-codex')).toMatchObject({
+      ok: false,
+      code: '401',
+      reasonCategory: 'auth',
+    });
+  });
+  it.each([
+    { wire: 'openai-chat' as const },
+    { baseUrl: 'https://untrusted.example/backend-api' },
+    { baseUrl: 'http://chatgpt.com/backend-api' },
+    { baseUrl: 'https://user:password@chatgpt.com/backend-api' },
+    { baseUrl: 'https://chatgpt.com/backend-api?token=secret' },
+    { baseUrl: 'https://chatgpt.com/other-path' },
+    { tlsRejectUnauthorized: true },
+    { queryParams: { token: 'secret' } },
+  ])('rejects an untrusted reserved Codex contract before token access: %j', async (override) => {
+    seed('chatgpt-codex', {
+      wire: 'openai-codex-responses',
+      baseUrl: 'https://chatgpt.com/backend-api',
+      ...override,
+    });
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     expect(await handleConnectionV1TestProvider('chatgpt-codex')).toMatchObject({
-      ok: true,
-      invokeParity: 'aligned',
-      invokeContract: { authMode: 'codex-oauth', modelsProbeRelation: 'unavailable' },
+      ok: false,
+      code: 'IPC_BAD_INPUT',
     });
-    expect(oauth.getValidAccessToken).toHaveBeenCalledOnce();
+    expect(oauth.getValidAccessToken).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
-
-  it('does not claim probe parity when OAuth resolution fails', async () => {
-    seed('chatgpt-codex', { wire: 'openai-codex-responses', requiresApiKey: true });
-    oauth.getValidAccessToken.mockRejectedValue(new Error('ChatGPT login expired'));
-    const result = await handleConnectionV1TestProvider('chatgpt-codex');
-    expect(result).toMatchObject({ ok: false, code: '401', reasonCategory: 'auth' });
-    expect(result.invokeParity).toBeUndefined();
+  it('rejects unsupported queries rather than silently claiming parity', async () => {
+    seed('custom-relay', { queryParams: { 'api-version': 'fixture-version' } });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    expect(await handleConnectionV1TestProvider('custom-relay')).toMatchObject({
+      ok: false,
+      code: 'IPC_BAD_INPUT',
+      message: expect.stringContaining('query parameters'),
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

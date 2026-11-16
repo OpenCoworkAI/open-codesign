@@ -372,6 +372,15 @@ export function ProviderCard({
         },
       });
       const kind = connectionTestToastKind(res);
+      if (res.ok) setConnectionDiag(null);
+      else
+        setConnectionDiag({
+          errorCode: res.code,
+          httpStatus: res.message,
+          ...(typeof res.attemptedUrl === 'string' && res.attemptedUrl.length > 0
+            ? { attemptedUrl: res.attemptedUrl }
+            : {}),
+        });
       if (kind === 'ok') {
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
       } else if (kind === 'degraded') {
@@ -397,14 +406,7 @@ export function ProviderCard({
               : {}),
           },
         });
-      } else {
-        setConnectionDiag({
-          errorCode: res.code,
-          httpStatus: res.message,
-          ...(typeof res.attemptedUrl === 'string' && res.attemptedUrl.length > 0
-            ? { attemptedUrl: res.attemptedUrl }
-            : {}),
-        });
+      } else if (res.ok === false) {
         reportableErrorToast({
           code: 'CONNECTION_TEST_FAILED',
           scope: 'settings',

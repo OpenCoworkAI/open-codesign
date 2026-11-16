@@ -1,3 +1,4 @@
+import { reasoningForModel } from '@open-codesign/core';
 import { looksLikeClaudeOAuthToken } from '@open-codesign/providers';
 import {
   CodesignError,
@@ -26,6 +27,7 @@ import {
 } from './resolve-api-key';
 
 export interface EffectiveProviderContract {
+  providerName?: string;
   providerId: string;
   modelId: string;
   wire: WireApi;
@@ -67,13 +69,55 @@ export function toInvokeContractView(contract: EffectiveProviderContract): Invok
   return {
     provider: contract.providerId,
     wire: contract.wire,
-    canonicalBaseUrl: contract.canonicalBaseUrl,
-    invokeUrl: contract.invokeUrl,
-    modelsUrl: contract.modelsUrl,
+    canonicalBaseUrl: safeContractUrl(contract.canonicalBaseUrl, contract),
+    invokeUrl: safeContractUrl(contract.invokeUrl, contract),
+    modelsUrl: contract.modelsUrl === null ? null : safeContractUrl(contract.modelsUrl, contract),
     modelsProbeRelation: contract.modelsProbeRelation,
     authMode: contract.authMode,
     allowKeyless: contract.allowKeyless,
   };
+}
+
+export function redactContractMessage(
+  message: string,
+  contract: EffectiveProviderContract,
+): string {
+  let safe = message;
+  for (const secret of [
+    contract.apiKey,
+    ...Object.values(contract.httpHeaders ?? {}),
+    ...Object.values(contract.queryParams ?? {}),
+  ]) {
+    if (!secret) continue;
+    safe = safe
+      .replaceAll(secret, '***REDACTED***')
+      .replaceAll(encodeURIComponent(secret), '***REDACTED***');
+  }
+  return safe.replace(/https?:\/\/[^\s"'<>]+/g, (url) => safeContractUrl(url, contract));
+}
+
+export function safeContractUrl(value: string, contract: EffectiveProviderContract): string {
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    let safe = url.toString();
+    for (const secret of [
+      contract.apiKey,
+      ...Object.values(contract.httpHeaders ?? {}),
+      ...Object.values(contract.queryParams ?? {}),
+    ]) {
+      if (secret)
+        safe = safe
+          .replaceAll(secret, '***REDACTED***')
+          .replaceAll(encodeURIComponent(secret), '***REDACTED***');
+    }
+    return safe;
+  } catch {
+    return '[invalid URL]';
+  }
 }
 
 export function buildEffectiveProviderContract(
@@ -93,6 +137,7 @@ export function buildEffectiveProviderContract(
   }
   return {
     providerId: resolved.model.provider,
+    ...(resolved.providerName !== undefined ? { providerName: resolved.providerName } : {}),
     modelId: resolved.model.modelId,
     wire: resolved.wire,
     storedBaseUrl,
@@ -110,7 +155,10 @@ export function buildEffectiveProviderContract(
     modelsProbeRelation,
     authMode: invokeAuthMode(resolved.wire, apiKey),
     overridden,
-    reasoningLevel: resolved.reasoningLevel,
+    reasoningLevel:
+      resolved.reasoningLevel ??
+      reasoningForModel(resolved.model, resolved.baseUrl ?? undefined) ??
+      'off',
   };
 }
 

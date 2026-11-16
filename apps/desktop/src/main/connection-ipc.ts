@@ -8,21 +8,19 @@ import {
   type ConnectionTestResponse,
   type ConnectionTestResult,
   canonicalBaseUrl,
-  connectionTestProbesModelsEndpoint,
   type DiagnosticCategory,
   ERROR_CODES,
   ensureVersionedBase,
+  inferenceEndpointUrl,
   isLiteLlmConnectionTarget,
   isSupportedOnboardingProvider,
   liteLlmHintKeyForHttpStatus,
   liteLlmHintKeyForTransportError,
-  inferenceEndpointUrl,
   modelsEndpointUrl,
-  modelsProbeRelationForWire,
+  modelsProbeRelationForProvider,
   type ProviderEntry,
   type ProviderModelDiscoveryMode,
   resolveListForProviderPlan,
-  resolveProviderCapabilities,
   type SupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
   type WireApi,
@@ -34,7 +32,9 @@ import {
   connectionErrorFromUnknown,
   type EffectiveProviderContract,
   invokeAuthMode,
+  redactContractMessage,
   resolveEffectiveInvokeContract,
+  safeContractUrl,
   toInvokeContractView,
 } from './effective-provider-contract';
 import { ipcMain } from './electron-runtime';
@@ -298,16 +298,6 @@ function buildEndpointForWire(
   return { url, normalizedBaseUrl };
 }
 
-/** Absolute URL used by probeInferenceEndpoint / probeDeclaredInference. */
-function inferenceProbeUrl(
-  wire: 'openai-chat' | 'openai-responses' | 'anthropic',
-  normalizedBaseUrl: string,
-): string {
-  if (wire === 'anthropic') return `${normalizedBaseUrl}/v1/messages`;
-  if (wire === 'openai-responses') return `${normalizedBaseUrl}/responses`;
-  return `${normalizedBaseUrl}/chat/completions`;
-}
-
 function buildModelsEndpoint(
   provider: SupportedOnboardingProvider,
   baseUrl: string,
@@ -545,13 +535,17 @@ function noConfigError(): ConnectionTestError {
 }
 
 function contractFromCredentials(creds: ActiveProviderCredentials): EffectiveProviderContract {
-  const relation = modelsProbeRelationForWire(creds.wire);
+  const relation = modelsProbeRelationForProvider(creds.wire, {
+    modelDiscoveryMode: creds.modelDiscoveryMode,
+    supportsModelsEndpoint: undefined,
+  });
   const canonical = canonicalBaseUrl(creds.baseUrl, creds.wire);
   const modelsUrl =
     relation === 'optional-discovery' ? modelsEndpointUrl(creds.baseUrl, creds.wire) : null;
   const allowKeyless = creds.apiKey.length === 0;
   return {
     providerId: creds.provider,
+    ...(creds.name !== undefined ? { providerName: creds.name } : {}),
     modelId: 'probe',
     wire: creds.wire,
     storedBaseUrl: creds.baseUrl,
@@ -586,6 +580,86 @@ function degradedProbeMethod(
 }
 
 export async function testInvokeContract(
+  contract: EffectiveProviderContract,
+): Promise<ConnectionTestResponse> {
+  // pi's Codex request omits max output tokens, and Anthropic's thinking
+  // adapter adds a minimum thinking budget. Neither can honor a tiny check.
+  const unavailable =
+    contract.wire === 'openai-codex-responses'
+      ? 'output-budget-unsupported'
+      : contract.wire === 'anthropic' &&
+          contract.reasoningLevel !== undefined &&
+          contract.reasoningLevel !== 'off'
+        ? 'reasoning-budget-unsupported'
+        : undefined;
+  if (unavailable !== undefined) {
+    return {
+      ok: false,
+      code: 'INVOKE_UNVERIFIED',
+      compatibility: 'unverified',
+      invokeParity: 'unverified',
+      validationUnavailableReason: unavailable,
+      message:
+        'This adapter cannot validate the configured invocation within the small connection-test token budget.',
+      hint: 'Credentials and endpoint settings were resolved, but no inference request was sent. Invocation readiness is unverified.',
+      modelsProbeRelation: contract.modelsProbeRelation,
+      invokeContract: toInvokeContractView(contract),
+    };
+  }
+  return withTlsBypass(contract.tlsBypass, async () => {
+    let models: ProbeResult | { kind: 'skipped' } = { kind: 'skipped' };
+    if (contract.modelsProbeRelation === 'optional-discovery' && contract.modelsUrl !== null) {
+      models = await probeGet(contract.modelsUrl, contract.authHeaders);
+    }
+    let invoke: ProbeResult;
+    const signal = AbortSignal.timeout(CONNECTION_FETCH_TIMEOUT_MS);
+    try {
+      const { complete } = await import('@open-codesign/providers');
+      const result = await complete(
+        { provider: contract.providerId, modelId: contract.modelId },
+        [{ role: 'user', content: 'Reply only OK.' }],
+        {
+          apiKey: contract.apiKey,
+          baseUrl: contract.canonicalBaseUrl,
+          wire: contract.wire,
+          allowKeyless: contract.allowKeyless,
+          signal,
+          timeoutMs: CONNECTION_FETCH_TIMEOUT_MS,
+          maxTokens: 16,
+          maxRetries: 0,
+          ...(contract.httpHeaders !== undefined ? { httpHeaders: contract.httpHeaders } : {}),
+          ...(contract.reasoningLevel !== undefined ? { reasoning: contract.reasoningLevel } : {}),
+        },
+      );
+      invoke =
+        result.content.trim().length > 0
+          ? { kind: 'pass' }
+          : { kind: 'network', message: 'Provider returned no completion text.' };
+    } catch (error) {
+      const { CompletionLengthError } = await import('@open-codesign/providers');
+      if (error instanceof CompletionLengthError) {
+        // An accepted invocation can hit this check's deliberately tiny output
+        // budget. Do not confuse that expected limit with an unusable provider.
+        return {
+          ...classifyInvokeAndModelsProbes(contract, models, { kind: 'pass' }),
+          invokeValidation: 'output-limit',
+        };
+      }
+      const message = signal.aborted
+        ? 'Connection invocation timed out.'
+        : redactContractMessage(error instanceof Error ? error.message : String(error), contract);
+      const status = /\b([45]\d{2})\b/.exec(message)?.[1];
+      invoke =
+        status === undefined
+          ? { kind: 'network', message }
+          : { kind: 'http', status: Number(status), message };
+    }
+    return classifyInvokeAndModelsProbes(contract, models, invoke);
+  });
+}
+
+/** Add-form/legacy discovery has no saved model; it only checks route reachability. */
+async function testReachabilityContract(
   contract: EffectiveProviderContract,
 ): Promise<ConnectionTestResponse> {
   if (contract.wire === 'openai-codex-responses') {
@@ -641,7 +715,10 @@ export async function testInvokeContract(
 export async function runProviderTest(
   creds: ActiveProviderCredentials,
 ): Promise<ConnectionTestResponse> {
-  return testInvokeContract(contractFromCredentials(creds));
+  const result = await testReachabilityContract(contractFromCredentials(creds));
+  return result.ok
+    ? { ...result, invokeParity: 'unverified', invokeValidation: 'route-only' }
+    : result;
 }
 
 function classifyInvokeAndModelsProbes(
@@ -657,8 +734,13 @@ function classifyInvokeAndModelsProbes(
     if (modelsPass || modelsSkipped) {
       return {
         ok: true,
-        probeMethod: modelsPass ? 'models' : 'invoke',
+        probeMethod: modelsPass
+          ? 'models'
+          : contract.wire === 'openai-codex-responses'
+            ? 'codex_oauth'
+            : 'inference',
         compatibility: 'compatible',
+        invokeValidation: 'completed',
         invokeParity: 'aligned',
         modelsProbeRelation: contract.modelsProbeRelation,
         invokeContract: view,
@@ -668,6 +750,7 @@ function classifyInvokeAndModelsProbes(
       ok: true,
       probeMethod: isHttpInvokeWire(contract.wire) ? degradedProbeMethod(contract.wire) : 'invoke',
       compatibility: 'degraded',
+      invokeValidation: 'completed',
       reasonCategory: 'model-discovery-degraded',
       invokeParity: 'degraded-discovery',
       modelsProbeRelation: contract.modelsProbeRelation,
@@ -686,6 +769,7 @@ function classifyInvokeAndModelsProbes(
       reasonCategory: 'invoke-contract-diverged',
       invokeParity: 'diverged',
       reachableVia: 'models',
+      attemptedUrl: safeContractUrl(contract.invokeUrl, contract),
       probeMethod: 'models',
       modelsProbeRelation: contract.modelsProbeRelation,
       invokeContract: view,
@@ -693,14 +777,33 @@ function classifyInvokeAndModelsProbes(
   }
 
   const failed = invokeFailureFields(invoke, contract.canonicalBaseUrl);
-  return {
-    ok: false,
-    ...failed,
-    compatibility: 'incompatible',
-    invokeParity: 'aligned',
-    modelsProbeRelation: contract.modelsProbeRelation,
-    invokeContract: view,
-  };
+  const litellm = isLiteLlmConnectionTarget({
+    providerId: contract.providerId,
+    ...(contract.providerName !== undefined ? { name: contract.providerName } : {}),
+    baseUrl: contract.canonicalBaseUrl,
+  });
+  return withHintKey(
+    {
+      ok: false,
+      ...failed,
+      attemptedUrl: safeContractUrl(
+        models.kind === 'http' &&
+          invoke.kind === 'http' &&
+          invoke.status === 404 &&
+          contract.modelsUrl !== null
+          ? contract.modelsUrl
+          : contract.invokeUrl,
+        contract,
+      ),
+      compatibility: 'incompatible',
+      invokeParity: 'aligned',
+      modelsProbeRelation: contract.modelsProbeRelation,
+      invokeContract: view,
+    },
+    invoke.kind === 'http'
+      ? liteLlmHttpHint(litellm, invoke.status, contract.canonicalBaseUrl)
+      : liteLlmTransportHint(litellm, new Error(invoke.kind === 'network' ? invoke.message : '')),
+  );
 }
 
 function invokeFailureFields(
@@ -711,7 +814,7 @@ function invokeFailureFields(
     const { code, hint } = classifyHttpError(invoke.status);
     return {
       code,
-      message: `HTTP ${invoke.status}`,
+      message: invoke.message ?? `HTTP ${invoke.status}`,
       hint,
       reasonCategory: connectionCategoryForStatus(invoke.status, canonicalBaseUrl),
     };
@@ -739,7 +842,7 @@ async function probeGet(url: string, headers: Record<string, string>): Promise<P
 
 type ProbeResult =
   | { kind: 'pass' }
-  | { kind: 'http'; status: number }
+  | { kind: 'http'; status: number; message?: string }
   | { kind: 'network'; message: string };
 
 /**

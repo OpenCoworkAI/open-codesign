@@ -7,7 +7,9 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import {
   canonicalInvokeBaseUrl,
+  redactContractMessage,
   resolveEffectiveInvokeContract,
+  toInvokeContractView,
 } from './effective-provider-contract';
 import { resolveActiveModel, resolveProviderModel } from './provider-settings';
 import { resolveCredentialForProvider } from './resolve-api-key';
@@ -54,6 +56,56 @@ function creds(
 }
 
 describe('resolveEffectiveInvokeContract vs generate', () => {
+  it.each([
+    ['anthropic', 'claude-sonnet-4-6', 'high'],
+    ['openai', 'gpt-5.1', 'high'],
+    ['openrouter', 'anthropic/claude-sonnet-4.6', 'medium'],
+  ] as const)('uses runtime reasoning defaults for %s without a saved override', async (provider, modelPrimary, expected) => {
+    const cfg = makeCfg({
+      provider,
+      modelPrimary,
+      secrets: { [provider]: { ciphertext: 'fixture' } },
+    });
+    const contract = await resolveEffectiveInvokeContract({ cfg, mode: 'active', creds: creds() });
+    expect(contract.reasoningLevel).toBe(expected);
+    const entry = cfg.providers[provider];
+    if (!entry) throw new Error('Missing fixture provider');
+    entry.reasoningLevel = 'off';
+    expect(
+      (await resolveEffectiveInvokeContract({ cfg, mode: 'active', creds: creds() }))
+        .reasoningLevel,
+    ).toBe('off');
+  });
+  it('removes URL credentials, query strings and known secrets from renderer diagnostics', async () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-4o',
+      secrets: { openai: { ciphertext: 'fixture' } },
+      providers: {
+        openai: {
+          ...BUILTIN_PROVIDERS.openai,
+          baseUrl: 'https://username:password@gateway.example/fixture-key/v1?token=private-query',
+        },
+      },
+    });
+    const contract = await resolveEffectiveInvokeContract({
+      cfg,
+      mode: 'active',
+      creds: creds({ getApiKeyForProvider: () => 'fixture-key' }),
+    });
+    contract.queryParams = { token: 'private-query' };
+    contract.httpHeaders = { 'x-private-key': 'private-header' };
+    const output = JSON.stringify(toInvokeContractView(contract));
+    for (const secret of ['username', 'password', 'fixture-key', 'private-query', 'private-header'])
+      expect(output).not.toContain(secret);
+    const diagnostic = redactContractMessage(
+      'Rejected fixture-key private-header https://username:password@gateway.example/v1?token=private-query',
+      contract,
+    );
+    for (const secret of ['username', 'password', 'fixture-key', 'private-query', 'private-header'])
+      expect(diagnostic).not.toContain(secret);
+    expect(output).toContain('gateway.example');
+  });
   it('test-active shares active-provider snap, wire, canonical baseUrl, and API key with generate', async () => {
     const cfg = makeCfg({
       provider: 'openrouter',

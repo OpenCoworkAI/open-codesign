@@ -232,6 +232,7 @@ export function computeDeleteProviderResult(cfg: Config, toDelete: string): Dele
  * cached config and the renderer's hint payload.
  */
 export interface ProviderModelResolution {
+  providerName?: string;
   model: ModelRef;
   baseUrl: string | null;
   wire: WireApi;
@@ -262,6 +263,38 @@ function providerModelFromEntry(
   cfg: Config,
   missingSecretMessage: string,
 ): ProviderModelResolution {
+  // The reserved account provider may only send its refreshable token to
+  // ChatGPT's own Codex endpoint, including for edited/imported config rows.
+  if (providerId === CHATGPT_CODEX_PROVIDER_ID) {
+    let endpoint: URL | undefined;
+    try {
+      endpoint = new URL(entry.baseUrl);
+    } catch {
+      // Invalid endpoints are rejected before reading the OAuth store.
+    }
+    if (
+      entry.wire !== 'openai-codex-responses' ||
+      endpoint?.origin !== 'https://chatgpt.com' ||
+      endpoint.pathname.replace(/\/+$/, '') !== '/backend-api' ||
+      endpoint.username !== '' ||
+      endpoint.password !== '' ||
+      endpoint.search !== '' ||
+      endpoint.hash !== '' ||
+      entry.tlsRejectUnauthorized === true ||
+      Object.keys(entry.queryParams ?? {}).length > 0
+    ) {
+      throw new CodesignError(
+        'ChatGPT sign-in requires the official Codex endpoint and wire. Use a separate API-key provider for gateways.',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+  }
+  if (Object.keys(entry.queryParams ?? {}).length > 0) {
+    throw new CodesignError(
+      'This provider configures query parameters that the runtime transport cannot send. Remove queryParams or use supported HTTP headers before testing or generating.',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
   const allowKeyless = isKeylessProviderAllowed(providerId, entry);
   // ChatGPT credentials live in the refreshable OAuth store, not config.secrets.
   if (
@@ -273,12 +306,14 @@ function providerModelFromEntry(
   }
   const caps = resolveProviderCapabilities(providerId, entry);
   return {
+    providerName: entry.name,
     model: { provider: providerId, modelId },
     baseUrl: entry.baseUrl,
     wire: entry.wire,
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
+    contextWindow: entry.contextWindow,
     allowKeyless,
     builtin: entry.builtin === true,
     tlsRejectUnauthorized: entry.tlsRejectUnauthorized,

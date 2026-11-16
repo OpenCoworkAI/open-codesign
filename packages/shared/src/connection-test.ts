@@ -8,18 +8,19 @@ export type InvokeAuthMode = 'codex-oauth' | 'anthropic-oauth' | 'bearer' | 'x-a
 /**
  * Whether a connection probe used the same invoke contract as generate.
  *
- * - `aligned`: the probe used the generate auth/header/baseUrl/wire, and the
- *   inference endpoint either succeeded or was the Codex OAuth path.
- * - `degraded-discovery`: inference works (generate would work) but GET
+ * - `aligned`: saved-model inference used generate auth/header/baseUrl/wire.
+ * - `degraded-discovery`: bounded inference was accepted but GET
  *   /models is missing or unusable.
  * - `diverged`: something is reachable (usually GET /models) but the real
  *   inference endpoint used at generate-time failed.
+ * - `unverified`: legacy route-only discovery did not invoke the saved model.
  */
-export type InvokeParity = 'aligned' | 'degraded-discovery' | 'diverged';
+export type InvokeParity = 'aligned' | 'degraded-discovery' | 'diverged' | 'unverified';
 
 export type ConnectionProbeMethod =
   | 'models'
   | 'invoke'
+  | 'inference'
   | 'chat_completion_degraded'
   | 'responses_degraded'
   | 'anthropic_messages_degraded'
@@ -42,6 +43,8 @@ export interface InvokeContractView {
 
 export interface ConnectionTestResult {
   ok: true;
+  /** A tiny check budget may be exhausted after the provider accepted inference. */
+  invokeValidation?: 'completed' | 'output-limit' | 'route-only';
   /**
    * `models` when GET /models succeeded *and* the invoke probe confirmed the
    * generate path.
@@ -49,8 +52,8 @@ export interface ConnectionTestResult {
    * endpoint was probed directly.
    * `*_degraded` when /models failed but the wire's real inference endpoint
    * is alive — generate would work.
-   * `codex_oauth` when ChatGPT Codex resolved the same refreshable OAuth
-   * token generate uses (no /models on this wire).
+   * `codex_oauth` identifies the account wire. Check invokeValidation to
+   * distinguish saved-model invocation from legacy credential-only checks.
    */
   probeMethod?: ConnectionProbeMethod;
   compatibility?: 'compatible' | 'degraded';
@@ -62,10 +65,21 @@ export interface ConnectionTestResult {
 
 export interface ConnectionTestError {
   ok: false;
-  code: 'IPC_BAD_INPUT' | '401' | '404' | 'ECONNREFUSED' | 'NETWORK' | 'PARSE' | 'INVOKE_DIVERGED';
+  attemptedUrl?: string;
+  hintKey?: string;
+  code:
+    | 'IPC_BAD_INPUT'
+    | '401'
+    | '404'
+    | 'ECONNREFUSED'
+    | 'NETWORK'
+    | 'PARSE'
+    | 'INVOKE_DIVERGED'
+    | 'INVOKE_UNVERIFIED';
   message: string;
   hint: string;
-  compatibility?: 'incompatible' | 'diverges';
+  compatibility?: 'incompatible' | 'diverges' | 'unverified';
+  validationUnavailableReason?: 'output-budget-unsupported' | 'reasoning-budget-unsupported';
   reasonCategory?: DiagnosticCategory;
   invokeParity?: InvokeParity;
   modelsProbeRelation?: ModelsProbeRelation;
