@@ -46,6 +46,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay',
   },
   {
+    id: 'teapotrouter',
+    label: 'TeaPotRouter',
+    provider: 'anthropic',
+    baseUrl: 'https://api.teapotrouter.com',
+    notes: 'Dual-protocol relay: Anthropic at root, OpenAI-compatible at /v1',
+  },
+  {
     id: 'opper',
     label: 'Opper',
     provider: 'openai',
