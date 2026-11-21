@@ -71,7 +71,8 @@ import { createProviderContextStore } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
 import { makeUiKitRenderer } from '../render-ui-kit';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
-import { projectRunEventToChat } from '../run-event-chat';
+import { projectRunEventHistory, projectRunEventToChat } from '../run-event-chat';
+import { RunEventDelivery } from '../run-event-delivery';
 import { RunJournal } from '../run-journal';
 import { withRun } from '../runContext';
 import {
@@ -323,7 +324,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   // Implementation + LRU eviction lives in ../provider-context.ts.
   const providerContext = createProviderContextStore(50);
   const journal = db ? new RunJournal(path_module.join(db.sessionDir, 'runs')) : null;
-  let eventDelivery = Promise.resolve();
+  const eventDelivery = new RunEventDelivery();
   const subscribers = new Set<WebContents>();
   const deliveryFailures = new Map<string, unknown>();
   const projectionFailures = new Map<string, number>();
@@ -337,8 +338,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       return;
     if (event.type === 'run_settled') closingRuns.add(event.generationId);
     event = structuredClone(event);
-    eventDelivery = eventDelivery
-      .then(async () => {
+    void eventDelivery
+      .enqueue(async () => {
         const durable = journal ? await journal.append({ ...event, chatPersisted: true }) : event;
         if (event.type === 'run_settled') settledRuns.add(event.generationId);
         if (journal && db) {
@@ -387,7 +388,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     if (journal) await journal.start({ runId: id, designId, startedAt: Date.now() });
     try {
       const result = await run();
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       let snapshotId: string | undefined;
       const artifact = result.artifacts[0];
@@ -417,7 +418,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         outcome: controller.signal.aborted ? 'cancelled' : 'completed',
         response: response as GenerateResponse,
       });
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       return { ...response, ...(journal ? { chatPersisted: true } : {}) };
     } catch (error) {
@@ -434,7 +435,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         message: error instanceof Error ? error.message : String(error),
         ...(error instanceof CodesignError ? { code: error.code } : {}),
       });
-      await eventDelivery;
+      await eventDelivery.settled();
       throw error;
     } finally {
       settledRuns.add(id);
@@ -481,32 +482,30 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       cursors[id] = seq;
     }
     if (_event?.sender) subscribers.add(_event.sender);
-    await eventDelivery;
     if (!journal || !db) return { schemaVersion: 1, events: [] };
-    repairedHistory ??= journal
-      .allEvents()
-      .then((events) => {
-        for (const event of events) {
-          if (canRecoverDesign(event.designId))
-            projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
-        }
-      })
-      .catch((error: unknown) => {
-        repairedHistory = undefined;
-        throw error;
-      });
-    await repairedHistory;
-    const repairCursors = { ...cursors };
-    for (const [id, beforeFailure] of projectionFailures)
-      repairCursors[id] = Math.min(repairCursors[id] ?? 0, beforeFailure);
-    const recovered = await journal.recover(repairCursors);
-    recovered.events = recovered.events
-      .filter((event) => canRecoverDesign(event.designId))
-      .map((event) => ({ ...event, chatPersisted: true }));
-    for (const event of recovered.events)
-      projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
-    for (const event of recovered.events) projectionFailures.delete(event.generationId);
-    return recovered;
+    return eventDelivery.enqueue(async () => {
+      repairedHistory ??= journal
+        .allEvents()
+        .then((events) =>
+          projectRunEventHistory({ db, sessionDir: db.sessionDir }, events, canRecoverDesign),
+        )
+        .catch((error: unknown) => {
+          repairedHistory = undefined;
+          throw error;
+        });
+      await repairedHistory;
+      const repairCursors = { ...cursors };
+      for (const [id, beforeFailure] of projectionFailures)
+        repairCursors[id] = Math.min(repairCursors[id] ?? 0, beforeFailure);
+      const recovered = await journal.recover(repairCursors);
+      recovered.events = recovered.events
+        .filter((event) => canRecoverDesign(event.designId))
+        .map((event) => ({ ...event, chatPersisted: true }));
+      for (const event of recovered.events)
+        projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
+      for (const event of recovered.events) projectionFailures.delete(event.generationId);
+      return recovered;
+    });
   });
 
   const emptyUsage = (): UsageTotals => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
@@ -624,7 +623,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const payload = ActiveRunMessageInputV1.parse(raw);
     return withStableWorkspacePath(payload.designId, async () => {
       requireWorkspaceRootForDesign(payload.designId);
-      await eventDelivery;
+      await eventDelivery.settled();
       const previous = listSessionActiveMessages(requireChatStore(), payload.designId).find(
         (row) => row.messageId === payload.messageId,
       );
@@ -657,14 +656,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           'GENERATION_NOT_ACTIVE',
         );
       const accepted = run.submit(payload);
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(payload.generationId))
         throw deliveryFailures.get(payload.generationId);
       return accepted;
     });
   });
   ipcMain.handle('codesign:v1:active-messages', async (_event, raw: unknown) => {
-    await eventDelivery;
+    await eventDelivery.settled();
     const { designId } = ListActiveMessagesInputV1.parse(raw);
     const opts = requireChatStore();
     return listSessionActiveMessages(opts, designId).map((row) => {
