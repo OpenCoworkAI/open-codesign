@@ -1,5 +1,6 @@
 import type { ProviderModelDiscoveryMode, ReasoningLevel, WireApi } from './config';
 import { looksLikeModelsListingUrl, usesRemoteModelsListing } from './model-discovery';
+import type { RecoveryCategory } from './recovery';
 
 export type ErrorCode =
   | '401'
@@ -83,6 +84,8 @@ export interface DiagnosticHypothesis {
   severity?: DiagnosticSeverity;
   /** Primary action the user should take */
   suggestedFix?: DiagnosticFix;
+  /** Machine-readable recovery category from provider error normalization. */
+  recoveryCategory?: RecoveryCategory;
 }
 
 export interface DiagnoseContext {

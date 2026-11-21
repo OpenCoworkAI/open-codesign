@@ -24,6 +24,7 @@ import type {
   ModelRef,
   OnboardingState,
   PreviewMode,
+  ProviderFailureContext,
   ProviderModelDiscoveryMode,
   ReasoningLevel,
   ReportEventInput,
@@ -356,6 +357,7 @@ export interface AgentStreamEvent {
   // error
   message?: string;
   code?: string;
+  providerFailure?: ProviderFailureContext;
 }
 
 export interface GenerationStatusResult {

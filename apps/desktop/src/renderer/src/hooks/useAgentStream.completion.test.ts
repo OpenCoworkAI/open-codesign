@@ -135,6 +135,73 @@ afterEach(() => {
 });
 
 describe('agent stream / IPC completion ordering', () => {
+  it.each([
+    { recoveryCategory: 'billing', status: 401, expected: 'remaining quota' },
+    { recoveryCategory: 'region_restricted', status: 403, expected: 'Contact the provider' },
+    {
+      recoveryCategory: 'model_not_supported_role',
+      status: 400,
+      expected: 'required system and developer message roles',
+    },
+  ] as const)('uses committed $recoveryCategory metadata with an Electron message-only rejection', async ({
+    recoveryCategory,
+    status,
+    expected,
+  }) => {
+    generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
+      emit('run_settled', generationId, {
+        outcome: 'failed',
+        chatPersisted: true,
+        message: 'Provider request failed',
+        providerFailure: { recoveryCategory, status },
+      });
+      expect(useCodesignStore.getState().generationByDesign[design.id]?.providerFailure).toEqual({
+        recoveryCategory,
+        status,
+      });
+      throw new Error(
+        "Error invoking remote method 'codesign:v1:generate': Provider request failed",
+      );
+    });
+    await useCodesignStore.getState().sendPrompt({ prompt: 'Synthetic failure' });
+    const state = useCodesignStore.getState();
+    expect(state.toasts).toHaveLength(1);
+    expect(state.toasts[0]?.description).toContain(expected);
+    expect(state.generationByDesign[design.id]).toBeUndefined();
+    expect(state.reportableErrors[0]?.context).toMatchObject({
+      upstream_recovery_category: recoveryCategory,
+      upstream_status: status,
+    });
+  });
+
+  it('does not let old or unknown recovery metadata poison the next successful run', async () => {
+    let failedRun = '';
+    generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
+      failedRun = generationId;
+      emit('run_settled', generationId, {
+        outcome: 'failed',
+        providerFailure: { recoveryCategory: 'billing', status: 429 },
+      });
+      throw new Error('Provider request failed');
+    });
+    await useCodesignStore.getState().sendPrompt({ prompt: 'Failed request' });
+    generate.mockImplementationOnce(async ({ generationId }: { generationId: string }) => {
+      emit('run_settled', failedRun, {
+        outcome: 'failed',
+        providerFailure: { recoveryCategory: 'region_restricted', status: 403 },
+      });
+      expect(
+        useCodesignStore.getState().generationByDesign[design.id]?.providerFailure,
+      ).toBeUndefined();
+      emit('run_settled', generationId, { outcome: 'completed' });
+      return { artifacts: [], message: 'Completed', inputTokens: 1, outputTokens: 1, costUsd: 0 };
+    });
+    await useCodesignStore.getState().sendPrompt({ prompt: 'Successful request' });
+    const state = useCodesignStore.getState();
+    expect(state.generationByDesign[design.id]).toBeUndefined();
+    expect(state.generationStage).toBe('done');
+    expect(state.toasts.filter((toast) => toast.variant === 'error')).toHaveLength(1);
+  });
   it('notifies through the OS only for live runs that complete or fail in the background', async () => {
     const shown: Array<{ title: string; body: string }> = [];
     vi.stubGlobal(

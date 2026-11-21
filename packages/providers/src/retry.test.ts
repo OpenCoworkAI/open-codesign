@@ -52,6 +52,31 @@ describe('classifyError', () => {
     expect(d.retry).toBe(true);
     expect(d.retryAfterMs).toBe(7000);
   });
+  it('does not retry exhausted account quota as a temporary rate limit', () => {
+    const error = Object.assign(new HttpError('quota exhausted', 429), {
+      code: 'insufficient_quota',
+    });
+    expect(classifyError(error)).toMatchObject({
+      retry: false,
+      reason: 'provider quota exhausted (429)',
+    });
+  });
+  it('keeps an explicit per-minute rate limit retryable when its message mentions quota', () => {
+    const error = Object.assign(
+      new HttpError('Quota exhausted for per-minute requests; retry in 60 seconds', 429),
+      { code: 'rate_limit_exceeded' },
+    );
+    expect(classifyError(error)).toMatchObject({ retry: true, reason: 'rate-limited (429)' });
+  });
+  it('retries a wrapped transient HTTP failure using its preserved cause', () => {
+    expect(
+      classifyError(
+        new CodesignError('Request failed', 'PROVIDER_ERROR', {
+          cause: new HttpError('down', 503),
+        }),
+      ),
+    ).toMatchObject({ retry: true });
+  });
   it('treats empty retry-after as no hint (not 0ms)', () => {
     const d = classifyError(new HttpError('slow', 429, { 'retry-after': '' }));
     expect(d.retry).toBe(true);
@@ -122,6 +147,48 @@ describe('classifyError', () => {
 });
 
 describe('completeWithRetry', () => {
+  it.each([
+    { status: 401, message: 'invalid key', code: 'invalid_api_key', category: 'auth_key_invalid' },
+    { status: 429, message: 'quota exhausted', code: 'insufficient_quota', category: 'billing' },
+    {
+      status: 403,
+      message: 'Country, region, or territory not supported',
+      code: 'unsupported_country_region_territory',
+      category: 'region_restricted',
+    },
+  ])('logs $category once without retrying permanent provider failures', async ({
+    status,
+    message,
+    code,
+    category,
+  }) => {
+    const error = new CodesignError('Provider request failed', 'PROVIDER_ERROR', {
+      cause: Object.assign(new HttpError(message, status), { code }),
+    });
+    const impl = vi.fn().mockRejectedValue(error);
+    const onRetry = vi.fn();
+    const logger = { warn: vi.fn() };
+    await expect(
+      completeWithRetry(
+        MODEL,
+        MESSAGES,
+        OPTS,
+        { maxRetries: 3, baseDelayMs: 1, onRetry, logger },
+        impl,
+      ),
+    ).rejects.toBe(error);
+    expect(impl).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'provider.error.final',
+      expect.objectContaining({
+        upstream_status: status,
+        upstream_code: code,
+        recovery_category: category,
+        retry_count: 0,
+      }),
+    );
+  });
   it('returns the result on first-try success', async () => {
     const impl = vi.fn().mockResolvedValueOnce(ok);
     const out = await completeWithRetry(MODEL, MESSAGES, OPTS, {}, impl);
