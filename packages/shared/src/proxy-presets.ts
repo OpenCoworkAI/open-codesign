@@ -53,10 +53,10 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
-    id: 'uberllm',
-    label: 'UberLLM',
+    id: 'martllm',
+    label: 'MartLLM',
     provider: 'openai',
-    baseUrl: 'https://api.uberllm.dev/v1',
+    baseUrl: 'https://api.martllm.com/v1',
     notes: 'Multi-model relay, prepaid',
   },
   {
