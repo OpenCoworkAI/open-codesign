@@ -11,6 +11,7 @@ import {
   type ProviderModelDiscoveryMode,
   type ReasoningLevel,
   resolveProviderCapabilities,
+  type ThinkingLevelMap,
   type WireApi,
 } from '@open-codesign/shared';
 import { maskSecret } from './keychain';
@@ -32,6 +33,8 @@ export interface ProviderRow {
   hasKey: boolean;
   requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Whitelist remap of thinking levels to the endpoint's wire vocabulary. */
+  thinkingLevelMap?: ThinkingLevelMap;
   /** Configured context window in tokens; absent when core resolves it. */
   contextWindow?: number;
   /** Per-provider TLS verification opt-out (#229). Only surfaced for
@@ -180,6 +183,9 @@ export function toProviderRows(
         ? { modelsHint: entry.modelsHint }
         : {}),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
+      ...(entry?.thinkingLevelMap !== undefined
+        ? { thinkingLevelMap: entry.thinkingLevelMap }
+        : {}),
       ...(entry?.contextWindow !== undefined ? { contextWindow: entry.contextWindow } : {}),
       ...(entry?.tlsRejectUnauthorized === true ? { tlsRejectUnauthorized: true } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
@@ -239,6 +245,7 @@ export interface ProviderModelResolution {
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
+  thinkingLevelMap: ThinkingLevelMap | undefined;
   contextWindow: number | undefined;
   allowKeyless: boolean;
   builtin: boolean;
@@ -313,6 +320,7 @@ function providerModelFromEntry(
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
+    thinkingLevelMap: entry.thinkingLevelMap,
     contextWindow: entry.contextWindow,
     allowKeyless,
     builtin: entry.builtin === true,

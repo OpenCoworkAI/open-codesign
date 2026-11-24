@@ -35,9 +35,11 @@ import {
 } from '@earendil-works/pi-ai';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
+  clampToThinkingLevelMap,
   classifyError,
   claudeCodeIdentityHeaders,
   createNativeSearchStream,
+  expandThinkingLevelMap,
   inferReasoning,
   isProviderAbortedTransportError,
   isTransportLevelError,
@@ -58,7 +60,9 @@ import {
   formatDesignMdForPrompt,
   LEGACY_SOURCE_ENTRY,
   type ModelRef,
+  type ReasoningLevel,
   type ResourceStateV1,
+  type ThinkingLevelMap,
   validateDesignMd,
   type WireApi,
 } from '@open-codesign/shared';
@@ -175,6 +179,7 @@ interface PiModel {
   provider: string;
   baseUrl: string;
   reasoning: boolean;
+  thinkingLevelMap?: Partial<Record<ReasoningLevel, string | null>>;
   compat?: {
     supportsDeveloperRole?: boolean;
     supportsReasoningEffort?: boolean;
@@ -289,6 +294,7 @@ function buildPiModel(
   contextWindow: number | undefined,
   httpHeaders?: Record<string, string> | undefined,
   apiKey?: string,
+  thinkingLevelMap?: ThinkingLevelMap,
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
@@ -326,6 +332,12 @@ function buildPiModel(
   };
   const compat = openAIChatCompatForBaseUrl(wire, canonicalBase);
   if (compat !== undefined) out.compat = compat;
+  // Explicit config beats the id heuristic, exactly like the non-agent path in
+  // @open-codesign/providers.
+  if (thinkingLevelMap !== undefined) {
+    out.reasoning = true;
+    out.thinkingLevelMap = expandThinkingLevelMap(thinkingLevelMap);
+  }
   if (httpHeaders !== undefined) out.headers = httpHeaders;
 
   // sub2api / claude2api gateways 403 any request without claude-cli
@@ -1019,6 +1031,7 @@ async function generateViaAgentInternal(
     input.contextWindow,
     input.httpHeaders,
     initialApiKey,
+    input.thinkingLevelMap,
   );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
@@ -1370,9 +1383,13 @@ async function generateViaAgentInternal(
   // from ProviderEntry.reasoningLevel by the desktop main process) takes
   // precedence, then the model-family default from reasoningForModel. If
   // neither yields a value the agent runs with 'off', matching
-  // pi-agent-core's default.
-  const thinkingLevel =
-    input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl) ?? 'off';
+  // pi-agent-core's default. A configured thinkingLevelMap is a whitelist, so
+  // the resolved level is clamped onto it before pi-agent-core forwards it
+  // raw; otherwise a stale/unlisted setting would reach the endpoint.
+  const thinkingLevel = clampToThinkingLevelMap(
+    input.reasoningLevel ?? reasoningForModel(input.model, input.baseUrl) ?? 'off',
+    input.thinkingLevelMap,
+  );
 
   // Build the Agent. convertToLlm narrows AgentMessage (may include custom
   // types) to the LLM-visible Message subset.

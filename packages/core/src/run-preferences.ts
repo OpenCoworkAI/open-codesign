@@ -7,6 +7,7 @@ import type {
   DesignRunPreferencesV1,
   ModelRef,
   ReasoningLevel,
+  ThinkingLevelMap,
   WireApi,
 } from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
@@ -67,6 +68,8 @@ interface RunPreferenceRouterModelInput {
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
+  /** Whitelist remap of thinking levels to the provider's wire vocabulary. */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   logger?: CoreLogger | undefined;
 }
 
@@ -307,6 +310,9 @@ export async function routeRunPreferences(
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
+        ...(input.thinkingLevelMap !== undefined
+          ? { thinkingLevelMap: input.thinkingLevelMap }
+          : {}),
         maxTokens: ROUTER_MAX_OUTPUT_TOKENS,
       },
       {

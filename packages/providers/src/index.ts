@@ -10,9 +10,12 @@ import {
   type ChatMessage,
   CodesignError,
   canonicalBaseUrl,
+  clampToThinkingLevelMap,
   ERROR_CODES,
   type ModelRef,
+  REASONING_LEVELS,
   type ReasoningLevel as SharedReasoningLevel,
+  type ThinkingLevelMap,
   type WireApi,
 } from '@open-codesign/shared';
 import {
@@ -29,6 +32,8 @@ import { normalizeGeminiModelId } from './gemini-compat';
  * `off` is an Open CoDesign config/UI override and is intentionally omitted
  * before calling pi-ai. */
 export type ReasoningLevel = SharedReasoningLevel;
+export { clampToThinkingLevelMap } from '@open-codesign/shared';
+
 type PiReasoningLevel = Exclude<ReasoningLevel, 'off'>;
 
 export interface GenerateOptions {
@@ -42,6 +47,8 @@ export interface GenerateOptions {
    *  Claude 4.x models this enables extended thinking; on OpenAI/Gemini it
    *  maps to their reasoning effort. Older/non-reasoning models ignore it. */
   reasoning?: ReasoningLevel;
+  /** Whitelist of supported thinking levels and their endpoint wire values. */
+  thinkingLevelMap?: ThinkingLevelMap;
   /** v3 wire override — when set, a synthetic PiModel is constructed so
    *  custom endpoints (DeepSeek, Ollama, LiteLLM, Azure, …) route through
    *  the correct pi-ai adapter even if the provider id isn't in pi-ai's
@@ -138,6 +145,7 @@ interface PiModel {
   name?: string;
   baseUrl?: string;
   reasoning?: boolean;
+  thinkingLevelMap?: Partial<Record<SharedReasoningLevel, string | null>>;
   compat?: {
     supportsDeveloperRole?: boolean;
     supportsReasoningEffort?: boolean;
@@ -277,6 +285,31 @@ export function inferReasoning(
   }
 }
 
+/**
+ * Expand a whitelist `ProviderEntry.thinkingLevelMap` into the full map pi-ai
+ * reads. Unlisted levels become `null` (explicitly unsupported) because the
+ * TOML config cannot spell `null` itself; pi-ai then hides them from
+ * `getSupportedThinkingLevels()` and clamps requests onto a supported level
+ * instead of sending an effort value the endpoint rejects.
+ */
+export function expandThinkingLevelMap(
+  map: ThinkingLevelMap,
+): Record<SharedReasoningLevel, string | null> {
+  const expanded: Record<SharedReasoningLevel, string | null> = {
+    off: null,
+    minimal: null,
+    low: null,
+    medium: null,
+    high: null,
+    xhigh: null,
+  };
+  for (const level of REASONING_LEVELS) {
+    const wireValue = map[level];
+    if (wireValue !== undefined) expanded[level] = wireValue;
+  }
+  return expanded;
+}
+
 function supportsOpenAIDeveloperRole(
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
@@ -328,6 +361,7 @@ function synthesizeWireModel(
   modelId: string,
   wire: GenerateOptions['wire'],
   baseUrl: string | undefined,
+  thinkingLevelMap?: ThinkingLevelMap,
 ): PiModel {
   const supportsImageInput =
     wire === 'anthropic' ||
@@ -356,6 +390,12 @@ function synthesizeWireModel(
   if (baseUrl !== undefined) base.baseUrl = baseUrl;
   const compat = openAIChatCompatForBaseUrl(wire, baseUrl);
   if (compat !== undefined) base.compat = compat;
+  // A configured map is an explicit declaration that the endpoint reasons and
+  // which levels it accepts, so it takes precedence over the id heuristic.
+  if (thinkingLevelMap !== undefined) {
+    base.reasoning = true;
+    base.thinkingLevelMap = expandThinkingLevelMap(thinkingLevelMap);
+  }
   return base;
 }
 
@@ -407,7 +447,13 @@ export async function complete(
   let piModel = pi.getModel(model.provider, effectiveModelId);
   if (!piModel) {
     if (opts.wire !== undefined) {
-      piModel = synthesizeWireModel(model.provider, effectiveModelId, opts.wire, baseUrl);
+      piModel = synthesizeWireModel(
+        model.provider,
+        effectiveModelId,
+        opts.wire,
+        baseUrl,
+        opts.thinkingLevelMap,
+      );
     } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(effectiveModelId);
     } else {
@@ -426,6 +472,7 @@ export async function complete(
       effectiveModelId,
       opts.wire,
       baseUrl ?? piModel.baseUrl,
+      opts.thinkingLevelMap,
     );
     const { compat: _catalogCompat, ...catalog } = piModel;
     piModel = {
@@ -433,10 +480,22 @@ export async function complete(
       api: routed.api,
       ...(routed.baseUrl !== undefined ? { baseUrl: routed.baseUrl } : {}),
       ...(routed.reasoning !== undefined ? { reasoning: routed.reasoning } : {}),
+      ...(routed.thinkingLevelMap !== undefined
+        ? { thinkingLevelMap: routed.thinkingLevelMap }
+        : {}),
     };
     if (routed.compat !== undefined) piModel.compat = routed.compat;
-  } else if (baseUrl !== undefined) {
-    piModel = { ...piModel, baseUrl };
+  } else if (baseUrl !== undefined || opts.thinkingLevelMap !== undefined) {
+    piModel = {
+      ...piModel,
+      ...(baseUrl !== undefined ? { baseUrl } : {}),
+      ...(opts.thinkingLevelMap !== undefined
+        ? {
+            reasoning: true,
+            thinkingLevelMap: expandThinkingLevelMap(opts.thinkingLevelMap),
+          }
+        : {}),
+    };
   }
 
   const piContext = toPiContext(messages, piModel, opts);
@@ -459,7 +518,11 @@ export async function complete(
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
   if (opts.maxRetries !== undefined) piOpts.maxRetries = opts.maxRetries;
-  const reasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
+  const requestedReasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
+  const reasoning =
+    requestedReasoning === undefined
+      ? undefined
+      : clampToThinkingLevelMap(requestedReasoning, opts.thinkingLevelMap);
   if (reasoning !== undefined && reasoning !== 'off') piOpts.reasoning = reasoning;
   if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
 

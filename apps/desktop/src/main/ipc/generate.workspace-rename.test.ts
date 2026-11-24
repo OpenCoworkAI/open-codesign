@@ -948,6 +948,7 @@ describe('generate IPC workspace rename coordination', () => {
       httpHeaders: undefined,
       queryParams: undefined,
       reasoningLevel: undefined,
+      thinkingLevelMap: undefined,
       contextWindow: 32_768,
       allowKeyless: false,
       builtin: false,
