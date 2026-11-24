@@ -17,7 +17,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "i18next": "^26.0.8",
+    "i18next": "^26.3.4",
     "react-i18next": "^17.0.6"
   },
   "peerDependencies": {
