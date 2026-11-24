@@ -9,6 +9,7 @@
 import {
   type ChatMessage,
   CodesignError,
+  canonicalBaseUrl,
   clampToThinkingLevelMap,
   ERROR_CODES,
   type ModelRef,
@@ -65,6 +66,8 @@ export interface GenerateOptions {
   allowKeyless?: boolean;
   /** Per-HTTP-request timeout forwarded to pi-ai; SDKs default to 10 minutes. */
   timeoutMs?: number;
+  /** Retry budget for explicit bounded checks; normal calls keep pi defaults. */
+  maxRetries?: number;
 }
 
 export interface GenerateResult {
@@ -412,11 +415,15 @@ export async function complete(
     throw new CodesignError('Missing API key', ERROR_CODES.PROVIDER_AUTH_MISSING);
   }
   const apiKey = trimmedApiKey.length > 0 ? trimmedApiKey : 'open-codesign-keyless';
+  const baseUrl =
+    opts.baseUrl !== undefined && opts.wire !== undefined
+      ? canonicalBaseUrl(opts.baseUrl, opts.wire)
+      : opts.baseUrl;
 
   // Gemini's OpenAI-compat endpoint rejects the `models/` prefix that its own
   // /models listing returns (issue #175). Normalize on the wire only; Settings
   // keeps the prefixed form so provider/model UX stays in sync with /models.
-  const effectiveModelId = normalizeGeminiModelId(model.modelId, opts.baseUrl);
+  const effectiveModelId = normalizeGeminiModelId(model.modelId, baseUrl);
 
   const pi = (await import('@earendil-works/pi-ai')) as unknown as {
     getModel: (provider: string, modelId: string) => PiModel | undefined;
@@ -432,6 +439,7 @@ export async function complete(
         headers?: Record<string, string>;
         onPayload?: (payload: unknown) => unknown;
         timeoutMs?: number;
+        maxRetries?: number;
       },
     ) => Promise<PiAssistantMessage>;
   };
@@ -443,7 +451,7 @@ export async function complete(
         model.provider,
         effectiveModelId,
         opts.wire,
-        opts.baseUrl,
+        baseUrl,
         opts.thinkingLevelMap,
       );
     } else if (model.provider === 'openrouter') {
@@ -456,19 +464,37 @@ export async function complete(
     }
   }
 
-  if (opts.thinkingLevelMap !== undefined) {
-    // Registry models also honor explicit endpoint configuration; never mutate
-    // pi's shared catalog entry or send a custom endpoint's map to the public URL.
+  // A catalog hit supplies capabilities, not permission to override the
+  // configured transport. SDK adapters read model.api/baseUrl, not piOpts.
+  if (opts.wire !== undefined) {
+    const routed = synthesizeWireModel(
+      model.provider,
+      effectiveModelId,
+      opts.wire,
+      baseUrl ?? piModel.baseUrl,
+      opts.thinkingLevelMap,
+    );
+    const { compat: _catalogCompat, ...catalog } = piModel;
+    piModel = {
+      ...catalog,
+      api: routed.api,
+      ...(routed.baseUrl !== undefined ? { baseUrl: routed.baseUrl } : {}),
+      ...(routed.reasoning !== undefined ? { reasoning: routed.reasoning } : {}),
+      ...(routed.thinkingLevelMap !== undefined
+        ? { thinkingLevelMap: routed.thinkingLevelMap }
+        : {}),
+    };
+    if (routed.compat !== undefined) piModel.compat = routed.compat;
+  } else if (baseUrl !== undefined || opts.thinkingLevelMap !== undefined) {
     piModel = {
       ...piModel,
-      ...(opts.wire !== undefined
+      ...(baseUrl !== undefined ? { baseUrl } : {}),
+      ...(opts.thinkingLevelMap !== undefined
         ? {
-            api: synthesizeWireModel(model.provider, effectiveModelId, opts.wire, opts.baseUrl).api,
+            reasoning: true,
+            thinkingLevelMap: expandThinkingLevelMap(opts.thinkingLevelMap),
           }
         : {}),
-      ...(opts.baseUrl !== undefined ? { baseUrl: opts.baseUrl } : {}),
-      reasoning: true,
-      thinkingLevelMap: expandThinkingLevelMap(opts.thinkingLevelMap),
     };
   }
 
@@ -483,13 +509,15 @@ export async function complete(
     headers?: Record<string, string>;
     onPayload?: (payload: unknown) => unknown;
     timeoutMs?: number;
+    maxRetries?: number;
   } = {
     apiKey,
   };
-  if (opts.baseUrl !== undefined) piOpts.baseUrl = opts.baseUrl;
+  if (baseUrl !== undefined) piOpts.baseUrl = baseUrl;
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.timeoutMs !== undefined) piOpts.timeoutMs = opts.timeoutMs;
+  if (opts.maxRetries !== undefined) piOpts.maxRetries = opts.maxRetries;
   const requestedReasoning = opts.reasoning ?? requiredReasoningDefault(effectiveModelId);
   const reasoning =
     requestedReasoning === undefined
@@ -525,10 +553,7 @@ export async function complete(
   // sub2api-issued key and you hit the plain API-key branch. Force the
   // identity headers for custom anthropic endpoints so the WAF admits us.
   // User-supplied httpHeaders keep precedence.
-  if (
-    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl) &&
-    !looksLikeClaudeOAuthToken(apiKey)
-  ) {
+  if (shouldForceClaudeCodeIdentity(opts.wire, baseUrl) && !looksLikeClaudeOAuthToken(apiKey)) {
     piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
   }
 
@@ -679,6 +704,12 @@ export {
   shouldForceClaudeCodeIdentity,
   withClaudeCodeIdentity,
 } from './claude-code-compat';
+export type { NormalizedProviderError, RecoveryCategory } from './errors';
+export {
+  classifyRecoveryCategory,
+  normalizeProviderError,
+  recoveryHintFor,
+} from './errors';
 export { looksLikeGatewayMissingMessagesApi } from './gateway-compat';
 export { isGeminiOpenAICompat, normalizeGeminiModelId } from './gemini-compat';
 export type {

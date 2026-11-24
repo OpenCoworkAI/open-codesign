@@ -1,5 +1,6 @@
 import {
   BUILTIN_PROVIDERS,
+  CHATGPT_CODEX_PROVIDER_ID,
   CodesignError,
   type Config,
   ERROR_CODES,
@@ -236,7 +237,8 @@ export function computeDeleteProviderResult(cfg: Config, toDelete: string): Dele
  * Result of resolving which provider/model to call against, given the canonical
  * cached config and the renderer's hint payload.
  */
-export interface ActiveModelResolution {
+export interface ProviderModelResolution {
+  providerName?: string;
   model: ModelRef;
   baseUrl: string | null;
   wire: WireApi;
@@ -246,8 +248,112 @@ export interface ActiveModelResolution {
   thinkingLevelMap: ThinkingLevelMap | undefined;
   contextWindow: number | undefined;
   allowKeyless: boolean;
+  builtin: boolean;
+  tlsRejectUnauthorized: boolean | undefined;
+  supportsModelsEndpoint: boolean;
+  modelDiscoveryMode: import('@open-codesign/shared').ProviderModelDiscoveryMode;
+}
+
+/**
+ * Result of resolving which provider/model to call against, given the canonical
+ * cached config and the renderer's hint payload.
+ */
+export interface ActiveModelResolution extends ProviderModelResolution {
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
+}
+
+function providerModelFromEntry(
+  providerId: string,
+  entry: ProviderEntry,
+  modelId: string,
+  cfg: Config,
+  missingSecretMessage: string,
+): ProviderModelResolution {
+  // The reserved account provider may only send its refreshable token to
+  // ChatGPT's own Codex endpoint, including for edited/imported config rows.
+  if (providerId === CHATGPT_CODEX_PROVIDER_ID) {
+    let endpoint: URL | undefined;
+    try {
+      endpoint = new URL(entry.baseUrl);
+    } catch {
+      // Invalid endpoints are rejected before reading the OAuth store.
+    }
+    if (
+      entry.wire !== 'openai-codex-responses' ||
+      endpoint?.origin !== 'https://chatgpt.com' ||
+      endpoint.pathname.replace(/\/+$/, '') !== '/backend-api' ||
+      endpoint.username !== '' ||
+      endpoint.password !== '' ||
+      endpoint.search !== '' ||
+      endpoint.hash !== '' ||
+      entry.tlsRejectUnauthorized === true ||
+      Object.keys(entry.queryParams ?? {}).length > 0
+    ) {
+      throw new CodesignError(
+        'ChatGPT sign-in requires the official Codex endpoint and wire. Use a separate API-key provider for gateways.',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+  }
+  if (Object.keys(entry.queryParams ?? {}).length > 0) {
+    throw new CodesignError(
+      'This provider configures query parameters that the runtime transport cannot send. Remove queryParams or use supported HTTP headers before testing or generating.',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  const allowKeyless = isKeylessProviderAllowed(providerId, entry);
+  // ChatGPT credentials live in the refreshable OAuth store, not config.secrets.
+  if (
+    providerId !== CHATGPT_CODEX_PROVIDER_ID &&
+    cfg.secrets[providerId] === undefined &&
+    !allowKeyless
+  ) {
+    throw new CodesignError(missingSecretMessage, ERROR_CODES.PROVIDER_KEY_MISSING);
+  }
+  const caps = resolveProviderCapabilities(providerId, entry);
+  return {
+    providerName: entry.name,
+    model: { provider: providerId, modelId },
+    baseUrl: entry.baseUrl,
+    wire: entry.wire,
+    httpHeaders: entry.httpHeaders,
+    queryParams: entry.queryParams,
+    reasoningLevel: entry.reasoningLevel,
+    thinkingLevelMap: entry.thinkingLevelMap,
+    contextWindow: entry.contextWindow,
+    allowKeyless,
+    builtin: entry.builtin === true,
+    tlsRejectUnauthorized: entry.tlsRejectUnauthorized,
+    supportsModelsEndpoint: caps.supportsModelsEndpoint,
+    modelDiscoveryMode: caps.modelDiscoveryMode,
+  };
+}
+
+/**
+ * Resolve a stored provider the same way generate would if that provider were
+ * active — used by `connection:v1:test-provider`. Does not snap to
+ * `cfg.activeProvider`.
+ */
+export function resolveProviderModel(
+  cfg: Config,
+  providerId: string,
+  modelId?: string,
+): ProviderModelResolution {
+  const entry = resolveEntryFor(cfg, providerId);
+  if (entry === null) {
+    throw new CodesignError(
+      `Provider "${providerId}" has no provider entry on disk.`,
+      ERROR_CODES.PROVIDER_NOT_SUPPORTED,
+    );
+  }
+  return providerModelFromEntry(
+    providerId,
+    entry,
+    modelId ?? entry.defaultModel,
+    cfg,
+    `No API key stored for provider "${providerId}". Re-run onboarding to add one.`,
+  );
 }
 
 export function resolveActiveModel(
@@ -262,25 +368,16 @@ export function resolveActiveModel(
       ERROR_CODES.PROVIDER_NOT_SUPPORTED,
     );
   }
-  const allowKeyless = isKeylessProviderAllowed(activeId, entry);
-  if (cfg.secrets[activeId] === undefined && !allowKeyless) {
-    throw new CodesignError(
-      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      ERROR_CODES.PROVIDER_KEY_MISSING,
-    );
-  }
   const overridden = activeId !== hint.provider;
   const modelId = overridden ? cfg.activeModel : hint.modelId;
   return {
-    model: { provider: activeId, modelId },
-    baseUrl: entry.baseUrl,
-    wire: entry.wire,
-    httpHeaders: entry.httpHeaders,
-    queryParams: entry.queryParams,
-    reasoningLevel: entry.reasoningLevel,
-    thinkingLevelMap: entry.thinkingLevelMap,
-    contextWindow: entry.contextWindow,
-    allowKeyless,
+    ...providerModelFromEntry(
+      activeId,
+      entry,
+      modelId,
+      cfg,
+      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
+    ),
     overridden,
   };
 }

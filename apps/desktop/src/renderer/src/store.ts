@@ -11,6 +11,7 @@ import type {
   DiagnosticEventRow,
   LocalInputFile,
   OnboardingState,
+  ProviderFailureContext,
   ReportableError,
   ReportEventInput,
   ReportEventResult,
@@ -146,6 +147,7 @@ export interface CodesignState {
       stage: GenerationStage;
       startedAt?: number;
       awaitingResponse?: boolean;
+      providerFailure?: ProviderFailureContext;
       chatPersisted?: boolean;
       streamedAssistantText?: string;
       submittedContext?: { referenceUrl?: string; comments: Record<string, string> };

@@ -1,5 +1,5 @@
 diff --git a/dist/providers/anthropic.js b/dist/providers/anthropic.js
-index fdffa11..05f6568 100644
+index fdffa1159609dc76f58a07b3bde8d08c7f0dccd5..05f6568d42ae729b883b4e387bdc1d32e7f40a6b 100644
 --- a/dist/providers/anthropic.js
 +++ b/dist/providers/anthropic.js
 @@ -342,6 +342,7 @@ export const streamAnthropic = (model, context, options) => {
@@ -21,8 +21,21 @@ index fdffa11..05f6568 100644
              const blocks = [];
              for (const block of msg.content) {
                  if (block.type === "text") {
+diff --git a/dist/providers/openai-codex-responses.js b/dist/providers/openai-codex-responses.js
+index 7fd5d35347dd6ca1f37ea11120a20361a30d9b3f..79b883a4dc9d030f06c5fd0a6c218405538e58c5 100644
+--- a/dist/providers/openai-codex-responses.js
++++ b/dist/providers/openai-codex-responses.js
+@@ -456,7 +456,7 @@ async function* mapCodexEvents(events) {
+         if (type === "response.done" || type === "response.completed" || type === "response.incomplete") {
+             const response = event.response;
+             const normalizedResponse = response
+-                ? { ...response, status: normalizeCodexStatus(response.status) }
++                ? { ...response, status: type === "response.incomplete" ? "incomplete" : normalizeCodexStatus(response.status) }
+                 : response;
+             yield { ...event, type: "response.completed", response: normalizedResponse };
+             return;
 diff --git a/dist/providers/openai-responses-shared.js b/dist/providers/openai-responses-shared.js
-index 3d970f3..a86ba4e 100644
+index 3d970f38df3030a2528afac242647334d81e7e4f..1685139b70865fefbfdbba8bbac920fb33deb6bd 100644
 --- a/dist/providers/openai-responses-shared.js
 +++ b/dist/providers/openai-responses-shared.js
 @@ -102,6 +102,10 @@ export function convertResponsesMessages(model, context, allowedToolCallProvider
@@ -36,8 +49,50 @@ index 3d970f3..a86ba4e 100644
              const output = [];
              const assistantMsg = msg;
              const isDifferentModel = assistantMsg.model !== model.id &&
+@@ -220,6 +224,7 @@ export function convertResponsesTools(tools, options) {
+ export async function processResponsesStream(openaiStream, output, stream, model, options) {
+     let currentItem = null;
+     let currentBlock = null;
++    let terminalReceived = false;
+     const blocks = output.content;
+     const blockIndex = () => blocks.length - 1;
+     for await (const event of openaiStream) {
+@@ -428,8 +433,13 @@ export async function processResponsesStream(openaiStream, output, stream, model
+                 stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
+             }
+         }
+-        else if (event.type === "response.completed") {
++        else if (event.type === "response.completed" || event.type === "response.incomplete") {
+             const response = event.response;
++            const status = event.type === "response.incomplete" ? "incomplete" : response?.status;
++            if (!response || !["completed", "incomplete", "failed", "cancelled"].includes(status)) {
++                throw new Error("Response stream ended with an invalid terminal status");
++            }
++            terminalReceived = true;
+             if (response?.id) {
+                 output.responseId = response.id;
+             }
+@@ -453,7 +463,7 @@ export async function processResponsesStream(openaiStream, output, stream, model
+                 options.applyServiceTierPricing(output.usage, serviceTier);
+             }
+             // Map status to stop reason
+-            output.stopReason = mapStopReason(response?.status);
++            output.stopReason = mapStopReason(status);
+             if (output.content.some((b) => b.type === "toolCall") && output.stopReason === "stop") {
+                 output.stopReason = "toolUse";
+             }
+@@ -472,6 +482,9 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             throw new Error(msg);
+         }
+     }
++    if (!terminalReceived) {
++        throw new Error("Response stream ended before a terminal completion event");
++    }
+ }
+ function mapStopReason(status) {
+     if (!status)
 diff --git a/dist/providers/openai-responses.js b/dist/providers/openai-responses.js
-index 2758610..ea0292f 100644
+index 275861009fdae39f2162e8695bace5033790c34d..ea0292ffbf56418e18a03e68ef83d7d4b9e474e0 100644
 --- a/dist/providers/openai-responses.js
 +++ b/dist/providers/openai-responses.js
 @@ -95,7 +95,13 @@ export const streamOpenAIResponses = (model, context, options) => {
@@ -56,7 +111,7 @@ index 2758610..ea0292f 100644
                  applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
              });
 diff --git a/dist/providers/simple-options.js b/dist/providers/simple-options.js
-index 45d8e55..c57aa7b 100644
+index 45d8e55726d5faf424d53d1ad43ed0b44891e49e..c57aa7b62348926127daa027f7835d81e4c76e2c 100644
 --- a/dist/providers/simple-options.js
 +++ b/dist/providers/simple-options.js
 @@ -10,6 +10,7 @@ export function buildBaseOptions(_model, options, apiKey) {
@@ -68,7 +123,7 @@ index 45d8e55..c57aa7b 100644
          websocketConnectTimeoutMs: options?.websocketConnectTimeoutMs,
          maxRetries: options?.maxRetries,
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index b2a00df..2f7cb6f 100644
+index b2a00df75a4a0f69b84afaf11527feca23abb624..2f7cb6f5c3d434e22f046fa7a1bad0c1168a83d0 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
 @@ -31,7 +31,15 @@ export interface ProviderResponse {

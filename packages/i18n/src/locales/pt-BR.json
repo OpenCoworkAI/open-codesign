@@ -519,7 +519,11 @@
         "connectionOk": "Conexão OK",
         "connectionOkDegraded": "Conectado — sem listagem de modelos; a inferência ainda funciona",
         "connectionFailed": "Falha na conexão",
-        "saveFailed": "Falha ao salvar o provedor"
+        "saveFailed": "Falha ao salvar o provedor",
+        "connectionDegraded": "Conectado, lista de modelos indisponível",
+        "connectionDegradedBody": "O generate vai funcionar. Este endpoint não expõe /models; o Open CoDesign confirmou o caminho real de inferência.",
+        "connectionDiverges": "Alcançável, mas o generate falharia",
+        "connectionDivergesBody": "O endpoint /models respondeu, mas a URL de inferência usada no generate falhou. O teste de conexão e o generate compartilham o mesmo contrato de invocação."
       },
       "discovery": {
         "manualHint": "Os IDs de modelo são informados manualmente neste provedor.",
@@ -1064,7 +1068,7 @@
       "endpointNotFound": "A URL base já contém um caminho de versão, mas o provedor não expôs esta rota.",
       "modelsListingNotApplicable": "Este provedor não expõe um endpoint de listagem de modelos. Isso é esperado — informe um ID e use a inferência em vez de tratar a ausência de /models como falha grave.",
       "gatewayIncompatible": "O gateway aceitou a conexão, mas não implementa a API deste provedor. Tente trocar o wire, por exemplo para openai-chat.",
-      "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo. Test Connection ainda pode passar porque só verifica o endpoint /models.",
+      "gatewayWafBlocked": "O gateway ou proxy reverso bloqueou a geração antes de ela chegar ao modelo.",
       "openaiResponsesMisconfigured": "O endpoint rejeitou o formato da requisição. O wire pode estar errado; tente openai-chat.",
       "unsupportedRole": "O endpoint rejeitou o formato de role enviado ao modelo. Normalmente é incompatibilidade de wire ou política do modelo.",
       "reasoningPolicy": "O endpoint rejeitou metadados de reasoning para este modelo. Reduza a profundidade de reasoning e tente novamente.",
@@ -1078,7 +1082,8 @@
       "referenceUrlTimeout": "A busca da URL de referência excedeu o tempo limite.",
       "referenceUrlTooLarge": "O conteúdo da URL de referência é grande demais para incluir.",
       "serverError": "Erro do servidor upstream. Pode ser temporário; tente novamente.",
-      "unknown": "Erro desconhecido — veja o log completo para detalhes."
+      "unknown": "Erro desconhecido — veja o log completo para detalhes.",
+      "invokeContractDiverged": "O provedor é alcançável, mas o endpoint de inferência usado no generate falhou. Sucesso em /models não basta: o generate do Open CoDesign usa a URL real de invocação deste wire."
     },
     "fix": {
       "updateKey": "Atualizar chave",
@@ -1162,6 +1167,26 @@
       "openFailedCopyHint": "Copie a URL da issue e abra manualmente.",
       "openFailedTitle": "Não foi possível abrir o navegador",
       "recentlyReportedNoNumber": "Você reportou isso {{relative}}."
+    },
+    "recovery": {
+      "auth_key_invalid": "Confira ou substitua a chave de API nas configurações do provedor.",
+      "auth_key_expired": "Entre novamente ou substitua a chave de API expirada.",
+      "auth_permission": "Confira as permissões da chave de API no painel do provedor.",
+      "region_restricted": "Este provedor não oferece suporte a esta conta ou região. Entre em contato com o provedor ou escolha outro provedor disponível.",
+      "endpoint_not_found": "Confira a URL base, o caminho e a porta do provedor.",
+      "endpoint_missing_v1": "Confira se este provedor exige /v1 na URL base.",
+      "wire_incompatible": "Selecione um protocolo de API compatível nas configurações avançadas.",
+      "gateway_incompatible": "Este gateway não implementa a API selecionada. Escolha um protocolo compatível ou outro provedor.",
+      "model_not_found": "Confira o ID do modelo ou escolha um modelo disponível.",
+      "model_not_supported_role": "Escolha um modelo compatível com os papéis de mensagem system e developer necessários.",
+      "rate_limit": "Aguarde antes de tentar novamente ou confira os limites de solicitações.",
+      "billing": "Confira o faturamento e a cota restante do provedor.",
+      "network_unreachable": "Confira a conexão de rede, a URL do provedor e o firewall.",
+      "network_timeout": "Confira a rede e tente novamente quando o provedor estiver acessível.",
+      "upstream_server_error": "O provedor apresentou um erro no servidor. Tente novamente mais tarde.",
+      "request_too_large": "Reduza o tamanho dos anexos, o texto da solicitação ou o histórico.",
+      "tls_error": "Confira o certificado e a configuração TLS do provedor.",
+      "unknown": "Abra o diagnóstico para consultar os detalhes do erro."
     }
   },
   "demos": {
