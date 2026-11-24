@@ -199,6 +199,30 @@ describe('pingProvider', () => {
     }
   });
 
+  it('validates WorldRouter with an authenticated GET /v1/models', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toBe('https://inference-api.worldrouter.ai/v1/models');
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer sk-worldrouter-test');
+      return new Response(
+        JSON.stringify({ data: [{ id: 'claude-sonnet-5-5' }, { id: 'gemini-4-neon' }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const result = await pingProvider('worldrouter', 'sk-worldrouter-test');
+    expect(result).toEqual({ ok: true, modelCount: 2 });
+  });
+
+  it('rejects a WorldRouter key on HTTP 401', async () => {
+    mockFetch(async () => new Response('no', { status: 401 }));
+    const result = await pingProvider('worldrouter', 'sk-worldrouter-bad');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('401');
+      expect(result.message).toContain('worldrouter');
+    }
+  });
+
   it('posts the LLMTR chat probe to a custom base URL', async () => {
     mockFetch(async (url, init) => {
       expect(url).toBe('https://gateway.example/v1/chat/completions');

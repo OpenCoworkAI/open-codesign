@@ -44,6 +44,13 @@ describe('rewriteUpstreamMessage', () => {
     expect(result.message).toContain('llmtr.com/docs/en/api-keys/');
   });
 
+  it('rewrites leaked openai URL to WorldRouter URL', () => {
+    const result = rewriteUpstreamMessage(LEAKED, 'worldrouter', 401);
+    expect(result.rewritten).toBe(true);
+    expect(result.message).not.toContain('openai.com');
+    expect(result.message).toContain('worldrouter.ai/dashboard/api-keys');
+  });
+
   it('rewrites to deepseek URL even though it is not in the typed enum', () => {
     const result = rewriteUpstreamMessage(LEAKED, 'deepseek', 401);
     expect(result.message).toContain('platform.deepseek.com/api_keys');

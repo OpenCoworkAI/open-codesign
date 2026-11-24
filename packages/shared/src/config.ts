@@ -8,6 +8,7 @@ const ProviderIdEnum = z.enum([
   'openai',
   'atlascloud',
   'llmtr',
+  'worldrouter',
   'google',
   'openrouter',
   'groq',
@@ -24,6 +25,7 @@ export const SUPPORTED_ONBOARDING_PROVIDERS = [
   'openai',
   'atlascloud',
   'llmtr',
+  'worldrouter',
   'openrouter',
   'ollama',
 ] as const;
@@ -345,6 +347,22 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
       modelDiscoveryMode: 'models',
     },
   },
+  worldrouter: {
+    id: 'worldrouter',
+    name: 'WorldRouter',
+    builtin: true,
+    wire: 'openai-chat',
+    baseUrl: 'https://inference-api.worldrouter.ai/v1',
+    envKey: 'WORLDROUTER_API_KEY',
+    defaultModel: 'claude-sonnet-5-5',
+    capabilities: {
+      supportsKeyless: false,
+      supportsModelsEndpoint: true,
+      supportsReasoning: false,
+      requiresClaudeCodeIdentity: false,
+      modelDiscoveryMode: 'models',
+    },
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -616,6 +634,13 @@ export const PROVIDER_SHORTLIST: Record<SupportedOnboardingProvider, ProviderSho
     keyHelpUrl: 'https://llmtr.com/docs/en/api-keys/',
     primary: ['qwen/qwen3.8-27b-free', 'llmtr/qwen3-8-27b'],
     defaultPrimary: 'qwen/qwen3.8-27b-free',
+  },
+  worldrouter: {
+    provider: 'worldrouter',
+    label: 'WorldRouter',
+    keyHelpUrl: 'https://www.worldrouter.ai/dashboard/api-keys',
+    primary: ['claude-sonnet-5-5', 'gemini-4-neon'],
+    defaultPrimary: 'claude-sonnet-5-5',
   },
   openrouter: {
     provider: 'openrouter',

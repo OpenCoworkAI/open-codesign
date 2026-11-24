@@ -23,6 +23,7 @@ export const PROVIDER_KEY_HELP_URL: Partial<Record<ProviderId, string>> = {
   openai: 'https://platform.openai.com/account/api-keys',
   atlascloud: 'https://atlascloud.ai/',
   llmtr: 'https://llmtr.com/docs/en/api-keys/',
+  worldrouter: 'https://www.worldrouter.ai/dashboard/api-keys',
   anthropic: 'https://console.anthropic.com/settings/keys',
   openrouter: 'https://openrouter.ai/settings/keys',
   google: 'https://aistudio.google.com/app/apikey',
