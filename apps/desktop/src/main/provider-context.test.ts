@@ -1,5 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { createProviderContextStore } from './provider-context';
+import { createProviderContextStore, mergeFinalProviderContext } from './provider-context';
+
+describe('final provider error context', () => {
+  it('keeps authoritative terminal identity over a stale transient retry', () => {
+    expect(
+      mergeFinalProviderContext(
+        {
+          upstream_status: 403,
+          upstream_code: 'unsupported_country_region_territory',
+          recovery_category: 'region_restricted',
+          upstream_request_id: undefined,
+          retry_count: 0,
+        },
+        {
+          upstream_status: 503,
+          upstream_code: 'server_error',
+          recovery_category: 'upstream_server_error',
+          upstream_request_id: 'last-retry',
+          retry_count: 2,
+        },
+      ),
+    ).toEqual({
+      upstream_status: 403,
+      upstream_code: 'unsupported_country_region_territory',
+      recovery_category: 'region_restricted',
+      retry_count: 2,
+    });
+  });
+  it('retains available retry context when final normalization lacks upstream identity', () => {
+    expect(
+      mergeFinalProviderContext(
+        { upstream_status: undefined, recovery_category: 'unknown', retry_count: 0 },
+        { upstream_status: 429, recovery_category: 'rate_limit', retry_count: 1 },
+      ),
+    ).toEqual({ upstream_status: 429, recovery_category: 'rate_limit', retry_count: 1 });
+  });
+});
 
 describe('createProviderContextStore', () => {
   it('remember then consume returns the context and deletes it', () => {

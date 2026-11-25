@@ -24,6 +24,7 @@ import type {
   ModelRef,
   OnboardingState,
   PreviewMode,
+  ProviderFailureContext,
   ProviderModelDiscoveryMode,
   ReasoningLevel,
   ReportEventInput,
@@ -38,6 +39,7 @@ import type {
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
   SupportedOnboardingProvider,
+  ThinkingLevelMap,
   WebSearchSettingsState,
   WebSearchTestResult,
   WireApi,
@@ -223,6 +225,8 @@ export interface ProviderRow {
   hasKey: boolean;
   requiresApiKey?: boolean;
   reasoningLevel?: ReasoningLevel;
+  /** Whitelist remap of thinking levels to the endpoint's wire vocabulary. */
+  thinkingLevelMap?: ThinkingLevelMap;
   /** Configured context window in tokens; absent when the model catalog decides. */
   contextWindow?: number;
   /** Per-provider opt-in to skip TLS verification on outbound HTTPS.
@@ -358,6 +362,7 @@ export interface AgentStreamEvent {
   // error
   message?: string;
   code?: string;
+  providerFailure?: ProviderFailureContext;
 }
 
 export interface GenerationStatusResult {

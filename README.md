@@ -235,6 +235,31 @@ JSX previews and standalone exports use `system-ui` by default without downloadi
 
 Credentials stay in `~/.config/open-codesign/config.toml` and the ChatGPT OAuth token store under the app config directory. Nothing leaves your machine unless your chosen model route requires it.
 
+#### Linux secure-storage selection
+
+On desktops Electron does not recognize, an installed Secret Service or KWallet
+can still be missed and Electron may select its insecure `basic_text` backend.
+Open CoDesign refuses to save new API keys with that backend.
+
+To persist your installed secure backend, create `linux-password-store.json` in
+the app config folder (normally `${XDG_CONFIG_HOME:-$HOME/.config}/open-codesign`,
+or the custom config folder shown in Settings → Storage):
+
+```json
+{"schemaVersion": 1, "passwordStore": "gnome-libsecret"}
+```
+
+Choose `gnome-libsecret`, `kwallet`, `kwallet5`, or `kwallet6` to match your installed
+and running secret service, then fully quit and restart the app. The preference
+is applied before Electron selects its key provider. An explicit
+`--password-store` launch flag takes precedence; remove the file to restore
+Electron's desktop-based selection. Changing providers may require re-entering
+keys encrypted with the previous provider. The preference does not install or
+unlock a secret service and never enables a plaintext fallback.
+
+See [Electron's safeStorage backend documentation](https://www.electronjs.org/docs/latest/api/safe-storage#safestoragegetselectedstoragebackend-linux)
+for the supported backends.
+
 ### 3. Type your first prompt
 
 Pick one of **fifteen built-in demos** — landing page, dashboard, pitch slide, pricing, mobile app, chat UI, event calendar, blog article, receipt/invoice, portfolio, settings panel, and more — or describe your own. A sandboxed prototype appears in seconds.

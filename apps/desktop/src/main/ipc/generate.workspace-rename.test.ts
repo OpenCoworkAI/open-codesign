@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Agent } from '@earendil-works/pi-agent-core';
 import { createAssistantMessageEventStream, getModel } from '@earendil-works/pi-ai';
-import type { Design } from '@open-codesign/shared';
+import { CodesignError, type Design } from '@open-codesign/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Handler = (event: unknown, raw: unknown) => unknown;
@@ -122,6 +122,8 @@ vi.mock('@open-codesign/core', async (importOriginal) => {
 vi.mock('@open-codesign/providers', async (importOriginal) => ({
   detectProviderFromKey: vi.fn(() => 'mock'),
   generateImage: vi.fn(),
+  normalizeProviderError: (await importOriginal<typeof import('@open-codesign/providers')>())
+    .normalizeProviderError,
   normalizeGeminiModelId: (await importOriginal<typeof import('@open-codesign/providers')>())
     .normalizeGeminiModelId,
 }));
@@ -220,6 +222,7 @@ import {
 import {
   createDesign,
   initInMemoryDb,
+  listDiagnosticEvents,
   listSnapshots,
   updateDesignWorkspace,
 } from '../snapshots-db';
@@ -477,6 +480,76 @@ describe('generate IPC workspace rename coordination', () => {
       'cursor',
     );
     expect(vi.mocked(generateViaAgent)).not.toHaveBeenCalled();
+  });
+  it.each([
+    0, 2,
+  ])('journals only allowlisted recovery identity and records the final failure after %s retries', async (retryCount) => {
+    vi.mocked(generateViaAgent).mockImplementationOnce(async (input) => {
+      if (retryCount > 0)
+        input.logger?.warn('provider.error.final', {
+          upstream_status: 429,
+          upstream_code: 'insufficient_quota',
+          recovery_category: 'billing',
+          retry_count: retryCount,
+          upstream_request_id: 'quota-request',
+        });
+      throw new CodesignError('Provider request failed', 'PROVIDER_ERROR', {
+        cause: {
+          status: 429,
+          code: 'insufficient_quota',
+          message: 'quota exhausted for sk-aaaaaaaaaaaaaaaaaaaaa',
+          headers: { authorization: 'Bearer synthetic-secret', 'x-request-id': 'quota-request' },
+          responseBody: 'quota exhausted for sk-aaaaaaaaaaaaaaaaaaaaa',
+        },
+      });
+    });
+    const db = initTestDb();
+    const design = createDesign(db, 'Quota recovery');
+    updateDesignWorkspace(db, design.id, defaultWorkspaceRoot);
+    const dispose = registerGenerateIpc({ db, getMainWindow: () => null });
+    try {
+      await expect(
+        getHandler('codesign:v1:generate')(null, {
+          schemaVersion: 1,
+          generationId: 'quota-run',
+          designId: design.id,
+          prompt: 'Synthetic request',
+          history: [],
+          attachments: [],
+          model: { provider: 'mock-provider', modelId: 'mock-model' },
+        }),
+      ).rejects.toThrow('Provider request failed');
+      const recovered = (await getHandler('codesign:v1:recover-runs')(null, {
+        schemaVersion: 1,
+        cursors: {},
+      })) as { events: Array<{ type: string; providerFailure?: unknown }> };
+      expect(recovered.events.at(-1)).toMatchObject({
+        type: 'run_settled',
+        providerFailure: { recoveryCategory: 'billing', status: 429 },
+      });
+      expect(recovered.events.at(-1)?.providerFailure).toEqual({
+        recoveryCategory: 'billing',
+        status: 429,
+      });
+      const context = listDiagnosticEvents(db).find(
+        (event) => event.runId === 'quota-run',
+      )?.context;
+      expect(context).toMatchObject({
+        recovery_category: 'billing',
+        upstream_status: 429,
+        upstream_request_id: 'quota-request',
+        retry_count: retryCount,
+      });
+      expect(
+        listDiagnosticEvents(db, { includeTransient: true }).filter(
+          (event) => event.runId === 'quota-run',
+        ),
+      ).toHaveLength(1);
+      expect(JSON.stringify(context)).not.toContain('sk-aaaaaaaaaaaaaaaaaaaaa');
+      expect(JSON.stringify(context)).not.toContain('authorization');
+    } finally {
+      dispose();
+    }
   });
   it('recovers interrupted persisted requests without starting another generation', async () => {
     const db = initTestDb();
@@ -875,8 +948,13 @@ describe('generate IPC workspace rename coordination', () => {
       httpHeaders: undefined,
       queryParams: undefined,
       reasoningLevel: undefined,
+      thinkingLevelMap: undefined,
       contextWindow: 32_768,
       allowKeyless: false,
+      builtin: false,
+      tlsRejectUnauthorized: undefined,
+      supportsModelsEndpoint: true,
+      modelDiscoveryMode: 'models',
       overridden: false,
     });
     const db = initTestDb();

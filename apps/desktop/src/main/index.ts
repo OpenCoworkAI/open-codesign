@@ -19,6 +19,7 @@ import { registerImageGenerationSettingsIpc } from './image-generation-settings'
 import { maybeAbortIfRunningFromDmg } from './install-check';
 import { registerIpcHandlers } from './ipc/register';
 import { getPendingUpdate, setupAutoUpdater } from './ipc/update';
+import { applyLinuxPasswordStore } from './linux-password-store';
 import { registerLocaleIpc } from './locale-ipc';
 import { getLogger, initLogger } from './logger';
 import { registerMemoryIpc } from './memory-ipc';
@@ -67,6 +68,17 @@ const storageLocations = initStorageSettings(defaultUserDataDir);
 if (storageLocations.dataDir !== undefined) {
   mkdirSync(storageLocations.dataDir, { recursive: true });
   app.setPath('userData', storageLocations.dataDir);
+}
+
+const passwordStoreSelection = applyLinuxPasswordStore(
+  process.platform,
+  configDir(),
+  app.commandLine,
+);
+if (passwordStoreSelection.warning !== undefined) {
+  getLogger('main').warn('keychain.passwordStore.preference.invalid', {
+    message: passwordStoreSelection.warning,
+  });
 }
 
 type NavigationEvent = { preventDefault: () => void };

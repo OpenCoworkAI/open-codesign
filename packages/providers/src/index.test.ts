@@ -9,7 +9,13 @@ vi.mock('@earendil-works/pi-ai', () => ({
   completeSimple: (...args: unknown[]) => completeSimpleMock(...args),
 }));
 
-import { complete, detectProviderFromKey, inferReasoning } from './index';
+import {
+  clampToThinkingLevelMap,
+  complete,
+  detectProviderFromKey,
+  expandThinkingLevelMap,
+  inferReasoning,
+} from './index';
 
 const MODEL: ModelRef = { provider: 'openai', modelId: 'gpt-4o' };
 
@@ -310,6 +316,38 @@ describe('complete', () => {
     );
 
     expect(result.content).toBe('ok');
+  });
+
+  it('canonicalizes openai-chat baseUrl the same way generate and connection tests do', async () => {
+    getModelMock.mockReturnValue(undefined);
+    completeSimpleMock.mockImplementationOnce(async (model, _context, opts) => {
+      expect(opts.baseUrl).toBe('https://gateway.example.com/v1');
+      expect(model.baseUrl).toBe('https://gateway.example.com/v1');
+      return {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'ok' }],
+        api: 'openai-completions',
+        provider: 'gateway',
+        model: 'gpt-4o',
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    });
+
+    await complete({ provider: 'gateway', modelId: 'gpt-4o' }, [{ role: 'user', content: 'hi' }], {
+      apiKey: 'sk-test',
+      wire: 'openai-chat',
+      baseUrl: 'https://gateway.example.com',
+    });
+    expect(completeSimpleMock).toHaveBeenCalledTimes(1);
   });
 
   it('appends image inputs to the final user turn for openai-codex-responses', async () => {
@@ -855,6 +893,116 @@ describe('complete — openai-responses strict instructions', () => {
       ],
       { apiKey: 'sk-ant-test' },
     );
+  });
+});
+
+describe('thinkingLevelMap', () => {
+  it('expands the whitelist and marks unlisted levels unsupported', () => {
+    expect(
+      expandThinkingLevelMap({ off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' }),
+    ).toEqual({
+      off: 'none',
+      minimal: null,
+      low: 'low',
+      medium: 'medium',
+      high: null,
+      xhigh: 'xhigh',
+    });
+  });
+
+  it('flags the synthesized model as reasoning and forwards the map to pi-ai', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+
+    await complete(
+      { provider: 'custom-ninfer', modelId: 'qwen-local' },
+      [{ role: 'user', content: 'Reply OK' }],
+      {
+        apiKey: '',
+        allowKeyless: true,
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:8090/v1',
+        reasoning: 'xhigh',
+        thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+      },
+    );
+
+    const [model, , piOpts] = completeSimpleMock.mock.calls[0] as [
+      { reasoning?: boolean; thinkingLevelMap?: Record<string, string | null> },
+      unknown,
+      { reasoning?: string },
+    ];
+    expect(model.reasoning).toBe(true);
+    expect(model.thinkingLevelMap).toEqual({
+      off: 'none',
+      minimal: null,
+      low: 'low',
+      medium: 'medium',
+      high: null,
+      xhigh: 'xhigh',
+    });
+    expect(piOpts.reasoning).toBe('xhigh');
+  });
+
+  it('clamps a masked requested level before forwarding it to pi-ai', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'OK' }],
+      stopReason: 'stop',
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    });
+
+    await complete(
+      { provider: 'custom-ninfer', modelId: 'qwen-local' },
+      [{ role: 'user', content: 'Reply OK' }],
+      {
+        apiKey: '',
+        allowKeyless: true,
+        wire: 'openai-chat',
+        baseUrl: 'http://127.0.0.1:8090/v1',
+        reasoning: 'high',
+        thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+      },
+    );
+
+    const piOpts = completeSimpleMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(piOpts.reasoning).toBe('xhigh');
+  });
+});
+
+describe('clampToThinkingLevelMap', () => {
+  const map = { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' };
+
+  it('passes listed levels through unchanged', () => {
+    expect(clampToThinkingLevelMap('medium', map)).toBe('medium');
+    expect(clampToThinkingLevelMap('off', map)).toBe('off');
+  });
+
+  it('prefers the closest deeper level, then the closest shallower one', () => {
+    const sparse = { off: 'none', medium: 'medium', xhigh: 'xhigh' };
+    expect(clampToThinkingLevelMap('minimal', sparse)).toBe('medium');
+    expect(clampToThinkingLevelMap('low', sparse)).toBe('medium');
+    expect(clampToThinkingLevelMap('high', map)).toBe('xhigh');
+  });
+
+  it('falls back to the closest shallower level when nothing deeper is listed', () => {
+    const shallow = { off: 'none', low: 'low', medium: 'medium' };
+    expect(clampToThinkingLevelMap('high', shallow)).toBe('medium');
+    expect(clampToThinkingLevelMap('xhigh', shallow)).toBe('medium');
+  });
+
+  it('never escalates off, even when the map omits it', () => {
+    expect(clampToThinkingLevelMap('off', { low: 'low' })).toBe('off');
+  });
+
+  it('clamps to off when an explicit whitelist lists no levels', () => {
+    expect(clampToThinkingLevelMap('high', {})).toBe('off');
+  });
+
+  it('passes the level through untouched when no map is configured', () => {
+    expect(clampToThinkingLevelMap('high', undefined)).toBe('high');
   });
 });
 

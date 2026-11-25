@@ -564,6 +564,68 @@ describe('generateViaAgent()', () => {
     expect(model?.compat?.supportsDeveloperRole).toBe(false);
   });
 
+  it('applies a provider thinkingLevelMap to the synthesized agent model', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-ninfer', modelId: 'qwen-local' },
+      apiKey: '',
+      allowKeyless: true,
+      baseUrl: 'http://127.0.0.1:8090/v1',
+      wire: 'openai-chat',
+      reasoningLevel: 'xhigh',
+      thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+    });
+
+    const model = agentCalls[0]?.options.initialState?.model as
+      | { reasoning?: boolean; thinkingLevelMap?: Record<string, string | null> }
+      | undefined;
+    expect(model?.reasoning).toBe(true);
+    expect(model?.thinkingLevelMap).toEqual({
+      off: 'none',
+      minimal: null,
+      low: 'low',
+      medium: 'medium',
+      high: null,
+      xhigh: 'xhigh',
+    });
+  });
+
+  it('clamps a configured reasoning level onto the provider thinkingLevelMap', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-ninfer', modelId: 'qwen-local' },
+      apiKey: '',
+      allowKeyless: true,
+      baseUrl: 'http://127.0.0.1:8090/v1',
+      wire: 'openai-chat',
+      reasoningLevel: 'high',
+      thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+    });
+
+    expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('xhigh');
+  });
+
+  it('never escalates an explicit off reasoning level', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'custom-ninfer', modelId: 'qwen-local' },
+      apiKey: '',
+      allowKeyless: true,
+      baseUrl: 'http://127.0.0.1:8090/v1',
+      wire: 'openai-chat',
+      reasoningLevel: 'off',
+      thinkingLevelMap: { low: 'low', medium: 'medium', xhigh: 'xhigh' },
+    });
+
+    expect(agentCalls[0]?.options.initialState?.thinkingLevel).toBe('off');
+  });
+
   it('omits non-persisted reasoning items from OpenAI Responses store=false payloads', async () => {
     const payload = {
       model: 'gpt-5.5',

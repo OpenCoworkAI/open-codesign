@@ -11,6 +11,7 @@ import {
   getAddProviderDefaults,
   isKeylessProviderAllowed,
   resolveActiveModel,
+  resolveProviderModel,
   toProviderRows,
 } from './provider-settings';
 
@@ -513,6 +514,31 @@ describe('resolveActiveModel', () => {
     expect(result.reasoningLevel).toBe('off');
   });
 
+  it('threads through the per-provider thinking level map for the canonical active', () => {
+    const cfg = makeCfg({
+      provider: 'openai',
+      modelPrimary: 'gpt-5.5',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+      },
+      providers: {
+        openai: {
+          ...BUILTIN_PROVIDERS.openai,
+          defaultModel: 'gpt-5.5',
+          thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+        },
+      },
+    });
+    const result = resolveActiveModel(cfg, { provider: 'openai', modelId: 'gpt-5.5' });
+
+    expect(result.thinkingLevelMap).toEqual({
+      off: 'none',
+      low: 'low',
+      medium: 'medium',
+      xhigh: 'xhigh',
+    });
+  });
+
   it('threads through the per-provider context window for the canonical active', () => {
     const cfg = makeCfg({
       provider: 'ollama',
@@ -647,5 +673,34 @@ describe('resolveActiveModel', () => {
         modelId: 'gpt-5.4',
       }),
     ).toThrowError(CodesignError);
+  });
+
+  it('threads builtin and model-discovery flags used by the invoke contract', () => {
+    const result = resolveActiveModel(baseCfg, {
+      provider: 'openrouter',
+      modelId: 'anthropic/claude-haiku-3',
+    });
+    expect(result.builtin).toBe(true);
+    expect(result.supportsModelsEndpoint).toBe(true);
+    expect(result.modelDiscoveryMode).toBe('models');
+  });
+});
+
+describe('resolveProviderModel', () => {
+  it('does not snap a named provider back to cfg.activeProvider', () => {
+    const cfg = makeCfg({
+      provider: 'openrouter',
+      modelPrimary: 'anthropic/claude-sonnet-4.6',
+      secrets: {
+        openai: { ciphertext: 'enc-oai' },
+        openrouter: { ciphertext: 'enc-or' },
+      },
+      baseUrls: { openai: 'https://api.duckcoding.ai/v1' },
+    });
+
+    const result = resolveProviderModel(cfg, 'openai', 'gpt-4o');
+    expect(result.model).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+    expect(result.baseUrl).toBe('https://api.duckcoding.ai/v1');
+    expect(result.wire).toBe('openai-chat');
   });
 });

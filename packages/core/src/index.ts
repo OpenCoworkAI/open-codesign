@@ -12,6 +12,7 @@ import type {
   ResourceStateV1,
   SelectedElement,
   StoredDesignSystem,
+  ThinkingLevelMap,
   WireApi,
 } from '@open-codesign/shared';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
@@ -246,6 +247,12 @@ export interface GenerateInput {
    */
   reasoningLevel?: ReasoningLevel | undefined;
   /**
+   * Whitelist remap of thinking levels to the provider's wire vocabulary
+   * (`ProviderEntry.thinkingLevelMap`). When present, unlisted levels are
+   * treated as unsupported and `reasoning` is forced on.
+   */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
+  /**
    * Context window, in tokens, configured for the provider
    * (`ProviderEntry.contextWindow`). When absent, core resolves it from pi-ai's
    * catalog via `resolveContextWindow`.
@@ -346,6 +353,8 @@ export interface ApplyCommentInput {
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
   reasoningLevel?: ReasoningLevel | undefined;
+  /** @see GenerateInput.thinkingLevelMap */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -570,6 +579,7 @@ export async function applyComment(
     ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
     ...(input.allowKeyless !== undefined ? { allowKeyless: input.allowKeyless } : {}),
     ...(input.reasoningLevel !== undefined ? { reasoningLevel: input.reasoningLevel } : {}),
+    ...(input.thinkingLevelMap !== undefined ? { thinkingLevelMap: input.thinkingLevelMap } : {}),
     ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
     ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
     ...(input.referenceUrl !== undefined ? { referenceUrl: input.referenceUrl } : {}),
@@ -598,6 +608,8 @@ export interface GenerateTitleInput {
   allowKeyless?: boolean | undefined;
   /** @see GenerateInput.reasoningLevel */
   reasoningLevel?: ReasoningLevel | undefined;
+  /** @see GenerateInput.thinkingLevelMap */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   signal?: AbortSignal | undefined;
   logger?: CoreLogger | undefined;
 }
@@ -655,6 +667,9 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string> 
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
+        ...(input.thinkingLevelMap !== undefined
+          ? { thinkingLevelMap: input.thinkingLevelMap }
+          : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {}),
         maxTokens: 200,
       },

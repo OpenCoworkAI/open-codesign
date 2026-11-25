@@ -1,7 +1,12 @@
-import { initI18n } from '@open-codesign/i18n';
+import { i18n, initI18n } from '@open-codesign/i18n';
 import type { DiagnosticHypothesis } from '@open-codesign/shared';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { buildGenerateDisplayMessage } from './errors';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  buildGenerateDisplayMessage,
+  buildGenerateErrorDescription,
+  deriveGenerateHypothesis,
+  extractUpstreamContext,
+} from './errors';
 
 const transportHypothesis: DiagnosticHypothesis = {
   cause: 'diagnostics.cause.transportInterrupted',
@@ -39,5 +44,87 @@ describe('buildGenerateDisplayMessage', () => {
       "Error invoking remote method 'codesign:v1:generate': CodesignError: model missing";
 
     expect(buildGenerateDisplayMessage(message, undefined)).toBe('model missing');
+  });
+});
+
+describe('provider recovery hints in generation errors', () => {
+  afterEach(async () => {
+    await initI18n('en');
+  });
+
+  it.each([
+    ['en', 'Choose a model that supports the required system and developer message roles.'],
+    ['zh-CN', '选择支持所需 system 和 developer 消息角色的模型。'],
+    ['es', 'Elige un modelo compatible con los roles de mensaje system y developer requeridos.'],
+    [
+      'pt-BR',
+      'Escolha um modelo compatível com os papéis de mensagem system e developer necessários.',
+    ],
+  ])('shows the actionable hint in %s', async (locale, hint) => {
+    await initI18n(locale);
+    const error = Object.assign(new Error('unsupported role: developer'), {
+      upstream_recovery_category: 'model_not_supported_role',
+      upstream_status: 400,
+    });
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    expect(hypothesis?.recoveryCategory).toBe('model_not_supported_role');
+    expect(extractUpstreamContext(error)).toMatchObject({
+      upstream_recovery_category: 'model_not_supported_role',
+    });
+    const description = buildGenerateErrorDescription(error.message, hypothesis);
+    expect(description).toContain(error.message);
+    expect(description).toContain(hint);
+    expect(description).not.toContain('Recovery:');
+    expect(description).not.toContain('model_not_supported_role');
+    expect(description).not.toContain('diagnostics.recovery.');
+  });
+
+  it('shows a recovery-only hint without appending an unknown-cause message', async () => {
+    await initI18n('en');
+    const error = { upstream_recovery_category: 'network_timeout' };
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    const description = buildGenerateErrorDescription('fetch failed', hypothesis);
+    expect(description).toContain('Check network connectivity');
+    expect(description).not.toContain(i18n.t('diagnostics.cause.unknown'));
+  });
+
+  it('does not suggest replacing a key for a provider region restriction', async () => {
+    await initI18n('en');
+    const error = Object.assign(new Error('Country, region, or territory not supported'), {
+      upstream_status: 403,
+      upstream_recovery_category: 'region_restricted',
+    });
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    expect(hypothesis?.suggestedFix).toBeUndefined();
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).toContain(
+      'Contact the provider',
+    );
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).not.toContain('API key');
+  });
+
+  it.each([
+    401, 429,
+  ])('shows billing recovery rather than auth/rate-limit actions for quota returned as %s', async (status) => {
+    await initI18n('en');
+    const error = Object.assign(new Error('quota exhausted'), {
+      upstream_status: status,
+      upstream_recovery_category: 'billing',
+    });
+    const hypothesis = deriveGenerateHypothesis(error, null);
+    expect(hypothesis?.category).toBe('billing');
+    expect(hypothesis?.suggestedFix?.label).toBe('diagnostics.fix.addCreditsGeneric');
+    expect(buildGenerateErrorDescription(error.message, hypothesis)).toContain('remaining quota');
+  });
+
+  it.each([
+    'unknown',
+    'made_up_category',
+    undefined,
+  ])('ignores unrecognized category %s', async (category) => {
+    await initI18n('en');
+    const error = { upstream_recovery_category: category };
+    expect(
+      buildGenerateErrorDescription('raw failure', deriveGenerateHypothesis(error, null)),
+    ).toBe('raw failure');
   });
 });

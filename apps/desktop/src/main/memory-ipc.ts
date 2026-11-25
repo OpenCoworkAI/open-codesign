@@ -25,6 +25,7 @@ import {
   updateWorkspaceMemory,
 } from '@open-codesign/core';
 import { getCodexTokenStore } from './codex-oauth-ipc';
+import { canonicalInvokeBaseUrl } from './effective-provider-contract';
 import { app, ipcMain, shell } from './electron-runtime';
 import { getLogger } from './logger';
 import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from './onboarding-ipc';
@@ -205,6 +206,7 @@ async function runWorkspaceMemoryUpdateOnce(
     ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
     ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
     ...(opts.reasoningLevel !== undefined ? { reasoningLevel: opts.reasoningLevel } : {}),
+    ...(opts.thinkingLevelMap !== undefined ? { thinkingLevelMap: opts.thinkingLevelMap } : {}),
     logger: {
       info: (event, data) => log.info(event, data),
       warn: (event, data) => log.warn(event, data),
@@ -341,6 +343,7 @@ async function doUserMemoryConsolidation(
     ...(opts.httpHeaders !== undefined ? { httpHeaders: opts.httpHeaders } : {}),
     ...(opts.allowKeyless === true ? { allowKeyless: true } : {}),
     ...(opts.reasoningLevel !== undefined ? { reasoningLevel: opts.reasoningLevel } : {}),
+    ...(opts.thinkingLevelMap !== undefined ? { thinkingLevelMap: opts.thinkingLevelMap } : {}),
     logger: {
       info: (event, data) => log.info(event, data),
       warn: (event, data) => log.warn(event, data),
@@ -397,14 +400,16 @@ async function resolveUserMemoryConsolidationOptions(
     getApiKeyForProvider,
     hasApiKeyForProvider,
   });
+  const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
   return {
     force,
     model: active.model,
     apiKey,
-    ...(active.baseUrl !== null ? { baseUrl: active.baseUrl } : {}),
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
     wire: active.wire,
     ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
     ...(active.reasoningLevel !== undefined ? { reasoningLevel: active.reasoningLevel } : {}),
+    ...(active.thinkingLevelMap !== undefined ? { thinkingLevelMap: active.thinkingLevelMap } : {}),
     ...(active.allowKeyless ? { allowKeyless: true } : {}),
   };
 }

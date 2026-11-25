@@ -20,7 +20,12 @@ import {
   routeRunPreferences,
   updateDesignSessionBrief,
 } from '@open-codesign/core';
-import { complete, detectProviderFromKey, generateImage } from '@open-codesign/providers';
+import {
+  complete,
+  detectProviderFromKey,
+  generateImage,
+  normalizeProviderError,
+} from '@open-codesign/providers';
 import {
   ActiveRunMessageInputV1,
   ApplyCommentPayload,
@@ -30,6 +35,7 @@ import {
   deriveResourceStateFromChatRows,
   GeneratePayloadV1,
   ListActiveMessagesInputV1,
+  readProviderFailureContext,
   summarizeUsageBudget,
   type UsageTotals,
 } from '@open-codesign/shared';
@@ -41,6 +47,7 @@ import { CHATGPT_CODEX_PROVIDER_ID, getCodexTokenStore } from '../codex-oauth-ip
 import { designSystemEditingContext } from '../design-system-editing';
 import { registerDesignSystemLibraryBusyCheck } from '../design-system-library-ipc';
 import { makeRuntimeVerifier } from '../done-verify';
+import { canonicalInvokeBaseUrl } from '../effective-provider-contract';
 import { app, ipcMain } from '../electron-runtime';
 import {
   acquireInFlightWorkspaceGeneration,
@@ -67,11 +74,12 @@ import { getApiKeyForProvider, getCachedConfig, hasApiKeyForProvider } from '../
 import { readPersisted as readPreferences } from '../preferences-ipc';
 import { runPreview } from '../preview-runtime';
 import { preparePromptContext } from '../prompt-context';
-import { createProviderContextStore } from '../provider-context';
+import { createProviderContextStore, mergeFinalProviderContext } from '../provider-context';
 import { resolveActiveModel } from '../provider-settings';
 import { makeUiKitRenderer } from '../render-ui-kit';
 import { resolveActiveApiKey, resolveCredentialForProvider } from '../resolve-api-key';
-import { projectRunEventToChat } from '../run-event-chat';
+import { projectRunEventHistory, projectRunEventToChat } from '../run-event-chat';
+import { RunEventDelivery } from '../run-event-delivery';
 import { RunJournal } from '../run-journal';
 import { withRun } from '../runContext';
 import {
@@ -251,15 +259,18 @@ function extractUpstreamHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-function normalizeGenerationFailure(opts: {
+export function normalizeGenerationFailure(opts: {
   err: unknown;
   signal: AbortSignal;
   provider: string;
   modelId: string;
   baseUrl: string | undefined;
   wire: string | undefined;
-}): { error: unknown; upstreamStatus: number | undefined } {
-  const upstreamStatus = extractUpstreamHttpStatus(opts.err);
+}): { error: unknown; upstreamStatus: number | undefined; context: Record<string, unknown> } {
+  const normalized = normalizeProviderError(opts.err, opts.provider, 0, opts.wire);
+  const upstreamStatus = normalized.upstream_status ?? extractUpstreamHttpStatus(opts.err);
+  const upstreamCode = normalized.upstream_code;
+  const recoveryCategory = normalized.recovery_category;
   if (opts.err !== null && typeof opts.err === 'object') {
     const errAsRec = opts.err as Record<string, unknown>;
     if (upstreamStatus !== undefined && errAsRec['upstream_status'] === undefined) {
@@ -277,10 +288,17 @@ function normalizeGenerationFailure(opts: {
     if (errAsRec['upstream_wire'] === undefined && opts.wire !== undefined) {
       errAsRec['upstream_wire'] = opts.wire;
     }
+    if (upstreamCode !== undefined && errAsRec['upstream_code'] === undefined) {
+      errAsRec['upstream_code'] = upstreamCode;
+    }
+    if (errAsRec['upstream_recovery_category'] === undefined) {
+      errAsRec['upstream_recovery_category'] = recoveryCategory;
+    }
   }
   return {
     error: extractGenerationTimeoutError(opts.signal) ?? opts.err,
     upstreamStatus,
+    context: { ...normalized },
   };
 }
 
@@ -323,7 +341,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
   // Implementation + LRU eviction lives in ../provider-context.ts.
   const providerContext = createProviderContextStore(50);
   const journal = db ? new RunJournal(path_module.join(db.sessionDir, 'runs')) : null;
-  let eventDelivery = Promise.resolve();
+  const eventDelivery = new RunEventDelivery();
   const subscribers = new Set<WebContents>();
   const deliveryFailures = new Map<string, unknown>();
   const projectionFailures = new Map<string, number>();
@@ -337,8 +355,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       return;
     if (event.type === 'run_settled') closingRuns.add(event.generationId);
     event = structuredClone(event);
-    eventDelivery = eventDelivery
-      .then(async () => {
+    void eventDelivery
+      .enqueue(async () => {
         const durable = journal ? await journal.append({ ...event, chatPersisted: true }) : event;
         if (event.type === 'run_settled') settledRuns.add(event.generationId);
         if (journal && db) {
@@ -387,7 +405,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     if (journal) await journal.start({ runId: id, designId, startedAt: Date.now() });
     try {
       const result = await run();
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       let snapshotId: string | undefined;
       const artifact = result.artifacts[0];
@@ -417,10 +435,16 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         outcome: controller.signal.aborted ? 'cancelled' : 'completed',
         response: response as GenerateResponse,
       });
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(id)) throw deliveryFailures.get(id);
       return { ...response, ...(journal ? { chatPersisted: true } : {}) };
     } catch (error) {
+      const record =
+        error !== null && typeof error === 'object' ? (error as Record<string, unknown>) : {};
+      const providerFailure = readProviderFailureContext({
+        recoveryCategory: record['upstream_recovery_category'],
+        status: record['upstream_status'],
+      });
       publishEvent({
         designId,
         generationId: id,
@@ -433,8 +457,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             : 'failed',
         message: error instanceof Error ? error.message : String(error),
         ...(error instanceof CodesignError ? { code: error.code } : {}),
+        ...(providerFailure ? { providerFailure } : {}),
       });
-      await eventDelivery;
+      await eventDelivery.settled();
       throw error;
     } finally {
       settledRuns.add(id);
@@ -481,32 +506,30 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       cursors[id] = seq;
     }
     if (_event?.sender) subscribers.add(_event.sender);
-    await eventDelivery;
     if (!journal || !db) return { schemaVersion: 1, events: [] };
-    repairedHistory ??= journal
-      .allEvents()
-      .then((events) => {
-        for (const event of events) {
-          if (canRecoverDesign(event.designId))
-            projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
-        }
-      })
-      .catch((error: unknown) => {
-        repairedHistory = undefined;
-        throw error;
-      });
-    await repairedHistory;
-    const repairCursors = { ...cursors };
-    for (const [id, beforeFailure] of projectionFailures)
-      repairCursors[id] = Math.min(repairCursors[id] ?? 0, beforeFailure);
-    const recovered = await journal.recover(repairCursors);
-    recovered.events = recovered.events
-      .filter((event) => canRecoverDesign(event.designId))
-      .map((event) => ({ ...event, chatPersisted: true }));
-    for (const event of recovered.events)
-      projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
-    for (const event of recovered.events) projectionFailures.delete(event.generationId);
-    return recovered;
+    return eventDelivery.enqueue(async () => {
+      repairedHistory ??= journal
+        .allEvents()
+        .then((events) =>
+          projectRunEventHistory({ db, sessionDir: db.sessionDir }, events, canRecoverDesign),
+        )
+        .catch((error: unknown) => {
+          repairedHistory = undefined;
+          throw error;
+        });
+      await repairedHistory;
+      const repairCursors = { ...cursors };
+      for (const [id, beforeFailure] of projectionFailures)
+        repairCursors[id] = Math.min(repairCursors[id] ?? 0, beforeFailure);
+      const recovered = await journal.recover(repairCursors);
+      recovered.events = recovered.events
+        .filter((event) => canRecoverDesign(event.designId))
+        .map((event) => ({ ...event, chatPersisted: true }));
+      for (const event of recovered.events)
+        projectRunEventToChat({ db, sessionDir: db.sessionDir }, event);
+      for (const event of recovered.events) projectionFailures.delete(event.generationId);
+      return recovered;
+    });
   });
 
   const emptyUsage = (): UsageTotals => ({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
@@ -535,12 +558,18 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     };
   });
 
-  const recordFinalError = (scope: string, runId: string, err: unknown): void => {
+  const recordFinalError = (
+    scope: string,
+    runId: string,
+    err: unknown,
+    normalized?: Record<string, unknown>,
+  ): void => {
     if (db === null) return;
     const code = err instanceof CodesignError ? (err.code as string) : 'PROVIDER_UPSTREAM_ERROR';
     const stack = err instanceof Error ? err.stack : undefined;
     const message = err instanceof Error ? err.message : String(err);
-    const context = providerContext.consume(runId);
+    const remembered = providerContext.consume(runId);
+    const context = mergeFinalProviderContext(normalized, remembered);
     recordDiagnosticEvent(db, {
       level: 'error',
       code,
@@ -566,6 +595,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
     warn: (event, data) => {
       logIpc.warn(event, { generationId: id, ...(data ?? {}) });
+      if ((event === 'provider.error' || event === 'provider.error.final') && data !== undefined) {
+        providerContext.remember(id, data);
+      }
       if (event === 'provider.error' && db !== null) {
         const code = 'PROVIDER_UPSTREAM_ERROR';
         const upstream =
@@ -582,7 +614,6 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         const upstreamCode =
           typeof data?.['upstream_code'] === 'string' ? data['upstream_code'] : 'unknown';
         const syntheticFrame = `    at provider (${status}:${upstreamCode})`;
-        if (data !== undefined) providerContext.remember(id, data);
         recordDiagnosticEvent(db, {
           level: 'warn',
           code,
@@ -624,7 +655,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const payload = ActiveRunMessageInputV1.parse(raw);
     return withStableWorkspacePath(payload.designId, async () => {
       requireWorkspaceRootForDesign(payload.designId);
-      await eventDelivery;
+      await eventDelivery.settled();
       const previous = listSessionActiveMessages(requireChatStore(), payload.designId).find(
         (row) => row.messageId === payload.messageId,
       );
@@ -657,14 +688,14 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           'GENERATION_NOT_ACTIVE',
         );
       const accepted = run.submit(payload);
-      await eventDelivery;
+      await eventDelivery.settled();
       if (deliveryFailures.has(payload.generationId))
         throw deliveryFailures.get(payload.generationId);
       return accepted;
     });
   });
   ipcMain.handle('codesign:v1:active-messages', async (_event, raw: unknown) => {
-    await eventDelivery;
+    await eventDelivery.settled();
     const { designId } = ListActiveMessagesInputV1.parse(raw);
     const opts = requireChatStore();
     return listSessionActiveMessages(opts, designId).map((row) => {
@@ -1209,8 +1240,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
           // Once we've snapped to the canonical active provider, the renderer-supplied
           // baseUrl can no longer be trusted — it may belong to a different (stale)
-          // provider. Always use the per-provider baseUrl from cached config.
-          const baseUrl = active.baseUrl ?? undefined;
+          // provider. Always use the per-provider baseUrl from cached config, then
+          // canonicalize it the same way connection tests and the agent runtime do.
+          const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
           if (active.overridden) {
             payload.baseUrl = baseUrl;
           }
@@ -1386,6 +1418,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 ...(active.reasoningLevel !== undefined
                   ? { reasoningLevel: active.reasoningLevel }
                   : {}),
+                ...(active.thinkingLevelMap !== undefined
+                  ? { thinkingLevelMap: active.thinkingLevelMap }
+                  : {}),
                 ...(allowKeyless ? { allowKeyless: true } : {}),
                 logger: coreLogger,
               }),
@@ -1441,6 +1476,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(active.thinkingLevelMap !== undefined
+                    ? { thinkingLevelMap: active.thinkingLevelMap }
                     : {}),
                   ...(active.contextWindow !== undefined
                     ? { contextWindow: active.contextWindow }
@@ -1507,6 +1545,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                             : {}),
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
                             : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
@@ -1598,6 +1639,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
                             : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
+                            : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
                       ),
@@ -1636,6 +1680,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                             : {}),
                           ...(active.reasoningLevel !== undefined
                             ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(active.thinkingLevelMap !== undefined
+                            ? { thinkingLevelMap: active.thinkingLevelMap }
                             : {}),
                           ...(allowKeyless ? { allowKeyless: true } : {}),
                         }),
@@ -1681,7 +1728,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               message: rethrow instanceof Error ? rethrow.message : String(rethrow),
               code: rethrow instanceof CodesignError ? rethrow.code : undefined,
             });
-            recordFinalError('generate', id, rethrow);
+            recordFinalError('generate', id, rethrow, failure.context);
             throw rethrow;
           } finally {
             clearTimeoutGuard();
@@ -1731,7 +1778,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           const active = resolveActiveModel(cfg, hint);
           const allowKeyless = active.allowKeyless;
           const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-          const baseUrl = active.baseUrl ?? undefined;
+          const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
           const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
 
           const { workspaceRoot, promptContext } = await withStableWorkspacePath(
@@ -1807,6 +1854,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ...(active.reasoningLevel !== undefined
                     ? { reasoningLevel: active.reasoningLevel }
                     : {}),
+                  ...(active.thinkingLevelMap !== undefined
+                    ? { thinkingLevelMap: active.thinkingLevelMap }
+                    : {}),
                   ...(active.contextWindow !== undefined
                     ? { contextWindow: active.contextWindow }
                     : {}),
@@ -1850,7 +1900,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               message: rethrow instanceof Error ? rethrow.message : String(rethrow),
               code: rethrow instanceof CodesignError ? rethrow.code : undefined,
             });
-            recordFinalError('apply-comment', id, rethrow);
+            recordFinalError('apply-comment', id, rethrow, failure.context);
             throw rethrow;
           } finally {
             clearTimeoutGuard();
@@ -1879,7 +1929,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       });
       const allowKeyless = active.allowKeyless;
       const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-      const baseUrl = active.baseUrl ?? undefined;
+      const baseUrl = canonicalInvokeBaseUrl(active.baseUrl, active.wire);
       const tlsBypass = resolveTlsBypassFor(cfg, active.model.provider);
       const titleLogger: CoreLogger = {
         info: (event, data) => logIpc.info(event, data),
@@ -1897,6 +1947,9 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
             ...(active.reasoningLevel !== undefined
               ? { reasoningLevel: active.reasoningLevel }
+              : {}),
+            ...(active.thinkingLevelMap !== undefined
+              ? { thinkingLevelMap: active.thinkingLevelMap }
               : {}),
             ...(allowKeyless ? { allowKeyless: true } : {}),
             logger: titleLogger,

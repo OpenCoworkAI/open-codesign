@@ -10,7 +10,13 @@
 
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { completeWithRetry } from '@open-codesign/providers';
-import type { ChatMessage, ModelRef, ReasoningLevel, WireApi } from '@open-codesign/shared';
+import type {
+  ChatMessage,
+  ModelRef,
+  ReasoningLevel,
+  ThinkingLevelMap,
+  WireApi,
+} from '@open-codesign/shared';
 import { remapProviderError } from './errors.js';
 import { escapeUntrustedXml, formatUntrustedContext } from './lib/context-format.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
@@ -168,6 +174,8 @@ interface MemoryModelInput {
   httpHeaders?: Record<string, string> | undefined;
   allowKeyless?: boolean | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
+  /** @see GenerateInput.thinkingLevelMap */
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   logger?: CoreLogger | undefined;
 }
 
@@ -218,6 +226,9 @@ async function completeMemoryUpdate(
         ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
         ...(input.allowKeyless === true ? { allowKeyless: true } : {}),
         ...(input.reasoningLevel !== undefined ? { reasoning: input.reasoningLevel } : {}),
+        ...(input.thinkingLevelMap !== undefined
+          ? { thinkingLevelMap: input.thinkingLevelMap }
+          : {}),
         maxTokens: MEMORY_MAX_OUTPUT_TOKENS,
       },
       {

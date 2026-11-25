@@ -11,6 +11,13 @@ export {
   CommentContentExpectations,
   commentContentFingerprint,
 } from './comment-content';
+export {
+  isRecoveryCategory,
+  type ProviderFailureContext,
+  RECOVERY_CATEGORIES,
+  type RecoveryCategory,
+  readProviderFailureContext,
+} from './recovery';
 export type {
   WebSearchBackend,
   WebSearchMode,
@@ -317,11 +324,14 @@ export const ProjectDraft = z.object({
 });
 export type ProjectDraft = z.infer<typeof ProjectDraft>;
 
-export type { CanonicalWire } from './base-url';
+export type { CanonicalWire, ModelsProbeRelation } from './base-url';
 export {
   canonicalBaseUrl,
   ensureVersionedBase,
+  inferenceEndpointUrl,
   modelsEndpointUrl,
+  modelsProbeRelationForProvider,
+  modelsProbeRelationForWire,
   stripInferenceEndpointSuffix,
 } from './base-url';
 export { CodesignError } from './codesign-error';
@@ -343,6 +353,7 @@ export type {
   ReasoningLevel,
   ResolvedProviderCapabilities,
   SupportedOnboardingProvider,
+  ThinkingLevelMap,
   WireApi,
 } from './config';
 export {
@@ -350,6 +361,7 @@ export {
   CHATGPT_CODEX_PROVIDER_ID,
   ConfigSchema,
   ConfigV3Schema,
+  clampToThinkingLevelMap,
   defaultProviderCapabilities,
   deriveModelDiscoveryMode,
   detectWireFromBaseUrl,
@@ -368,15 +380,26 @@ export {
   ProviderEntrySchema,
   ProviderModelDiscoveryModeSchema,
   parseConfigFlexible,
+  REASONING_LEVELS,
   ReasoningLevelSchema,
   resolveProviderCapabilities,
   SecretRef,
   STORED_DESIGN_SYSTEM_SCHEMA_VERSION,
   StoredDesignSystem,
   SUPPORTED_ONBOARDING_PROVIDERS,
+  ThinkingLevelMapSchema,
   toPersistedV3,
   WireApiSchema,
 } from './config';
+export type {
+  ConnectionProbeMethod,
+  ConnectionTestError,
+  ConnectionTestResponse,
+  ConnectionTestResult,
+  InvokeAuthMode,
+  InvokeContractView,
+  InvokeParity,
+} from './connection-test';
 export type { DesignToken } from './design-token';
 export { DesignTokenSet, DesignTokenV1 } from './design-token';
 export type {

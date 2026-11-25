@@ -1,5 +1,6 @@
 import type { ProviderModelDiscoveryMode, ReasoningLevel, WireApi } from './config';
 import { looksLikeModelsListingUrl, usesRemoteModelsListing } from './model-discovery';
+import type { RecoveryCategory } from './recovery';
 
 export type ErrorCode =
   | '401'
@@ -35,6 +36,7 @@ export type DiagnosticCategory =
   | 'generation-timeout'
   | 'context-window-exceeded'
   | 'model-discovery-degraded'
+  | 'invoke-contract-diverged'
   | 'transport-interrupted'
   | 'upstream-server-error'
   | 'reference-url-invalid'
@@ -83,6 +85,8 @@ export interface DiagnosticHypothesis {
   severity?: DiagnosticSeverity;
   /** Primary action the user should take */
   suggestedFix?: DiagnosticFix;
+  /** Machine-readable recovery category from provider error normalization. */
+  recoveryCategory?: RecoveryCategory;
 }
 
 export interface DiagnoseContext {
@@ -260,6 +264,21 @@ export function diagnose(code: ErrorCode, ctx: DiagnoseContext): DiagnosticHypot
         category: 'cors',
         severity: 'error',
         suggestedFix: { kind: 'openSettings', label: 'diagnostics.fix.reportBug' },
+      }),
+    ];
+  }
+
+  if (normalised === 'INVOKE_DIVERGED') {
+    return [
+      h({
+        cause: 'diagnostics.cause.invokeContractDiverged',
+        category: 'invoke-contract-diverged',
+        severity: 'warning',
+        suggestedFix: {
+          kind: 'openSettings',
+          label: 'diagnostics.fix.switchWire',
+          settingsTab: 'models',
+        },
       }),
     ];
   }

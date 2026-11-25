@@ -12,7 +12,11 @@
  * marks any still-pending row as 'done' so the WorkingCard never sticks.
  */
 
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import {
+  DEFAULT_SOURCE_ENTRY,
+  LEGACY_SOURCE_ENTRY,
+  readProviderFailureContext,
+} from '@open-codesign/shared';
 import { useEffect, useRef } from 'react';
 import type { AgentStreamEvent } from '../../../preload/index';
 import { notifyDesignInBackground } from '../lib/system-notifications';
@@ -442,7 +446,22 @@ export function useAgentStream(): void {
       refreshChat(event.designId);
       const state = useCodesignStore.getState();
       const run = state.generationByDesign[event.designId];
-      if (run?.generationId !== event.generationId || run.awaitingResponse) return;
+      if (run?.generationId !== event.generationId) return;
+      if (run.awaitingResponse) {
+        const providerFailure =
+          event.outcome === 'failed'
+            ? readProviderFailureContext(event.providerFailure)
+            : undefined;
+        if (providerFailure) {
+          useCodesignStore.setState({
+            generationByDesign: {
+              ...state.generationByDesign,
+              [event.designId]: { ...run, providerFailure },
+            },
+          });
+        }
+        return;
+      }
       const generationByDesign = { ...state.generationByDesign };
       delete generationByDesign[event.designId];
       const visible = state.currentDesignId === event.designId;

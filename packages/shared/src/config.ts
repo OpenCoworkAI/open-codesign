@@ -104,8 +104,36 @@ export type StoredDesignSystem = z.infer<typeof StoredDesignSystem>;
 
 // ── ProviderEntry (v3) ───────────────────────────────────────────────────────
 
-export const ReasoningLevelSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+export const ReasoningLevelSchema = z.enum(REASONING_LEVELS);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
+
+/** Only listed levels are supported; values are the endpoint's effort strings. */
+export const ThinkingLevelMapSchema = z.partialRecord(ReasoningLevelSchema, z.string().min(1));
+export type ThinkingLevelMap = z.infer<typeof ThinkingLevelMapSchema>;
+
+/**
+ * Clamp a requested level onto the provider's configured whitelist, mirroring
+ * pi-ai's `clampThinkingLevel()`: prefer the closest deeper level, then the
+ * closest shallower one. Never escalate `off`; the adapter may still send an
+ * explicitly configured `map.off` value. Absent maps leave the level unchanged.
+ */
+export function clampToThinkingLevelMap(
+  level: ReasoningLevel,
+  map: ThinkingLevelMap | undefined,
+): ReasoningLevel {
+  if (level === 'off' || map === undefined || map[level] !== undefined) return level;
+  const requestedIndex = REASONING_LEVELS.indexOf(level);
+  for (let i = requestedIndex + 1; i < REASONING_LEVELS.length; i++) {
+    const candidate = REASONING_LEVELS[i] as ReasoningLevel;
+    if (map[candidate] !== undefined) return candidate;
+  }
+  for (let i = requestedIndex - 1; i >= 0; i--) {
+    const candidate = REASONING_LEVELS[i] as ReasoningLevel;
+    if (map[candidate] !== undefined) return candidate;
+  }
+  return 'off';
+}
 
 export const ProviderModelDiscoveryModeSchema = z.enum([
   'models',
@@ -191,6 +219,14 @@ export const ProviderEntrySchema = z
      */
     reasoningLevel: ReasoningLevelSchema.optional(),
     /**
+     * Per-provider remap of thinking levels to provider-specific wire values.
+     * Needed by OpenAI-compatible runtimes that accept a different effort
+     * vocabulary than the OpenAI one (for example `none|low|medium|xhigh`).
+     * Setting `xhigh` also unlocks the "xhigh" dropdown entry, which pi-ai
+     * hides unless a model maps it. See `ThinkingLevelMapSchema`.
+     */
+    thinkingLevelMap: ThinkingLevelMapSchema.optional(),
+    /**
      * Context window, in tokens, of the models served through this provider.
      * Overrides pi-ai's model catalog in core's `resolveContextWindow`; needed
      * for local runtimes and relays whose windows the catalog does not know.
@@ -217,6 +253,7 @@ export interface ProviderCapabilityInput {
   requiresApiKey?: boolean | undefined;
   modelsHint?: string[] | undefined;
   reasoningLevel?: ReasoningLevel | undefined;
+  thinkingLevelMap?: ThinkingLevelMap | undefined;
   capabilities?: ProviderCapabilities | undefined;
 }
 
@@ -256,6 +293,7 @@ export function defaultProviderCapabilities(
     supportsKeyless: entry.requiresApiKey === false,
     supportsModelsEndpoint: modelDiscoveryMode === 'models',
     supportsReasoning:
+      entry.thinkingLevelMap !== undefined ||
       (entry.reasoningLevel !== undefined && entry.reasoningLevel !== 'off') ||
       entry.wire === 'anthropic' ||
       entry.wire === 'openai-responses' ||
@@ -275,7 +313,9 @@ export function resolveProviderCapabilities(
   return {
     supportsKeyless: explicit.supportsKeyless ?? defaults.supportsKeyless,
     supportsModelsEndpoint: modelDiscoveryMode === 'models',
-    supportsReasoning: explicit.supportsReasoning ?? defaults.supportsReasoning,
+    supportsReasoning:
+      entry.thinkingLevelMap !== undefined ||
+      (explicit.supportsReasoning ?? defaults.supportsReasoning),
     requiresClaudeCodeIdentity:
       explicit.requiresClaudeCodeIdentity ?? defaults.requiresClaudeCodeIdentity,
     modelDiscoveryMode,

@@ -6,6 +6,8 @@
 
 The Open CoDesign pi adapter owns search authorization, request accounting, citation normalization, and bounded Claude pause continuation. Provider-specific output stays in local JSONL sessions for replay; it is never replayed to a different model or provider. Synthetic protocol tests are in the providers package. Re-evaluate this patch against upstream when updating pi; do not edit installed dependency files.
 
+The same patch also rejects Responses streams that reach EOF without a valid terminal event. `response.incomplete` remains a length limit (including normalized Codex events); a completed tool-only response still returns `toolUse`. This prevents cleanly truncated relay streams from being accepted as successful partial output. It does not add automatic replay, non-streaming fallback, or changes to provider account policies. `packages/providers/src/pi-responses-terminal.test.ts` exercises the installed SDK with synthetic SSE, including UTF-8 frame fragmentation, explicit failures/cancellation and missing/malformed terminal events. The pi version and MIT license are unchanged.
+
 ## PptxGenJS 4.0.1 XML validity
 
 `pptxgenjs@4.0.1.patch` repairs the two published entry points used by this workspace (`dist/pptxgen.cjs.js` and `dist/pptxgen.es.js`):

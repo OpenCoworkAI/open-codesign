@@ -1,10 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import {
-  type DesignSessionBriefV1,
-  normalizeDesignSessionBrief,
-  SessionManager,
-} from '@open-codesign/core';
+import { type DesignSessionBriefV1, normalizeDesignSessionBrief } from '@open-codesign/core';
 import type {
   ChatAppendInput,
   ChatMessageKind,
@@ -25,6 +20,7 @@ import {
   DesignRunPreferencesV1 as DesignRunPreferencesV1Schema,
 } from '@open-codesign/shared';
 import { compactToolResultForHistory } from './ipc/tool-log';
+import { type CachedSession, SessionFileCache } from './session-file-cache';
 import { type Database, getDesign, listSnapshots, touchDesignActivity } from './snapshots-db';
 import { normalizeWorkspacePath } from './workspace-path';
 
@@ -41,18 +37,16 @@ export function appendSessionNativeSearchMessage(
   designId: string,
   message: import('@earendil-works/pi-ai').AssistantMessage,
 ): void {
-  const manager = openSession(opts, designId);
-  manager.appendCustomEntry(NATIVE_SEARCH_CUSTOM_TYPE, { schemaVersion: 1, message });
-  flushSession(manager);
+  appendCustomEntry(opts, designId, NATIVE_SEARCH_CUSTOM_TYPE, { schemaVersion: 1, message });
 }
 
 export function readSessionNativeSearchMessages(
   opts: SessionChatStoreOptions,
   designId: string,
 ): import('@earendil-works/pi-ai').AssistantMessage[] {
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return [];
-  const manager = SessionManager.open(file, opts.sessionDir, resolveSessionCwd(opts, designId));
+  const session = openSession(opts, designId);
+  if (!session) return [];
+  const manager = session.manager;
   return manager
     .getEntries()
     .flatMap((entry) => {
@@ -79,7 +73,8 @@ export function readSessionNativeSearchMessages(
         return [];
       return [message];
     })
-    .slice(-100);
+    .slice(-100)
+    .map((message) => structuredClone(message));
 }
 
 export interface SessionChatStoreOptions {
@@ -182,22 +177,44 @@ function resolveSessionCwd(opts: SessionChatStoreOptions, designId: string): str
   }
 }
 
-function openSession(opts: SessionChatStoreOptions, designId: string): SessionManager {
-  mkdirSync(opts.sessionDir, { recursive: true });
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  return SessionManager.open(file, opts.sessionDir, resolveSessionCwd(opts, designId));
+const sessionCaches = new WeakMap<Database, SessionFileCache<SessionChatIndex>>();
+
+function cacheFor(opts: SessionChatStoreOptions): SessionFileCache<SessionChatIndex> {
+  let cache = sessionCaches.get(opts.db);
+  if (!cache) {
+    cache = new SessionFileCache((manager, designId) => {
+      const index = emptyChatIndex(designId);
+      for (const entry of manager.getEntries()) applyChatEntry(index, entry);
+      return index;
+    }, applyChatEntry);
+    sessionCaches.set(opts.db, cache);
+  }
+  return cache;
 }
 
-function flushSession(manager: SessionManager): void {
-  const file = manager.getSessionFile();
-  const header = manager.getHeader();
-  if (file === undefined || header === null) {
-    throw new CodesignError('Session file unavailable', 'IPC_DB_ERROR');
-  }
-  // pi defers writing user-only sessions; desktop chat must persist immediately.
-  mkdirSync(path.dirname(file), { recursive: true });
-  const lines = [header, ...manager.getEntries()].map((entry) => JSON.stringify(entry));
-  writeFileSync(file, `${lines.join('\n')}\n`, 'utf8');
+function openSession(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  create = false,
+): CachedSession<SessionChatIndex> | null {
+  const session = cacheFor(opts).get(
+    sessionFileForDesign(opts.sessionDir, designId),
+    resolveSessionCwd(opts, designId),
+    designId,
+    create,
+  );
+  return session;
+}
+
+function appendCustomEntry(
+  opts: SessionChatStoreOptions,
+  designId: string,
+  type: string,
+  data: unknown,
+) {
+  const session = openSession(opts, designId, true);
+  if (!session) throw new CodesignError('Session unavailable', 'IPC_DB_ERROR');
+  return cacheFor(opts).append(session, type, data);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -336,70 +353,129 @@ function applyStatusUpdate(row: ChatMessageRow, update: StoredToolStatusUpdate):
   return { ...row, payload: nextPayload };
 }
 
-function replayEntries(designId: string, entries: unknown[]): ChatMessageRow[] {
-  const rows: ChatMessageRow[] = [];
-  const deliveredIds = new Set<string>();
-  for (const raw of entries) {
-    const entry = raw as CustomEntryLike;
-    if (entry.type !== 'custom') continue;
-    if (entry.customType === ACTIVE_MESSAGE_CUSTOM_TYPE) {
-      const message = ActiveRunMessageV1.parse(entry.data);
-      if (message.designId !== designId)
-        throw new CodesignError('Stored message belongs to another design.', 'IPC_DB_ERROR');
-      if (message.status !== 'delivered' || deliveredIds.has(message.messageId)) continue;
-      deliveredIds.add(message.messageId);
-      rows.push({
-        schemaVersion: 1,
-        id: rows.length,
-        seq: rows.length,
-        designId,
-        kind: 'user',
-        payload: { text: message.text, activeMessageId: message.messageId, mode: message.mode },
-        snapshotId: null,
-        createdAt: entry.timestamp ?? message.createdAt,
-      });
-      continue;
+interface SessionChatIndex {
+  designId: string;
+  rows: ChatMessageRow[];
+  rowIndexes: Map<number, number>;
+  eventKeys: Set<string>;
+  tools: Map<string, number>;
+  assistantRuns: Set<string>;
+  runningTools: Map<string, Set<number>>;
+  activeMessages: Map<string, ActiveRunMessageV1>;
+  deliveredIds: Set<string>;
+}
+
+function emptyChatIndex(designId: string): SessionChatIndex {
+  return {
+    designId,
+    rows: [],
+    rowIndexes: new Map(),
+    eventKeys: new Set(),
+    tools: new Map(),
+    assistantRuns: new Set(),
+    runningTools: new Map(),
+    activeMessages: new Map(),
+    deliveredIds: new Set(),
+  };
+}
+
+function toolKey(runId: string, toolId: unknown): string {
+  return JSON.stringify([runId, typeof toolId, toolId]);
+}
+
+function indexRow(index: SessionChatIndex, row: ChatMessageRow): void {
+  const position = index.rows.length;
+  index.rows.push(row);
+  if (!index.rowIndexes.has(row.seq)) index.rowIndexes.set(row.seq, position);
+  const data = isRecord(row.payload) ? row.payload : {};
+  if (typeof data['runEventKey'] === 'string') index.eventKeys.add(data['runEventKey']);
+  const run = data['runId'];
+  if (typeof run !== 'string') return;
+  if (row.kind === 'assistant_text') index.assistantRuns.add(run);
+  if (row.kind !== 'tool_call') return;
+  const key = toolKey(run, data['toolCallId']);
+  if (!index.tools.has(key)) index.tools.set(key, position);
+  if (data['status'] === 'running') {
+    let running = index.runningTools.get(run);
+    if (!running) {
+      running = new Set();
+      index.runningTools.set(run, running);
     }
-    if (entry.customType === CHAT_MESSAGE_CUSTOM_TYPE) {
-      const stored = parseStoredMessage(entry.data);
-      if (stored === null) {
-        throw new CodesignError('Malformed stored chat message entry', 'IPC_DB_ERROR');
-      }
-      rows.push({
-        schemaVersion: 1,
-        id: stored.id,
-        designId,
-        seq: stored.seq,
-        kind: stored.kind,
-        payload: stored.payload,
-        snapshotId: stored.snapshotId,
-        createdAt: entry.timestamp ?? new Date(0).toISOString(),
-      });
-      continue;
-    }
-    if (entry.customType === CHAT_TOOL_STATUS_CUSTOM_TYPE) {
-      const update = parseStatusUpdate(entry.data);
-      if (update === null) {
-        throw new CodesignError('Malformed stored chat tool-status entry', 'IPC_DB_ERROR');
-      }
-      const idx = rows.findIndex((row) => row.seq === update.seq);
-      if (idx < 0) continue;
-      const row = rows[idx];
-      if (row) rows[idx] = applyStatusUpdate(row, update);
-    }
+    running.add(position);
   }
-  return rows;
+}
+
+function applyChatEntry(index: SessionChatIndex, raw: unknown): void {
+  const entry = raw as CustomEntryLike;
+  if (entry.type !== 'custom') return;
+  if (entry.customType === ACTIVE_MESSAGE_CUSTOM_TYPE) {
+    const message = ActiveRunMessageV1.parse(entry.data);
+    if (index.designId && message.designId !== index.designId)
+      throw new CodesignError('Stored message belongs to another design.', 'IPC_DB_ERROR');
+    index.activeMessages.set(message.messageId, message);
+    if (message.status !== 'delivered' || index.deliveredIds.has(message.messageId)) return;
+    index.deliveredIds.add(message.messageId);
+    indexRow(index, {
+      schemaVersion: 1,
+      id: index.rows.length,
+      seq: index.rows.length,
+      designId: message.designId,
+      kind: 'user',
+      payload: { text: message.text, activeMessageId: message.messageId, mode: message.mode },
+      snapshotId: null,
+      createdAt: entry.timestamp ?? message.createdAt,
+    });
+  } else if (entry.customType === CHAT_MESSAGE_CUSTOM_TYPE) {
+    const stored = parseStoredMessage(entry.data);
+    if (!stored) throw new CodesignError('Malformed stored chat message entry', 'IPC_DB_ERROR');
+    indexRow(index, {
+      schemaVersion: 1,
+      id: stored.id,
+      seq: stored.seq,
+      designId: index.designId,
+      kind: stored.kind,
+      payload: stored.payload,
+      snapshotId: stored.snapshotId,
+      createdAt: entry.timestamp ?? new Date(0).toISOString(),
+    });
+  } else if (entry.customType === CHAT_TOOL_STATUS_CUSTOM_TYPE) {
+    const update = parseStatusUpdate(entry.data);
+    if (!update) throw new CodesignError('Malformed stored chat tool-status entry', 'IPC_DB_ERROR');
+    const position = index.rowIndexes.get(update.seq);
+    if (position === undefined) return;
+    const previous = index.rows[position];
+    if (!previous) return;
+    const row = applyStatusUpdate(previous, update);
+    index.rows[position] = row;
+    const data = isRecord(row.payload) ? row.payload : {};
+    if (typeof data['runId'] === 'string' && data['status'] !== 'running')
+      index.runningTools.get(data['runId'])?.delete(position);
+  }
+}
+
+export function sessionChatProjection(opts: SessionChatStoreOptions, designId: string) {
+  const index = openSession(opts, designId)?.state;
+  return {
+    hasEvent: (key: string) => index?.eventKeys.has(key) ?? false,
+    activeMessage: (id: string) => structuredClone(index?.activeMessages.get(id)),
+    tool: (runId: string, id: unknown) => {
+      const pos = index?.tools.get(toolKey(runId, id));
+      return pos === undefined ? undefined : structuredClone(index?.rows[pos]);
+    },
+    hasAssistant: (runId: string) => index?.assistantRuns.has(runId) ?? false,
+    runningTools: (runId: string) =>
+      [...(index?.runningTools.get(runId) ?? [])].flatMap((pos) => {
+        const row = index?.rows[pos];
+        return row ? [structuredClone(row)] : [];
+      }),
+  };
 }
 
 export function listSessionChatMessages(
   opts: SessionChatStoreOptions,
   designId: string,
 ): ChatMessageRow[] {
-  const cwd = resolveSessionCwd(opts, designId);
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return [];
-  const manager = SessionManager.open(file, opts.sessionDir, cwd);
-  return replayEntries(designId, manager.getEntries());
+  return structuredClone(openSession(opts, designId)?.state.rows ?? []);
 }
 
 export function appendSessionActiveMessage(
@@ -407,27 +483,14 @@ export function appendSessionActiveMessage(
   message: ActiveRunMessageV1,
 ): void {
   const checked = ActiveRunMessageV1.parse(message);
-  const manager = openSession(opts, checked.designId);
-  manager.appendCustomEntry(ACTIVE_MESSAGE_CUSTOM_TYPE, checked);
-  flushSession(manager);
+  appendCustomEntry(opts, checked.designId, ACTIVE_MESSAGE_CUSTOM_TYPE, checked);
 }
 
 export function listSessionActiveMessages(
   opts: SessionChatStoreOptions,
   designId: string,
 ): ActiveRunMessageV1[] {
-  const cwd = resolveSessionCwd(opts, designId);
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return [];
-  const latest = new Map<string, ActiveRunMessageV1>();
-  for (const entry of SessionManager.open(file, opts.sessionDir, cwd).getEntries()) {
-    if (entry.type !== 'custom' || entry.customType !== ACTIVE_MESSAGE_CUSTOM_TYPE) continue;
-    const row = ActiveRunMessageV1.parse(entry.data);
-    if (row.designId !== designId)
-      throw new CodesignError('Stored message belongs to another design.', 'IPC_DB_ERROR');
-    latest.set(row.messageId, row);
-  }
-  return [...latest.values()];
+  return structuredClone([...(openSession(opts, designId)?.state.activeMessages.values() ?? [])]);
 }
 
 function replayCommentEvents(designId: string, entries: unknown[]): CommentRow[] {
@@ -471,10 +534,9 @@ export function listSessionComments(
   designId: string,
   snapshotId?: string,
 ): CommentRow[] {
-  const cwd = resolveSessionCwd(opts, designId);
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return [];
-  const manager = SessionManager.open(file, opts.sessionDir, cwd);
+  const session = openSession(opts, designId);
+  if (!session) return [];
+  const manager = session.manager;
   const rows = replayCommentEvents(designId, manager.getEntries());
   return snapshotId === undefined ? rows : rows.filter((row) => row.snapshotId === snapshotId);
 }
@@ -493,10 +555,7 @@ function appendCommentEvent(
   designId: string,
   event: StoredCommentEvent,
 ): void {
-  const manager = openSession(opts, designId);
-  const entryId = manager.appendCustomEntry(COMMENT_CUSTOM_TYPE, event);
-  const entry = manager.getEntry(entryId);
-  flushSession(manager);
+  const entry = appendCustomEntry(opts, designId, COMMENT_CUSTOM_TYPE, event);
   const createdAt = entry?.timestamp ?? new Date().toISOString();
   touchDesignActivity(opts.db, designId, createdAt);
 }
@@ -614,8 +673,9 @@ export function appendSessionChatMessage(
   input: ChatAppendInput,
   options: AppendSessionChatMessageOptions = {},
 ): ChatMessageRow {
-  const manager = openSession(opts, input.designId);
-  const seq = listSessionChatMessages(opts, input.designId).length;
+  const session = openSession(opts, input.designId, true);
+  if (!session) throw new CodesignError('Session unavailable', 'IPC_DB_ERROR');
+  const seq = session.state.rows.length;
   const stored: StoredChatMessage = {
     schemaVersion: 1,
     id: seq,
@@ -624,9 +684,7 @@ export function appendSessionChatMessage(
     payload: input.payload ?? {},
     snapshotId: input.snapshotId ?? null,
   };
-  const entryId = manager.appendCustomEntry(CHAT_MESSAGE_CUSTOM_TYPE, stored);
-  const entry = manager.getEntry(entryId);
-  flushSession(manager);
+  const entry = cacheFor(opts).append(session, CHAT_MESSAGE_CUSTOM_TYPE, stored);
   const createdAt = entry?.timestamp ?? new Date().toISOString();
   if (options.touchActivity !== false) {
     touchDesignActivity(opts.db, input.designId, createdAt);
@@ -647,11 +705,10 @@ export function appendSessionToolStatus(
   opts: SessionChatStoreOptions,
   input: ChatToolStatusUpdate,
 ): void {
-  const row = listSessionChatMessages(opts, input.designId).find(
-    (message) => message.seq === input.seq,
-  );
-  if (row?.kind !== 'tool_call') return;
-  const manager = openSession(opts, input.designId);
+  const session = openSession(opts, input.designId);
+  const position = session?.state.rowIndexes.get(input.seq);
+  const row = position === undefined ? undefined : session?.state.rows[position];
+  if (!session || row?.kind !== 'tool_call') return;
   const toolName =
     typeof (row.payload as { toolName?: unknown } | null)?.toolName === 'string'
       ? ((row.payload as { toolName: string }).toolName ?? 'unknown')
@@ -669,9 +726,7 @@ export function appendSessionToolStatus(
       ? { runResultEventKey: input.runResultEventKey }
       : {}),
   };
-  const entryId = manager.appendCustomEntry(CHAT_TOOL_STATUS_CUSTOM_TYPE, stored);
-  const entry = manager.getEntry(entryId);
-  flushSession(manager);
+  const entry = cacheFor(opts).append(session, CHAT_TOOL_STATUS_CUSTOM_TYPE, stored);
   touchDesignActivity(opts.db, input.designId, entry?.timestamp ?? new Date().toISOString());
 }
 
@@ -679,10 +734,9 @@ export function readSessionDesignBrief(
   opts: SessionChatStoreOptions,
   designId: string,
 ): DesignSessionBriefV1 | null {
-  const cwd = resolveSessionCwd(opts, designId);
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return null;
-  const manager = SessionManager.open(file, opts.sessionDir, cwd);
+  const session = openSession(opts, designId);
+  if (!session) return null;
+  const manager = session.manager;
   const entries = manager.getEntries();
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index] as CustomEntryLike | undefined;
@@ -698,20 +752,17 @@ export function appendSessionDesignBrief(
   designId: string,
   brief: DesignSessionBriefV1,
 ): void {
-  const manager = openSession(opts, designId);
   const stored: StoredDesignBrief = { schemaVersion: 1, brief };
-  manager.appendCustomEntry(CONTEXT_BRIEF_CUSTOM_TYPE, stored);
-  flushSession(manager);
+  appendCustomEntry(opts, designId, CONTEXT_BRIEF_CUSTOM_TYPE, stored);
 }
 
 export function readSessionRunPreferences(
   opts: SessionChatStoreOptions,
   designId: string,
 ): DesignRunPreferencesV1 | null {
-  const cwd = resolveSessionCwd(opts, designId);
-  const file = sessionFileForDesign(opts.sessionDir, designId);
-  if (!existsSync(file)) return null;
-  const manager = SessionManager.open(file, opts.sessionDir, cwd);
+  const session = openSession(opts, designId);
+  if (!session) return null;
+  const manager = session.manager;
   const entries = manager.getEntries();
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index] as CustomEntryLike | undefined;
@@ -728,10 +779,8 @@ export function appendSessionRunPreferences(
   preferences: DesignRunPreferencesV1,
 ): void {
   const parsed = DesignRunPreferencesV1Schema.parse(preferences);
-  const manager = openSession(opts, designId);
   const stored: StoredRunPreferences = { schemaVersion: 1, preferences: parsed };
-  manager.appendCustomEntry(RUN_PREFERENCES_CUSTOM_TYPE, stored);
-  flushSession(manager);
+  appendCustomEntry(opts, designId, RUN_PREFERENCES_CUSTOM_TYPE, stored);
 }
 
 export function seedSessionChatFromSnapshots(
