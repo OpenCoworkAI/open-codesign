@@ -191,6 +191,17 @@ scoop install opencoworkai/open-codesign
 - **API Key**：粘贴 Anthropic（`sk-ant-...`）、OpenAI（`sk-...`）、Atlas Cloud、LLMTR、Google Gemini、OpenRouter、SiliconFlow、DeepSeek 或其他支持的 provider key。
 - **本地 / Keyless**：使用 Ollama，或使用 IP 白名单的 OpenAI 兼容网关。
 
+#### DemonRoute 自定义 provider
+
+使用 [DemonRoute](https://demonroute.com/docs) 时，在自定义 provider 表单中将名称设为
+**DemonRoute**，wire 协议选择 **OpenAI Chat**，Base URL 填写
+`https://api.demonroute.com/v1`。保留 API Key 认证并输入你的 DemonRoute API Key。
+默认模型应从服务方的[模型目录](https://demonroute.com/models)复制完整的 API 模型标识，
+不要使用模型页面 URL 中的简写名称。保存后先点击 **测试连接**，再为设计选择该 provider。
+
+这个示例使用已有的自定义 provider 表单。可用模型、价格和数据处理方式以服务方当前条款为准；
+生成请求会发送到 DemonRoute。列出配置示例不表示项目与该服务存在合作关系。
+
 凭证会保存在 `~/.config/open-codesign/config.toml`，ChatGPT OAuth token 会保存在应用配置目录下的 token store 中。除非你选择的模型入口本身需要联网，请求内容不会额外离开你的机器。
 
 ### 3. 输入第一条提示词
