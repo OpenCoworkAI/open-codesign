@@ -1,6 +1,6 @@
 # Web Search v1
 
-Open CoDesign can research a slide topic, save facts/data, build slides, and deliver a separate sources file. It uses **Tavily Search** and a bounded, direct HTTP(S) reader. There is no research panel, MCP runtime, or hosted account. HTML reading uses the lazily loaded `parse5` HTML5 parser; it does not execute webpage scripts or load their resources.
+Open CoDesign can research a slide topic, save facts/data, build slides, and deliver a separate sources file. It uses the selected search backend and a bounded, direct HTTP(S) reader. There is no research panel, MCP runtime, or hosted account. HTML reading uses the lazily loaded `parse5` HTML5 parser; it does not execute webpage scripts or load their resources.
 
 ## Configure
 
@@ -58,6 +58,14 @@ Settings limits: `maxCalls` 1–50 (search and fetch combined per run, including
 Adapter API: [official Tavily Search reference](https://docs.tavily.com/documentation/api-reference/endpoint/search). V1 uses `POST /search`, Bearer authentication, basic search, and no generated answer or raw-content response. The tool contract is provider-independent.
 
 ## Use
+
+### Keyless Keenable search
+
+Choose **Settings → Web Search → Search backend → Keenable** to use keyless search. Automatic routing never selects Keenable. No key form is shown; existing Tavily and model credentials are retained and are not decrypted or sent for this backend. **Test search service** explicitly runs one saved-settings search, even with search disabled, without enabling web access or granting task permission.
+
+The adapter sends `POST https://api.keenable.ai/v1/search/public` with `{ query, max_results }` and `X-Keenable-Title: Open CoDesign` through the existing public-network transport. It retains the per-run permission prompt, shared call budget, deadline, public-address checks, 1–5 results and 2,000-character snippet limit. HTTP failures (including 429), malformed responses and timeouts never trigger retries or another backend.
+
+The [official raw HTTP documentation](https://docs.keenable.ai/llms.txt) documents the keyless endpoint and mandatory application header; the [Search API reference](https://docs.keenable.ai/api-reference/search) documents result titles, URLs, snippets and publication dates. Keyless requests share [limits of 10 requests per second and 1,000 per hour per IP](https://docs.keenable.ai/rate-limits). Keenable may retain queries and results under its [data and privacy policy](https://docs.keenable.ai/data-privacy); selecting this external service is explicit. No live service search was used for implementation verification.
 
 For example:
 

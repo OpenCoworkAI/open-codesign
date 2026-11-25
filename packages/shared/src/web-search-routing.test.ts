@@ -25,6 +25,24 @@ function config(
 }
 
 describe('web search routing and configuration', () => {
+  it('uses keyless Keenable only when explicitly selected, without provider or Tavily credentials', () => {
+    const cfg = config('https://gateway.example/v1');
+    cfg.secrets = {};
+    if (!cfg.webSearch) throw new Error('Missing fixture settings');
+    cfg.webSearch.backend = 'keenable';
+    expect(resolveWebSearchRoute(cfg)).toEqual({
+      service: 'keenable',
+      mode: 'search-api',
+      providerId: null,
+      endpoint: 'https://api.keenable.ai/v1/search/public',
+      reason: null,
+    });
+    expect(SaveWebSearchSettingsInput.parse({ backend: 'keenable' })).toEqual({
+      backend: 'keenable',
+    });
+    cfg.webSearch.backend = 'auto';
+    expect(resolveWebSearchRoute(cfg).service).not.toBe('keenable');
+  });
   it.each([
     ['https://api.deepseek.com/v1', 'deepseek', 'https://api.deepseek.com/v1/tools/search'],
     ['https://api.moonshot.cn/v1', 'kimi', 'https://api.moonshot.cn/v1/tools/search_pro'],
