@@ -439,6 +439,13 @@
       "advanced": "Advanced"
     },
     "webSearch": {
+      "serply": {
+        "newKey": "Serply API key",
+        "replaceKey": "Replace Serply API key",
+        "getKey": "Get a key at app.serply.io",
+        "clearConfirm": "Remove the saved Serply key? The Tavily key is retained.",
+        "openFailed": "Could not open the Serply key page. Visit https://app.serply.io in your browser."
+      },
       "title": "Web search",
       "description": "Use your model provider credentials for supported web search, or choose Tavily. Web access still requires task authorization.",
       "nextRun": "Enabling, disabling, or saving settings applies to the next run, not active runs.",
@@ -469,7 +476,7 @@
       "invalidInput": "Enter a non-empty API key of at most 4096 characters without spaces or control characters.",
       "result": {
         "ok": "Saved key verified. Search service search is reachable.",
-        "missingKey": "No saved key. Save a Tavily API key first.",
+        "missingKey": "No saved key for the selected search service. Save its API key first.",
         "unreadableKey": "The saved key cannot be read on this device. Replace it or clear it and save a new key.",
         "invalidKey": "Search service rejected the saved key. Check it and save a replacement.",
         "quota": "Search service quota is exhausted. Check your Search service account or plan.",

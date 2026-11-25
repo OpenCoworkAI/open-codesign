@@ -92,6 +92,73 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Tavily Settings UI', () => {
+  it('selects Serply without carrying an unsaved key, then binds new credentials to that backend', async () => {
+    await mount();
+    hooks.state[1] = 'unsaved-tavily-fixture';
+    api.save.mockResolvedValueOnce({
+      ok: true,
+      settings: { enabled: false, backend: 'serply', hasKey: false },
+    });
+    find(render(), (props) => props['aria-label'] === 'settings.webSearch.backend').onChange?.({
+      target: { value: 'serply', checked: false },
+    });
+    await vi.waitFor(() => expect(api.save).toHaveBeenCalledWith({ backend: 'serply' }));
+    expect(hooks.state[1]).toBe('');
+    expect(renderToStaticMarkup(render())).toContain('settings.webSearch.serply.newKey');
+    hooks.state[1] = 'serply-new-fixture';
+    vi.stubGlobal(
+      'FormData',
+      class {
+        get() {
+          return hooks.state[1];
+        }
+      },
+    );
+    find(render(), (props) => props.onSubmit !== undefined).onSubmit?.({
+      preventDefault: vi.fn(),
+      currentTarget: {} as HTMLFormElement,
+    });
+    await vi.waitFor(() =>
+      expect(api.save).toHaveBeenCalledWith({ apiKey: 'serply-new-fixture', backend: 'serply' }),
+    );
+    expect(hooks.state[1]).toBe('');
+    expect(api.test).not.toHaveBeenCalled();
+  });
+
+  it('opens the Serply dashboard and gives Serply-specific key copy only when selected', async () => {
+    api.get.mockResolvedValue({
+      enabled: true,
+      hasKey: true,
+      backend: 'serply',
+      service: 'serply',
+    });
+    await mount();
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain('settings.webSearch.serply.replaceKey');
+    const open = find(
+      render(),
+      (props) =>
+        Array.isArray(props.children) &&
+        props.children.includes('settings.webSearch.serply.getKey'),
+    );
+    await open.onClick?.();
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith('https://app.serply.io');
+  });
+
+  it('provides direct Serply translations in all supported locales', () => {
+    for (const locale of ['en', 'zh-CN', 'es', 'pt-BR']) {
+      const messages = JSON.parse(
+        readFileSync(
+          new URL(`../../../../../../../packages/i18n/src/locales/${locale}.json`, import.meta.url),
+          'utf8',
+        ),
+      );
+      for (const key of ['newKey', 'replaceKey', 'getKey', 'clearConfirm', 'openFailed']) {
+        expect(typeof messages.settings.webSearch.serply[key]).toBe('string');
+        expect(messages.settings.webSearch.serply[key].length).toBeGreaterThan(0);
+      }
+    }
+  });
   it('saves backend and native opt-in without sending a duplicate key', async () => {
     await mount();
     api.save.mockResolvedValueOnce({

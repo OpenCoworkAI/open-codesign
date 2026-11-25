@@ -23,7 +23,8 @@ function settingsState(config: Config | null): WebSearchSettingsState {
   const route = resolveWebSearchRoute(config);
   return {
     enabled: config?.webSearch?.enabled ?? false,
-    hasKey: config?.secrets['tavily'] !== undefined,
+    hasKey:
+      config?.secrets[config.webSearch?.backend === 'serply' ? 'serply' : 'tavily'] !== undefined,
     backend: config?.webSearch ? (config.webSearch.backend ?? 'tavily') : 'auto',
     nativeEnabled: config?.webSearch?.nativeEnabled ?? false,
     maxNativeRequests: config?.webSearch?.maxNativeRequests ?? 12,
@@ -52,8 +53,10 @@ export function saveWebSearchSettings(raw: unknown): Promise<WebSearchSettingsSt
         ? toPersistedV3(current)
         : { version: 3 as const, activeProvider: '', activeModel: '', providers: {}, secrets: {} };
       const secrets = { ...config.secrets };
-      if (input.clearKey === true) delete secrets['tavily'];
-      else if (input.apiKey !== undefined) secrets['tavily'] = buildSecretRef(input.apiKey);
+      const backend = input.backend ?? config.webSearch?.backend ?? 'tavily';
+      const credentialId = backend === 'serply' ? 'serply' : 'tavily';
+      if (input.clearKey === true) delete secrets[credentialId];
+      else if (input.apiKey !== undefined) secrets[credentialId] = buildSecretRef(input.apiKey);
       const next = hydrateConfig({
         ...config,
         secrets,
@@ -120,6 +123,17 @@ export async function testWebSearchSettings(): Promise<WebSearchTestResult> {
   const route = resolveWebSearchRoute(config);
   if (route.reason) return { status: route.reason };
   if (route.mode === 'native-tool') return { status: 'not-verified' };
+  if (route.service === 'serply') {
+    const stored = config?.secrets['serply'];
+    if (!stored) return { status: 'missing-key' };
+    let apiKey: string;
+    try {
+      apiKey = decryptSecret(stored.ciphertext);
+    } catch {
+      return { status: 'unreadable-key' };
+    }
+    return testSearchConnection('serply', apiKey, config?.webSearch?.timeoutMs ?? 15000);
+  }
   if (
     route.service &&
     route.service !== 'tavily' &&

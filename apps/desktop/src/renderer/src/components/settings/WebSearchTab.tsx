@@ -39,6 +39,7 @@ export function WebSearchTab() {
   const mounted = useRef(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const serply = settings?.backend === 'serply';
 
   async function loadSettings() {
     setNotice(null);
@@ -64,7 +65,12 @@ export function WebSearchTab() {
   async function save(input: SaveWebSearchSettingsInput) {
     if (busyRef.current || !settings) return;
     setApiKey('');
-    const parsed = SaveWebSearchSettingsInput.safeParse(input);
+    const parsed = SaveWebSearchSettingsInput.safeParse({
+      ...input,
+      ...((input.apiKey !== undefined || input.clearKey === true) && settings.backend !== undefined
+        ? { backend: settings.backend }
+        : {}),
+    });
     if (!parsed.success) {
       setNotice({ key: 'settings.webSearch.invalidInput', error: true });
       return;
@@ -129,9 +135,13 @@ export function WebSearchTab() {
     try {
       const bridge = window.codesign;
       if (!bridge) throw new Error('Unavailable');
-      await bridge.openExternal('https://app.tavily.com');
+      await bridge.openExternal(serply ? 'https://app.serply.io' : 'https://app.tavily.com');
     } catch {
-      if (mounted.current) setNotice({ key: 'settings.webSearch.openFailed', error: true });
+      if (mounted.current)
+        setNotice({
+          key: serply ? 'settings.webSearch.serply.openFailed' : 'settings.webSearch.openFailed',
+          error: true,
+        });
     }
   }
 
@@ -173,6 +183,7 @@ export function WebSearchTab() {
           <option value="auto">{t('settings.webSearch.backendAuto')}</option>
           <option value="provider">{t('settings.webSearch.backendProvider')}</option>
           <option value="tavily">Tavily</option>
+          <option value="serply">Serply</option>
         </select>
       </Row>
       <p className={hintClass} role="status">
@@ -236,13 +247,21 @@ export function WebSearchTab() {
           }}
         >
           <label
-            htmlFor="tavily-api-key"
+            htmlFor="search-api-key"
             className="block text-[var(--text-sm)] font-medium text-[var(--color-text-secondary)]"
           >
-            {t(settings?.hasKey ? 'settings.webSearch.replaceKey' : 'settings.webSearch.newKey')}
+            {t(
+              serply
+                ? settings?.hasKey
+                  ? 'settings.webSearch.serply.replaceKey'
+                  : 'settings.webSearch.serply.newKey'
+                : settings?.hasKey
+                  ? 'settings.webSearch.replaceKey'
+                  : 'settings.webSearch.newKey',
+            )}
           </label>
           <input
-            id="tavily-api-key"
+            id="search-api-key"
             name="apiKey"
             type="password"
             value={apiKey}
@@ -251,11 +270,11 @@ export function WebSearchTab() {
             spellCheck={false}
             maxLength={4096}
             disabled={!settings || busy}
-            aria-describedby="tavily-key-hint"
+            aria-describedby="search-key-hint"
             placeholder={t('settings.webSearch.keyPlaceholder')}
             className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--text-sm)] text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-50"
           />
-          <p id="tavily-key-hint" className={hintClass}>
+          <p id="search-key-hint" className={hintClass}>
             {t('settings.webSearch.keyHint')}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -272,7 +291,7 @@ export function WebSearchTab() {
             </button>
             <button type="button" onClick={() => void openKeyPage()} className={buttonClass}>
               <ExternalLink className="h-3.5 w-3.5" />
-              {t('settings.webSearch.getKey')}
+              {t(serply ? 'settings.webSearch.serply.getKey' : 'settings.webSearch.getKey')}
             </button>
             <button
               type="button"
@@ -288,7 +307,11 @@ export function WebSearchTab() {
 
       {confirmClear ? (
         <div className="space-y-2">
-          <p className={hintClass}>{t('settings.webSearch.clearConfirm')}</p>
+          <p className={hintClass}>
+            {t(
+              serply ? 'settings.webSearch.serply.clearConfirm' : 'settings.webSearch.clearConfirm',
+            )}
+          </p>
           <div className="flex gap-2">
             <button
               type="button"

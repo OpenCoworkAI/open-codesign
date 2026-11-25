@@ -439,6 +439,13 @@
       "advanced": "高级"
     },
     "webSearch": {
+      "serply": {
+        "newKey": "Serply API Key",
+        "replaceKey": "替换 Serply API Key",
+        "getKey": "前往 app.serply.io 获取 Key",
+        "clearConfirm": "确定移除已保存的 Serply Key？Tavily Key 会保留。",
+        "openFailed": "无法打开 Serply Key 页面，请在浏览器中访问 https://app.serply.io。"
+      },
       "title": "联网搜索",
       "description": "复用当前模型供应商凭据进行联网搜索，或使用 Tavily。联网仍需本轮任务授权。",
       "nextRun": "启用、停用或保存设置仅对下一次运行生效，不影响正在进行的运行。",
@@ -469,7 +476,7 @@
       "invalidInput": "请输入非空且不超过 4096 个字符的 API Key，不可包含空格或控制字符。",
       "result": {
         "ok": "已保存的 Key 验证成功，可以连接 搜索服务 搜索。",
-        "missingKey": "尚未保存 Key，请先保存 Tavily API Key。",
+        "missingKey": "尚未保存当前搜索服务的 Key，请先保存该服务的 API Key。",
         "unreadableKey": "无法在此设备读取已保存的 Key，请替换或清除后重新保存。",
         "invalidKey": "搜索服务 拒绝了已保存的 Key，请检查并保存替换 Key。",
         "quota": "搜索服务 额度已用尽，请检查 搜索服务 账户或套餐。",
