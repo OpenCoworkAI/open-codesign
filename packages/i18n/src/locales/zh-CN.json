@@ -523,7 +523,12 @@
         "loadFailed": "加载图像生成设置失败",
         "saved": "图像生成设置已保存",
         "saveFailed": "保存图像生成设置失败"
-      }
+      },
+      "testConnection": "测试图片生成",
+      "testing": "正在生成测试图片…",
+      "testHint": "使用已保存的设置生成一张图片，可能消耗服务商额度。请先保存更改。",
+      "testOk": "图片生成测试成功",
+      "testFailed": "图片生成测试失败"
     },
     "memory": {
       "userFile": "用户记忆文件",

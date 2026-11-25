@@ -26,6 +26,30 @@ describe('provider recovery translations', () => {
 
 describe('image response preference labels', () => {
   it.each([
+    'en',
+    'zh-CN',
+    'es',
+    'pt-BR',
+  ])('defines the image test action, loading, outcome and credit disclosure in %s', async (locale) => {
+    const { i18n } = await import('./index');
+    await initI18n(locale);
+    const english = i18n.getResource('en', 'translation', 'settings.imageGen') as Record<
+      string,
+      unknown
+    >;
+    const localized = i18n.getResource(locale, 'translation', 'settings.imageGen') as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(localized).sort()).toEqual(Object.keys(english).sort());
+    for (const key of ['testConnection', 'testing', 'testHint', 'testOk', 'testFailed']) {
+      expect(typeof localized[key]).toBe('string');
+      expect(String(localized[key]).trim().length).toBeGreaterThan(0);
+      if (locale !== 'en') expect(localized[key]).not.toBe(english[key]);
+    }
+    await setLocale('en');
+  });
+  it.each([
     ['en', 'Request base64 response'],
     ['zh-CN', '请求 base64 响应'],
     ['es', 'Solicitar respuesta en base64'],

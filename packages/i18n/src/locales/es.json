@@ -351,7 +351,12 @@
         "loadFailed": "Error al cargar la configuración de generación de imágenes",
         "saved": "Configuración de generación de imágenes guardada",
         "saveFailed": "Error al guardar la configuración de generación de imágenes"
-      }
+      },
+      "testConnection": "Probar generación de imágenes",
+      "testing": "Generando imagen de prueba…",
+      "testHint": "Genera una imagen con la configuración guardada y puede consumir créditos del proveedor. Guarda los cambios antes de probar.",
+      "testOk": "La prueba de generación de imágenes se completó",
+      "testFailed": "La prueba de generación de imágenes falló"
     },
     "shell": {
       "back": "Espacio de trabajo",
