@@ -1,6 +1,5 @@
 ---
 "@open-codesign/desktop": patch
-"@open-codesign/providers": patch
 "@open-codesign/i18n": patch
 ---
 
