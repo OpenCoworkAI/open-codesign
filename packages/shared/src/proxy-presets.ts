@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
+    id: 'teamorouter',
+    label: 'TeamoRouter',
+    provider: 'openai',
+    baseUrl: 'https://api.teamorouter.com/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
