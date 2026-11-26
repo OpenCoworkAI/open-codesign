@@ -52,6 +52,7 @@ let api: ReturnType<typeof useWorkspaceSourceEdit>;
 let props: Parameters<typeof useWorkspaceSourceEdit>[0];
 const inspect = vi.fn();
 const apply = vi.fn();
+const applyBatch = vi.fn();
 const onPersist = vi.fn();
 const onSaved = vi.fn();
 const validate = vi.fn();
@@ -87,6 +88,10 @@ beforeEach(() => {
     ...applied,
     previewRevision: request.previewRevision,
   }));
+  applyBatch.mockReset().mockImplementation(async (request: { previewRevision: string }) => ({
+    ...applied,
+    previewRevision: request.previewRevision,
+  }));
   onPersist.mockReset();
   onSaved.mockReset();
   validate.mockReset().mockImplementation(async (request) => ({
@@ -97,7 +102,7 @@ beforeEach(() => {
   }));
   Object.defineProperty(window, 'codesign', {
     configurable: true,
-    value: { sourceEdits: { inspect, apply } },
+    value: { sourceEdits: { inspect, apply, applyBatch } },
   });
   props = {
     designId: 'a',
@@ -443,5 +448,109 @@ describe('revision-bound local source edits', () => {
     expect(api.active).toBe(false);
     expect(api.eligible).toBe(false);
     expect(inspect).not.toHaveBeenCalled();
+  });
+  it('routes multi-operation arrays through applyBatch and fails closed if applyBatch is missing', async () => {
+    const multiTarget: SourceEditTarget = {
+      ...target,
+      editableFields: [
+        { kind: 'set-text', value: 'Old' },
+        { kind: 'set-attribute', name: 'title', value: 'Tip' },
+      ],
+    };
+    inspect.mockResolvedValue({ ...ready, targets: [multiTarget] });
+    validate.mockImplementation(async (request) => ({
+      targetId: request.targetId,
+      sourceHash: request.sourceHash,
+      previewRevision: request.previewRevision,
+      fieldStates: [
+        { key: 'text:only', status: 'ready' },
+        { key: 'attribute:title', status: 'ready' },
+      ],
+    }));
+    await render();
+    await act(async () => api.enable());
+    expect(api.active).toBe(true);
+    const revision = api.inspection?.previewRevision;
+    if (!revision) throw new Error('Missing inspection');
+    await act(async () =>
+      api.select({ targetId: multiTarget.id, sourceHash: hash, previewRevision: revision }),
+    );
+    await act(async () =>
+      api.apply([
+        { kind: 'set-text', value: 'New' },
+        { kind: 'set-attribute', name: 'title', value: 'Next tip' },
+      ]),
+    );
+    expect(apply).not.toHaveBeenCalled();
+    expect(applyBatch).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      designId: 'a',
+      path: 'App.jsx',
+      expectedSourceHash: hash,
+      previewRevision: revision,
+      targetId: multiTarget.id,
+      operations: [
+        { kind: 'set-text', value: 'New' },
+        { kind: 'set-attribute', name: 'title', value: 'Next tip' },
+      ],
+      scope: 'source-definition',
+    });
+
+    Object.defineProperty(window, 'codesign', {
+      configurable: true,
+      value: { sourceEdits: { inspect, apply } },
+    });
+    const nextRevision = api.inspection?.previewRevision;
+    if (!nextRevision) throw new Error('Missing inspection');
+    await act(async () =>
+      api.select({ targetId: multiTarget.id, sourceHash: hash, previewRevision: nextRevision }),
+    );
+    applyBatch.mockClear();
+    await act(async () =>
+      api.apply([
+        { kind: 'set-text', value: 'Another' },
+        { kind: 'set-attribute', name: 'title', value: 'Another tip' },
+      ]),
+    );
+    expect(applyBatch).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(api.message).toBe('canvas.sourceEdit.unavailable');
+  });
+  it('stores picked element metadata and returns the restore selector once after reload', async () => {
+    await render();
+    await act(async () => api.enable());
+    const revision = api.inspection?.previewRevision;
+    if (!revision) throw new Error('Missing inspection');
+    const picked = {
+      selector: '/main[1]/p[1]',
+      tag: 'p',
+      outerHTML: '<p>Old</p>',
+      rect: { top: 0, left: 0, width: 20, height: 10 },
+    };
+    await act(async () =>
+      api.select({ targetId: target.id, sourceHash: hash, previewRevision: revision }, [], picked),
+    );
+    expect(api.picked).toEqual(picked);
+    await act(async () => api.apply([{ kind: 'set-text', value: 'New' }]));
+    expect(apply).toHaveBeenCalledOnce();
+    // Next inspection completes (simulated by updated content prop).
+    props = {
+      ...props,
+      source: { path: 'App.jsx', content: '<p>New</p>', workspaceDesignId: 'a' },
+    };
+    await render();
+    expect(api.inspection).not.toBeNull();
+    expect(api.takeRestoreSelector()).toBe('/main[1]/p[1]');
+    expect(api.takeRestoreSelector()).toBeNull();
+
+    // Exit and toggle both clear any pending restore selector.
+    const nextRev = api.inspection?.previewRevision;
+    if (!nextRev) throw new Error('Missing inspection');
+    await act(async () =>
+      api.select({ targetId: target.id, sourceHash: hash, previewRevision: nextRev }, [], picked),
+    );
+    await act(async () => api.apply([{ kind: 'set-text', value: 'Third' }]));
+    await act(async () => api.exit());
+    expect(api.takeRestoreSelector()).toBeNull();
   });
 });

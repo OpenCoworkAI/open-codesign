@@ -321,6 +321,97 @@
       "status": "Status",
       "id": "Run ID",
       "tokens": "Tokens"
+    },
+    "tabs": {
+      "page": "Page",
+      "element": "Element"
+    },
+    "collapse": "Collapse inspector",
+    "expand": "Expand inspector",
+    "paletteLabel": "Color palette",
+    "paletteMatch": "= {{name}}",
+    "paletteSource": {
+      "token": "Tweak token",
+      "design": "DESIGN.md",
+      "used": "Used on this page"
+    },
+    "groups": {
+      "content": "Content",
+      "color": "Color",
+      "layout": "Type & spacing",
+      "accessibility": "Accessibility"
+    },
+    "fields": {
+      "text": "Text",
+      "textN": "Text {{n}}",
+      "color": "Text",
+      "backgroundColor": "Fill",
+      "fontSize": "Font size",
+      "gap": "Gap",
+      "padding": "Padding",
+      "borderRadius": "Radius",
+      "maxWidth": "Max width",
+      "title": "Tooltip",
+      "placeholder": "Placeholder",
+      "alt": "Alt text"
+    },
+    "box": {
+      "all": "All sides",
+      "vertical": "Top & bottom",
+      "horizontal": "Left & right",
+      "top": "Top",
+      "right": "Right",
+      "bottom": "Bottom",
+      "left": "Left"
+    },
+    "element": {
+      "pickHint": "Click an element in the preview to edit it.",
+      "parent": "Up: {{name}}",
+      "selectParent": "Select the parent element",
+      "ancestors": "Parent elements",
+      "shared": "Shared definition — every use changes together.",
+      "locked_one": "{{count}} property is controlled by code",
+      "locked_other": "{{count}} properties are controlled by code",
+      "noDirectEdits": "This element has no properties that can be edited directly.",
+      "askAi": "Ask AI to change it",
+      "pending_one": "{{count}} change · shown live in the preview",
+      "pending_other": "{{count}} changes · shown live in the preview",
+      "noPending": "Edit a value, then apply it to the source.",
+      "applying": "Writing to source…",
+      "discard": "Discard",
+      "apply": "Apply"
+    },
+    "page": {
+      "colorTokens": "Color tokens",
+      "colorTokensHint": "Changing a token updates every place that reads it.",
+      "otherControls": "Other controls",
+      "designColors": "DESIGN.md palette",
+      "usedColors": "Colors on this page",
+      "usedCount_one": "{{count}} use",
+      "usedCount_other": "{{count}} uses"
+    },
+    "kinds": {
+      "heading": "Heading",
+      "paragraph": "Paragraph",
+      "text": "Text",
+      "link": "Link",
+      "button": "Button",
+      "image": "Image",
+      "input": "Input",
+      "label": "Label",
+      "list": "List",
+      "listItem": "List item",
+      "header": "Header",
+      "footer": "Footer",
+      "navigation": "Navigation",
+      "main": "Main content",
+      "section": "Section",
+      "form": "Form",
+      "graphic": "Graphic",
+      "media": "Media",
+      "table": "Table",
+      "container": "Container",
+      "element": "Element"
     }
   },
   "chat": {

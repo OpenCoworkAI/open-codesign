@@ -1,5 +1,6 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import {
+  SourceEditApplyBatchRequestV1,
   SourceEditApplyRequestV1,
   type SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
@@ -173,41 +174,70 @@ export function registerSourceEditsIpc(db: Database, getWin: () => BrowserWindow
         return await inSource(input.data, event, async (source) => {
           const { planSourceEdit } = await import('./source-edit-engine');
           const plan = planSourceEdit({ ...input.data, path: source.path, source: source.content });
-          if (plan.status === 'rejected') return plan;
-          await commitSourceEdit({
-            destination: source.destination,
-            expectedContent: source.content,
-            content: plan.content,
-            validate: source.validate,
-          });
-          // The filesystem is authoritative. Notification failure cannot un-save a
-          // committed edit, and must never trigger a rollback over an external edit.
-          const warnings: string[] = [];
-          try {
-            const win = getWin();
-            if (win && !win.isDestroyed())
-              win.webContents.send('codesign:files:v1:changed', {
-                schemaVersion: 1,
-                designId: input.data.designId,
-              });
-          } catch (error) {
-            warnings.push(
-              'The source was saved, but automatic preview refresh failed. Reload the preview.',
-            );
-            logger.warn('source-edit.refresh.failed', {
-              designId: input.data.designId,
-              error: String(error),
-            });
-          }
-          return {
-            ...plan,
-            previewRevision: input.data.previewRevision,
-            ...(warnings.length ? { warnings } : {}),
-          };
+          return commitPlan(plan, source, input.data);
         });
       } catch (error) {
         return failure(error);
       }
     },
   );
+
+  ipcMain.handle(
+    'codesign:source-edits:v1:apply-batch',
+    async (event: unknown, raw: unknown): Promise<SourceEditApplyResultV1> => {
+      const input = SourceEditApplyBatchRequestV1.safeParse(raw);
+      if (!input.success) return rejected('invalid-input', 'Invalid source edit request.');
+      try {
+        return await inSource(input.data, event, async (source) => {
+          const { planSourceEditBatch } = await import('./source-edit-engine');
+          const plan = planSourceEditBatch({
+            ...input.data,
+            path: source.path,
+            source: source.content,
+          });
+          return commitPlan(plan, source, input.data);
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
+
+  async function commitPlan(
+    plan: SourceEditApplyResultV1,
+    source: { destination: string; content: string; validate: () => Promise<void> },
+    request: { designId: string; previewRevision: string },
+  ): Promise<SourceEditApplyResultV1> {
+    if (plan.status === 'rejected') return plan;
+    await commitSourceEdit({
+      destination: source.destination,
+      expectedContent: source.content,
+      content: plan.content,
+      validate: source.validate,
+    });
+    // The filesystem is authoritative. Notification failure cannot un-save a
+    // committed edit, and must never trigger a rollback over an external edit.
+    const warnings: string[] = [];
+    try {
+      const win = getWin();
+      if (win && !win.isDestroyed())
+        win.webContents.send('codesign:files:v1:changed', {
+          schemaVersion: 1,
+          designId: request.designId,
+        });
+    } catch (error) {
+      warnings.push(
+        'The source was saved, but automatic preview refresh failed. Reload the preview.',
+      );
+      logger.warn('source-edit.refresh.failed', {
+        designId: request.designId,
+        error: String(error),
+      });
+    }
+    return {
+      ...plan,
+      previewRevision: request.previewRevision,
+      ...(warnings.length ? { warnings } : {}),
+    };
+  }
 }

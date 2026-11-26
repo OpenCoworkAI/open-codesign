@@ -12,12 +12,24 @@ import {
   sourceEditFieldState,
 } from './helpers';
 import { sourceEditReasonMessage } from './source-edit-messages';
-import { inspectWorkspaceSourceEdit, persistWorkspaceSourceEdit } from './source-edit-persistence';
+import {
+  inspectWorkspaceSourceEdit,
+  persistWorkspaceSourceEdit,
+  persistWorkspaceSourceEditBatch,
+} from './source-edit-persistence';
 
 export interface SourceEditWorkspaceSource {
   path: string;
   content: string;
   workspaceDesignId?: string;
+}
+
+/** The clicked preview element, independent of whether it maps to editable source. */
+export interface SourceEditPickedElement {
+  selector: string;
+  tag: string;
+  outerHTML: string;
+  rect: { top: number; left: number; width: number; height: number };
 }
 
 export function useWorkspaceSourceEdit(input: {
@@ -42,6 +54,9 @@ export function useWorkspaceSourceEdit(input: {
   const [selection, setSelection] = useState<SourceEditTarget | null>(null);
   const [fieldStates, setFieldStates] = useState<SourceEditSelection['fieldStates']>();
   const [ancestors, setAncestors] = useState<SourceEditAncestor[]>([]);
+  const [picked, setPicked] = useState<SourceEditPickedElement | null>(null);
+  // Survives the reload a save causes, so the same element can be re-pinned.
+  const restoreSelector = useRef<string | null>(null);
   const allowed =
     input.available &&
     !input.generating &&
@@ -96,10 +111,12 @@ export function useWorkspaceSourceEdit(input: {
     setSelection(null);
     setFieldStates(undefined);
     setAncestors([]);
+    setPicked(null);
     setInspected(null);
     setMessage(null);
     setBusy(false);
     if (!context.allowed) setEnabled(false);
+    if (!context.enabled || !context.allowed) restoreSelector.current = null;
     if (
       !context.enabled ||
       !context.eligible ||
@@ -156,15 +173,26 @@ export function useWorkspaceSourceEdit(input: {
     setSelection(null);
     setFieldStates(undefined);
     setAncestors([]);
+    setPicked(null);
   }, []);
 
   const exit = useCallback(() => {
     setEnabled(false);
+    restoreSelector.current = null;
+    clearSelection();
+  }, [clearSelection]);
+
+  const enable = useCallback(() => {
+    setEnabled(true);
     clearSelection();
   }, [clearSelection]);
 
   const select = useCallback(
-    (meta?: SourceEditSelection, trail: SourceEditAncestor[] = []) => {
+    (
+      meta?: SourceEditSelection,
+      trail: SourceEditAncestor[] = [],
+      element?: SourceEditPickedElement,
+    ) => {
       if (!active || !inspection || applying.current) return;
       selectionEpoch.current++;
       setMessage(null);
@@ -177,14 +205,18 @@ export function useWorkspaceSourceEdit(input: {
       setSelection(target ?? null);
       setFieldStates(target ? meta?.fieldStates : undefined);
       setAncestors(!meta || matches ? trail : []);
+      setPicked(element ?? null);
       if (!target) setMessage(t('canvas.sourceEdit.unsupportedSelection'));
     },
     [active, inspection, t],
   );
 
   const apply = useCallback(
-    async (operation: SourceEditOperation) => {
+    async (request: SourceEditOperation | SourceEditOperation[]) => {
+      const operations = Array.isArray(request) ? request : [request];
+      const operation = operations[0];
       if (
+        !operation ||
         !inspection ||
         !selection ||
         !context.designId ||
@@ -194,15 +226,16 @@ export function useWorkspaceSourceEdit(input: {
       )
         return;
       const fieldKey = sourceEditFieldKey(operation);
-      if (
-        !selection.editableFields.some((field) => sourceEditFieldKey(field) === fieldKey) ||
-        sourceEditFieldState(selection, operation, fieldStates).status !== 'ready'
-      ) {
+      const editable = (op: SourceEditOperation, states: SourceEditSelection['fieldStates']) =>
+        selection.editableFields.some(
+          (field) => sourceEditFieldKey(field) === sourceEditFieldKey(op),
+        ) && sourceEditFieldState(selection, op, states).status === 'ready';
+      if (!operations.every((op) => editable(op, fieldStates))) {
         setMessage(t('canvas.sourceEdit.validationFailed'));
         return;
       }
       const api = window.codesign?.sourceEdits;
-      if (!api) {
+      if (!api || (operations.length > 1 && !api.applyBatch)) {
         setMessage(t('canvas.sourceEdit.unavailable'));
         return;
       }
@@ -234,10 +267,7 @@ export function useWorkspaceSourceEdit(input: {
           checked?.targetId === selection.id &&
           checked.sourceHash === inspection.sourceHash &&
           checked.previewRevision === inspection.previewRevision;
-        if (
-          !valid ||
-          sourceEditFieldState(selection, operation, checked?.fieldStates).status !== 'ready'
-        ) {
+        if (!valid || !operations.every((op) => editable(op, checked?.fieldStates))) {
           setFieldStates(
             valid
               ? checked?.fieldStates
@@ -250,24 +280,25 @@ export function useWorkspaceSourceEdit(input: {
           return;
         }
         setFieldStates(checked.fieldStates);
-        const result = await persistWorkspaceSourceEdit(
-          {
-            schemaVersion: 1,
-            designId: context.designId,
-            path: context.path,
-            expectedSourceHash: inspection.sourceHash,
-            previewRevision: inspection.previewRevision,
-            targetId: selection.id,
-            operation,
-            scope: 'source-definition',
-          },
-          api.apply,
-        );
+        const base = {
+          schemaVersion: 1 as const,
+          designId: context.designId,
+          path: context.path,
+          expectedSourceHash: inspection.sourceHash,
+          previewRevision: inspection.previewRevision,
+          targetId: selection.id,
+          scope: 'source-definition' as const,
+        };
+        const result =
+          operations.length > 1 && api.applyBatch
+            ? await persistWorkspaceSourceEditBatch({ ...base, operations }, api.applyBatch)
+            : await persistWorkspaceSourceEdit({ ...base, operation }, api.apply);
         if (current.current !== context || epoch.current !== ticket) return;
         if (result.status === 'rejected') {
           setMessage(sourceEditReasonMessage(result.reason, t));
           return;
         }
+        restoreSelector.current = picked?.selector ?? null;
         clearSelection();
         setInspected(null);
         setRefresh((value) => value + 1);
@@ -294,6 +325,7 @@ export function useWorkspaceSourceEdit(input: {
       inspection,
       selection,
       fieldStates,
+      picked,
       input.validate,
       input.onPersist,
       input.onSaved,
@@ -301,6 +333,13 @@ export function useWorkspaceSourceEdit(input: {
       t,
     ],
   );
+
+  const takeRestoreSelector = useCallback((): string | null => {
+    if (!inspection) return null;
+    const selector = restoreSelector.current;
+    restoreSelector.current = null;
+    return selector;
+  }, [inspection]);
 
   return {
     active,
@@ -311,13 +350,17 @@ export function useWorkspaceSourceEdit(input: {
     selection: inspection ? selection : null,
     fieldStates: inspection ? fieldStates : undefined,
     ancestors: inspection ? ancestors : [],
+    picked: inspection ? picked : null,
     toggle: () => {
       setEnabled((value) => !value);
+      restoreSelector.current = null;
       clearSelection();
     },
+    enable,
     clearSelection,
     exit,
     select,
     apply,
+    takeRestoreSelector,
   };
 }

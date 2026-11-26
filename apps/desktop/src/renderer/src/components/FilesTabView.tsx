@@ -8,6 +8,7 @@ import {
 import {
   type CommentRow,
   DEFAULT_SOURCE_ENTRY,
+  inspectTweakSource,
   LEGACY_SOURCE_ENTRY,
   type PreviewMode,
 } from '@open-codesign/shared';
@@ -19,7 +20,6 @@ import {
   Folder,
   FolderOpen,
   Globe2,
-  MousePointer2,
   RefreshCw,
 } from 'lucide-react';
 import {
@@ -62,17 +62,25 @@ import {
   postModeToPreviewWindow,
   postPinSelectorToPreviewWindow,
   postSourceEditAncestorToPreviewWindow,
+  postSourceEditPreviewToPreviewWindow,
+  postSourceEditRestoreToPreviewWindow,
   requestSourceEditValidation,
   type SourceEditAncestor,
   stablePreviewSourceKey,
 } from '../preview/helpers';
-import { useWorkspaceSourceEdit } from '../preview/useWorkspaceSourceEdit';
+import {
+  type SourceEditPickedElement,
+  useWorkspaceSourceEdit,
+} from '../preview/useWorkspaceSourceEdit';
 import {
   readWorkspacePreviewSource,
   resolveDesignPreviewSource,
 } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
-import { SourceEditPanel } from './SourceEditPanel';
+import { ElementInspector } from './inspector/ElementInspector';
+import type { PreviewDraft } from './inspector/element-model';
+import { InspectorRail, PageColorsSection } from './inspector/InspectorPanel';
+import { buildPalette, designMdColors, tweakColorTokens } from './inspector/palette';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 
@@ -1024,6 +1032,7 @@ interface WorkspaceFilePreviewMessageHandlerInput {
   onSourceEditSelected?: (
     selection?: SourceEditSelection,
     ancestors?: SourceEditAncestor[],
+    element?: SourceEditPickedElement,
   ) => void;
   onSelectionCleared?: (() => void) | undefined;
   sourcePath?: string | undefined;
@@ -1077,7 +1086,12 @@ export function createWorkspaceFilePreviewMessageHandlers({
     onSelectionCleared: () => onSelectionCleared?.(),
     onElementSelected: (msg) => {
       if (sourceEditMode) {
-        onSourceEditSelected?.(msg.sourceEdit, msg.sourceEditAncestors ?? []);
+        onSourceEditSelected?.(msg.sourceEdit, msg.sourceEditAncestors ?? [], {
+          selector: msg.selector,
+          tag: msg.tag,
+          outerHTML: msg.outerHTML,
+          rect: msg.rect,
+        });
         return;
       }
       selectCanvasElement({
@@ -1698,6 +1712,47 @@ export function WorkspaceFilePreview({
     : interactive
       ? interactionMode
       : 'default';
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [designMd, setDesignMd] = useState<string | null>(null);
+  useEffect(() => {
+    void currentDesignUpdatedAt;
+    const read = window.codesign?.files?.read;
+    if (!interactive || !renderable || !currentDesignId || !read) {
+      setDesignMd(null);
+      return;
+    }
+    let cancelled = false;
+    void read(currentDesignId, 'DESIGN.md')
+      .then((result) => {
+        if (!cancelled) setDesignMd(result.content);
+      })
+      .catch(() => {
+        if (!cancelled) setDesignMd(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDesignId, currentDesignUpdatedAt, interactive, renderable]);
+  const palette = useMemo(() => {
+    const source = activePreviewSource?.content ?? '';
+    const tweaks = inspectTweakSource(source);
+    return buildPalette({
+      tokens: tweakColorTokens(tweaks.block?.tokens, tweaks.schema),
+      designColors: designMdColors(designMd),
+      source,
+    });
+  }, [activePreviewSource?.content, designMd]);
+  const previewDraft = useCallback(
+    (draft: PreviewDraft) => {
+      if (!sourceEdit.inspection) return;
+      postSourceEditPreviewToPreviewWindow(
+        iframeRef.current?.contentWindow,
+        draft,
+        sourceEdit.inspection,
+      );
+    },
+    [sourceEdit.inspection],
+  );
 
   useLayoutEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -1973,6 +2028,23 @@ export function WorkspaceFilePreview({
     );
   }
 
+  const showInspector = interactive && !previewFullscreen && Boolean(activePreviewSource);
+  const askAi = sourceEdit.picked
+    ? () => {
+        const picked = sourceEdit.picked;
+        const sourcePath = activePreviewSource?.path;
+        if (!picked) return;
+        sourceEdit.exit();
+        openCommentBubble({
+          ...(sourcePath ? { sourcePath } : {}),
+          selector: picked.selector,
+          tag: picked.tag,
+          outerHTML: picked.outerHTML,
+          rect: picked.rect,
+        });
+      }
+    : undefined;
+
   return (
     <div
       className="relative flex h-full min-h-0 flex-col"
@@ -1990,28 +2062,6 @@ export function WorkspaceFilePreview({
         sourceEdit.exit();
       }}
     >
-      {interactive && !previewFullscreen ? (
-        <div className="flex shrink-0 justify-end border-b border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)]">
-          <button
-            type="button"
-            aria-pressed={sourceEdit.active}
-            disabled={!sourceEdit.eligible}
-            title={
-              sourceEdit.eligible
-                ? t('canvas.sourceEdit.scope')
-                : t('canvas.sourceEdit.unavailable')
-            }
-            onClick={() => {
-              useCodesignStore.getState().clearCanvasElement();
-              sourceEdit.toggle();
-            }}
-            className="inline-flex min-h-[var(--size-control-sm)] items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-sm)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
-          >
-            <MousePointer2 className="size-[var(--space-4)]" aria-hidden />
-            {t('canvas.sourceEdit.toggle')}
-          </button>
-        </div>
-      ) : null}
       <div className="relative flex min-h-0 flex-1">
         <iframe
           key={srcDoc}
@@ -2022,6 +2072,11 @@ export function WorkspaceFilePreview({
           onLoad={() => {
             const win = iframeRef.current?.contentWindow;
             postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
+            if (sourceEdit.active && sourceEdit.inspection) {
+              const selector = sourceEdit.takeRestoreSelector();
+              if (selector)
+                postSourceEditRestoreToPreviewWindow(win, selector, sourceEdit.inspection);
+            }
             if (
               interactive &&
               !sourceEdit.active &&
@@ -2033,65 +2088,79 @@ export function WorkspaceFilePreview({
           }}
           className="min-w-0 flex-1 h-full bg-white border-0 block"
         />
-        <div hidden={previewFullscreen} className="min-h-0 shrink-0 max-w-[45%]">
-          {interactive ? (
-            <div
-              className={
-                sourceEdit.active
-                  ? 'flex h-full min-h-0 w-[var(--size-menu-wide)] max-w-full flex-col'
-                  : undefined
+        {showInspector && activePreviewSource ? (
+          <InspectorRail
+            mode={sourceEdit.active ? 'element' : 'page'}
+            onModeChange={(mode) => {
+              if (mode === 'element') {
+                if (!sourceEdit.eligible) return;
+                useCodesignStore.getState().clearCanvasElement();
+                sourceEdit.enable();
+              } else {
+                sourceEdit.exit();
               }
-            >
-              {sourceEdit.active && activePreviewSource ? (
-                <SourceEditPanel
-                  key={`${sourceEdit.inspection?.previewRevision}:${sourceEdit.selection?.id ?? ''}`}
-                  path={activePreviewSource.path}
-                  target={sourceEdit.selection}
-                  busy={sourceEdit.busy}
-                  message={sourceEdit.message}
-                  onApply={sourceEdit.apply}
-                  onClose={sourceEdit.exit}
-                  fieldStates={sourceEdit.fieldStates}
-                  ancestors={sourceEdit.ancestors}
-                  onSelectAncestor={(selector) => {
-                    if (
-                      !sourceEdit.inspection ||
-                      sourceEdit.busy ||
-                      !sourceEdit.ancestors.some((item) => item.selector === selector)
-                    )
-                      return;
-                    postSourceEditAncestorToPreviewWindow(
-                      iframeRef.current?.contentWindow,
-                      selector,
-                      sourceEdit.inspection,
-                      pushIframeError,
-                    );
-                  }}
-                  source={activePreviewSource.content}
-                />
-              ) : null}
-            </div>
-          ) : null}
-          {showTweakPanel && !sourceEdit.active ? (
-            <Suspense fallback={null}>
-              {activePreviewSource ? (
-                <TweakPanel
-                  key={`${currentDesignId}:${activePreviewSource.path}`}
-                  iframeRef={iframeRef}
-                  source={activePreviewSource}
-                  onPersist={(source) =>
-                    setPreviewSource({
-                      ...source,
-                      ...(activePreviewSource.workspaceDesignId
-                        ? { workspaceDesignId: activePreviewSource.workspaceDesignId }
-                        : {}),
-                    })
-                  }
-                />
-              ) : null}
-            </Suspense>
-          ) : null}
-        </div>
+            }}
+            elementAvailable={sourceEdit.eligible}
+            elementUnavailableReason={t('canvas.sourceEdit.unavailable')}
+            collapsed={inspectorCollapsed}
+            onCollapsedChange={(collapsed) => {
+              if (collapsed) sourceEdit.exit();
+              setInspectorCollapsed(collapsed);
+            }}
+            page={
+              <>
+                {showTweakPanel ? (
+                  <Suspense fallback={null}>
+                    <TweakPanel
+                      key={`${currentDesignId}:${activePreviewSource.path}`}
+                      iframeRef={iframeRef}
+                      presentation="inspector"
+                      source={activePreviewSource}
+                      onPersist={(source) =>
+                        setPreviewSource({
+                          ...source,
+                          ...(activePreviewSource.workspaceDesignId
+                            ? { workspaceDesignId: activePreviewSource.workspaceDesignId }
+                            : {}),
+                        })
+                      }
+                    />
+                  </Suspense>
+                ) : null}
+                <PageColorsSection palette={palette} />
+              </>
+            }
+            element={
+              <ElementInspector
+                key={`${sourceEdit.inspection?.previewRevision}:${sourceEdit.selection?.id ?? sourceEdit.picked?.selector ?? ''}`}
+                pickedTag={sourceEdit.selection?.tagName ?? sourceEdit.picked?.tag ?? null}
+                target={sourceEdit.selection}
+                fieldStates={sourceEdit.fieldStates}
+                ancestors={sourceEdit.ancestors}
+                busy={sourceEdit.busy}
+                message={sourceEdit.message}
+                palette={palette}
+                onApply={sourceEdit.apply}
+                onPreview={previewDraft}
+                onAskAi={askAi}
+                onSelectAncestor={(selector) => {
+                  if (
+                    !sourceEdit.inspection ||
+                    sourceEdit.busy ||
+                    !sourceEdit.ancestors.some((item) => item.selector === selector)
+                  )
+                    return;
+                  postSourceEditAncestorToPreviewWindow(
+                    iframeRef.current?.contentWindow,
+                    selector,
+                    sourceEdit.inspection,
+                    pushIframeError,
+                  );
+                }}
+              />
+            }
+          />
+        ) : null}
       </div>
     </div>
   );

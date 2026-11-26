@@ -321,6 +321,97 @@
       "status": "状态",
       "id": "运行 ID",
       "tokens": "Tokens"
+    },
+    "tabs": {
+      "page": "页面",
+      "element": "元素"
+    },
+    "collapse": "收起检查器",
+    "expand": "展开检查器",
+    "paletteLabel": "色板",
+    "paletteMatch": "= {{name}}",
+    "paletteSource": {
+      "token": "微调令牌",
+      "design": "DESIGN.md",
+      "used": "本页已用"
+    },
+    "groups": {
+      "content": "内容",
+      "color": "颜色",
+      "layout": "排版与间距",
+      "accessibility": "辅助信息"
+    },
+    "fields": {
+      "text": "文案",
+      "textN": "文案 {{n}}",
+      "color": "文字",
+      "backgroundColor": "背景",
+      "fontSize": "字号",
+      "gap": "间距",
+      "padding": "内边距",
+      "borderRadius": "圆角",
+      "maxWidth": "最大宽度",
+      "title": "提示文字",
+      "placeholder": "占位文字",
+      "alt": "替代文字"
+    },
+    "box": {
+      "all": "四边",
+      "vertical": "上下",
+      "horizontal": "左右",
+      "top": "上",
+      "right": "右",
+      "bottom": "下",
+      "left": "左"
+    },
+    "element": {
+      "pickHint": "在预览中点选一个元素开始编辑。",
+      "parent": "上一层：{{name}}",
+      "selectParent": "选择上一层元素",
+      "ancestors": "上层元素",
+      "shared": "来自共享定义，修改会同步到所有引用处。",
+      "locked_one": "{{count}} 项由代码控制",
+      "locked_other": "{{count}} 项由代码控制",
+      "noDirectEdits": "这个元素没有可以直接修改的属性。",
+      "askAi": "交给 AI 修改",
+      "pending_one": "{{count}} 处修改 · 预览中实时显示",
+      "pending_other": "{{count}} 处修改 · 预览中实时显示",
+      "noPending": "修改数值后点击“应用”写入源码。",
+      "applying": "正在写入源码…",
+      "discard": "撤销",
+      "apply": "应用"
+    },
+    "page": {
+      "colorTokens": "颜色令牌",
+      "colorTokensHint": "修改令牌会同步到所有读取它的地方。",
+      "otherControls": "其他控件",
+      "designColors": "DESIGN.md 色板",
+      "usedColors": "本页已用颜色",
+      "usedCount_one": "{{count}} 处",
+      "usedCount_other": "{{count}} 处"
+    },
+    "kinds": {
+      "heading": "标题",
+      "paragraph": "段落",
+      "text": "文字",
+      "link": "链接",
+      "button": "按钮",
+      "image": "图片",
+      "input": "输入框",
+      "label": "标签",
+      "list": "列表",
+      "listItem": "列表项",
+      "header": "页眉",
+      "footer": "页脚",
+      "navigation": "导航",
+      "main": "主体内容",
+      "section": "区块",
+      "form": "表单",
+      "graphic": "图形",
+      "media": "媒体",
+      "table": "表格",
+      "container": "容器",
+      "element": "元素"
     }
   },
   "chat": {

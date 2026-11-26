@@ -4,6 +4,8 @@ import {
   handlePreviewMessage,
   type PreviewMessageHandlers,
   postSourceEditAncestorToPreviewWindow,
+  postSourceEditPreviewToPreviewWindow,
+  postSourceEditRestoreToPreviewWindow,
   requestSourceEditValidation,
 } from './helpers';
 
@@ -117,6 +119,23 @@ describe('preview-only commit validation', () => {
       '*',
     );
     expect(error).not.toHaveBeenCalled();
+  });
+  it('posts preview drafts and post-save restore selectors with current revision', () => {
+    const postMessage = vi.fn();
+    const win = { postMessage } as unknown as Window;
+    const draft = { styles: { color: '#ff0000' }, attributes: { title: 'Updated' } };
+    expect(postSourceEditPreviewToPreviewWindow(null, draft, current)).toBe(false);
+    expect(postSourceEditRestoreToPreviewWindow(undefined, '/main[1]/p[1]', current)).toBe(false);
+    expect(postSourceEditPreviewToPreviewWindow(win, draft, current)).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { __codesign: true, type: 'SOURCE_EDIT_PREVIEW', ...draft, ...current },
+      '*',
+    );
+    expect(postSourceEditRestoreToPreviewWindow(win, '/main[1]/p[1]', current)).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { __codesign: true, type: 'SOURCE_EDIT_RESTORE', selector: '/main[1]/p[1]', ...current },
+      '*',
+    );
   });
 });
 
