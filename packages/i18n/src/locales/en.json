@@ -114,6 +114,8 @@
         "unsafePath": "The file path or link state does not meet safe-write requirements. No edit can be saved.",
         "invalidInput": "The edit request is invalid. Reopen the editing panel and try again.",
         "stageChanged": "The temporary save file changed. Writing stopped; check the file before retrying.",
+        "nothingToUndo": "There are no source edits left to undo for this file.",
+        "nothingToRedo": "There are no undone source edits left to redo for this file.",
         "unknown": "This content cannot currently be confirmed safe to edit. Refresh and select again, or inspect the source if it remains unavailable."
       },
       "ancestors": "Containing elements",
@@ -337,23 +339,144 @@
     },
     "groups": {
       "content": "Content",
+      "media": "Media",
+      "appearance": "Appearance",
+      "typography": "Typography",
+      "spacing": "Spacing",
       "color": "Color",
-      "layout": "Type & spacing",
+      "layout": "Layout",
+      "classes": "Classes",
       "accessibility": "Accessibility"
     },
     "fields": {
       "text": "Text",
       "textN": "Text {{n}}",
       "color": "Text",
+      "background": "Background",
       "backgroundColor": "Fill",
+      "fontFamily": "Font",
       "fontSize": "Font size",
+      "fontWeight": "Weight",
+      "lineHeight": "Line height",
+      "letterSpacing": "Tracking",
+      "textAlign": "Align",
+      "textTransform": "Case",
       "gap": "Gap",
       "padding": "Padding",
-      "borderRadius": "Radius",
+      "margin": "Margin",
+      "width": "Width",
+      "height": "Height",
       "maxWidth": "Max width",
+      "minHeight": "Min height",
+      "border": "Border",
+      "borderColor": "Border color",
+      "borderWidth": "Border width",
+      "borderRadius": "Radius",
+      "boxShadow": "Shadow",
+      "opacity": "Opacity",
+      "overflow": "Overflow",
+      "display": "Display",
+      "flexDirection": "Direction",
+      "justifyContent": "Justify",
+      "alignItems": "Align items",
+      "flexWrap": "Wrap",
+      "gridTemplateColumns": "Columns",
+      "objectFit": "Object fit",
       "title": "Tooltip",
       "placeholder": "Placeholder",
-      "alt": "Alt text"
+      "alt": "Alt text",
+      "aria-label": "ARIA label",
+      "href": "Link URL",
+      "src": "Source URL",
+      "className": "Classes"
+    },
+    "provenance": {
+      "authored": "Authored in source",
+      "token": "Linked to token",
+      "tokenNamed": "Token: {{name}}",
+      "computed": "Computed style (edit to apply inline)",
+      "locked": "Controlled by code"
+    },
+    "options": {
+      "display": {
+        "block": "Block",
+        "flex": "Flex",
+        "grid": "Grid",
+        "inline": "Inline",
+        "inlineBlock": "Inline block",
+        "hidden": "Hidden"
+      },
+      "flexDirection": {
+        "row": "Row",
+        "column": "Column",
+        "rowReverse": "Row rev",
+        "columnReverse": "Col rev"
+      },
+      "justifyContent": {
+        "flexStart": "Start",
+        "center": "Center",
+        "flexEnd": "End",
+        "spaceBetween": "Space between",
+        "spaceAround": "Space around",
+        "spaceEvenly": "Space evenly"
+      },
+      "alignItems": {
+        "stretch": "Stretch",
+        "flexStart": "Start",
+        "center": "Center",
+        "flexEnd": "End",
+        "baseline": "Baseline"
+      },
+      "flexWrap": {
+        "nowrap": "No wrap",
+        "wrap": "Wrap"
+      },
+      "textAlign": {
+        "left": "Left",
+        "center": "Center",
+        "right": "Right",
+        "justify": "Justify"
+      },
+      "textTransform": {
+        "none": "None",
+        "uppercase": "Uppercase",
+        "lowercase": "Lowercase",
+        "capitalize": "Capitalize"
+      },
+      "fontWeight": {
+        "light": "Light (300)",
+        "regular": "Regular (400)",
+        "medium": "Medium (500)",
+        "semibold": "Semibold (600)",
+        "bold": "Bold (700)",
+        "extrabold": "Extra bold (800)"
+      },
+      "boxShadow": {
+        "none": "None",
+        "subtle": "Subtle",
+        "card": "Card",
+        "elevated": "Elevated"
+      },
+      "objectFit": {
+        "cover": "Cover",
+        "contain": "Contain",
+        "fill": "Fill",
+        "none": "None",
+        "scaleDown": "Scale down"
+      },
+      "overflow": {
+        "visible": "Visible",
+        "hidden": "Hidden",
+        "auto": "Auto",
+        "scroll": "Scroll"
+      },
+      "fontFamily": {
+        "system": "System UI",
+        "sans": "Sans (Inter)",
+        "serif": "Serif (Georgia)",
+        "mono": "Monospace",
+        "display": "Display (Fraunces)"
+      }
     },
     "box": {
       "all": "All sides",
@@ -369,13 +492,45 @@
       "parent": "Up: {{name}}",
       "selectParent": "Select the parent element",
       "ancestors": "Parent elements",
+      "children": "Child elements",
+      "selectChild": "Select child: {{name}}",
       "shared": "Shared definition — every use changes together.",
+      "sharedBadge": "Shared · {{count}}",
+      "itemBadge": "Item #{{index}}",
       "locked_one": "{{count}} property is controlled by code",
       "locked_other": "{{count}} properties are controlled by code",
       "noDirectEdits": "This element has no properties that can be edited directly.",
       "askAi": "Ask AI to change it",
+      "undo": "Undo",
+      "redo": "Redo",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moveLeft": "Move left",
+      "moveRight": "Move right",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "hide": "Hide element",
+      "show": "Show element",
+      "resetStyle": "Reset property",
+      "restoreStyle": "Keep property",
+      "bindToken": "Bind as tweak token",
+      "reloadNote": "Applying reloads preview",
+      "inlineTextHint": "Double-click text on canvas to edit inline.",
+      "boxLink": "Link all sides",
+      "boxUnlink": "Edit sides independently",
+      "boxPadding": "Padding",
+      "boxMargin": "Margin",
+      "toolbarLabel": "Selected element actions",
+      "inlineEditorLabel": "Edit element text inline",
+      "dimensions": "{{width}} × {{height}}",
+      "emptyValue": "Default",
+      "customValue": "Custom",
       "pending_one": "{{count}} change · shown live in the preview",
       "pending_other": "{{count}} changes · shown live in the preview",
+      "pendingText_one": "{{count}} text edit · shown live",
+      "pendingText_other": "{{count}} text edits · shown live",
+      "pendingStyle_one": "{{count}} style edit · shown live",
+      "pendingStyle_other": "{{count}} style edits · shown live",
       "noPending": "Edit a value, then apply it to the source.",
       "applying": "Writing to source…",
       "discard": "Discard",
@@ -388,7 +543,9 @@
       "designColors": "DESIGN.md palette",
       "usedColors": "Colors on this page",
       "usedCount_one": "{{count}} use",
-      "usedCount_other": "{{count}} uses"
+      "usedCount_other": "{{count}} uses",
+      "syncDesignMd": "Save to DESIGN.md",
+      "syncingDesignMd": "Saving…"
     },
     "kinds": {
       "heading": "Heading",

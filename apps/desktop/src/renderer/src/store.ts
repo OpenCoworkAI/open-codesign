@@ -16,6 +16,7 @@ import type {
   ReportEventInput,
   ReportEventResult,
   SelectedElement,
+  SourceEditAstHandoffContext,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type {
@@ -31,7 +32,7 @@ import { recordAction } from './lib/action-timeline';
 import { tr, uniqueFiles } from './store/lib/locale';
 import { makeActiveMessagesSlice } from './store/slices/active-messages';
 import { makeChatSlice } from './store/slices/chat';
-import { makeCommentsSlice } from './store/slices/comments';
+import { commentAnchorAstKey, makeCommentsSlice } from './store/slices/comments';
 import { makeDesignsSlice } from './store/slices/designs';
 import { makeDiagnosticsSlice } from './store/slices/diagnostics';
 import {
@@ -85,6 +86,7 @@ export {
   buildEnrichedPrompt,
   closeTabAt,
   coerceUsageSnapshot,
+  commentAnchorAstKey,
   DEFAULT_CANVAS_TABS,
   extractCodesignErrorCode,
   extractUpstreamContext,
@@ -118,6 +120,8 @@ export interface CommentBubbleAnchor {
   rect: CommentRect;
   /** v2 enrichment — parent element outerHTML, truncated. */
   parentOuterHTML?: string;
+  /** Structured AST/computed-style context from element inspector Ask AI handoff. */
+  astContext?: SourceEditAstHandoffContext;
   /** If set, the bubble is editing an existing saved comment. */
   existingCommentId?: string;
   initialText?: string;
@@ -226,6 +230,7 @@ export interface CodesignState {
    *  the Comments panel only and are not sent to the agent. */
   queuedCommentIds: string[];
   commentBubble: CommentBubbleAnchor | null;
+  astContextByAnchorKey: Record<string, SourceEditAstHandoffContext>;
   /** Id of the snapshot currently visible in the preview — pins filter by it. */
   currentSnapshotId: string | null;
   /** Live, iframe-viewport-relative rects keyed by selector. Updated on
@@ -449,6 +454,7 @@ export interface CodesignState {
     scope?: CommentScope;
     parentOuterHTML?: string;
     sourcePath?: string;
+    astContext?: SourceEditAstHandoffContext;
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<CommentRow | null>;
   /** Single entry point used by CommentBubble. If `existingCommentId` is set,
@@ -466,6 +472,7 @@ export interface CodesignState {
     text: string;
     scope?: CommentScope;
     parentOuterHTML?: string;
+    astContext?: SourceEditAstHandoffContext;
   }) => Promise<CommentRow | null>;
   removeComment: (id: string) => Promise<void>;
   /** Replace the live rects map — called from PreviewPane when the sandbox
@@ -579,6 +586,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   commentsLoaded: false,
   queuedCommentIds: [],
   commentBubble: null,
+  astContextByAnchorKey: {},
   currentSnapshotId: null,
   liveRects: {},
 

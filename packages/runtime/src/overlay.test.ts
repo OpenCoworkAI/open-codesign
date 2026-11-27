@@ -3,7 +3,12 @@ import {
   buildOverlayScript,
   isElementRectsMessage,
   isOverlayMessage,
+  isSourceEditElementSnapshot,
+  isSourceEditHotSwappedMessage,
+  isSourceEditInlineEditRequestMessage,
   OVERLAY_SCRIPT,
+  SOURCE_EDIT_HUD_ATTRIBUTE,
+  SOURCE_EDIT_PREVIEW_STYLE_ID,
 } from './overlay';
 
 interface FakeWindow {
@@ -88,9 +93,37 @@ describe('OVERLAY_SCRIPT reattach loop warning throttle', () => {
 // would arrive with ev.source === window. Both paths must be rejected.
 // ---------------------------------------------------------------------------
 
+interface FakeDomNode {
+  tagName: string;
+  id: string;
+  isConnected: boolean;
+  style: Record<string, string>;
+  attrs: Record<string, string>;
+  className: string;
+  children: FakeDomNode[];
+  firstChild: FakeDomNode | null;
+  firstElementChild: FakeDomNode | null;
+  nextElementSibling: FakeDomNode | null;
+  parentNode: FakeDomNode | null;
+  parentElement: FakeDomNode | null;
+  nodeType: number;
+  shadowRoot: FakeDomNode | null;
+  textContent: string;
+  setAttribute: (name: string, value: string) => void;
+  getAttribute: (name: string) => string | null;
+  hasAttribute: (name: string) => boolean;
+  removeAttribute: (name: string) => void;
+  addEventListener: (type: string, fn: (e: unknown) => void) => void;
+  appendChild: (child: FakeDomNode) => FakeDomNode;
+  removeChild: (child: FakeDomNode) => FakeDomNode;
+  attachShadow: (init: { mode: string }) => FakeDomNode;
+  remove: () => void;
+}
+
 interface ListenerHarness {
   body: object;
-  documentElement: { getAttribute: (name: string) => string | null };
+  head: FakeDomNode;
+  documentElement: FakeDomNode;
   selectorMatches: Map<string, unknown[]>;
   elementIds: Map<string, unknown>;
   documentListeners: Map<string, (e: unknown) => void>;
@@ -98,9 +131,16 @@ interface ListenerHarness {
   parent: object;
   postedToParent: unknown[];
   setHitTarget: (target: unknown) => void;
+  setComputedStyle: (fn: ((el: unknown) => unknown) | null) => void;
   runTick: () => void;
+  runRaf: () => void;
+  triggerResize: (el?: unknown) => void;
+  resizeObservers: Array<{ observed: unknown[]; disconnected: boolean }>;
   queueMutations: (records: object[]) => void;
-  hitLayer: { isConnected: boolean; style: Record<string, string>; textContent?: string };
+  fakeWindow: Record<string, unknown>;
+  hitLayer: FakeDomNode;
+  getHudHost: () => FakeDomNode | null;
+  getPreviewStyleEl: () => FakeDomNode | null;
 }
 
 function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
@@ -113,33 +153,125 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   const parent = { postMessage: (msg: unknown) => postedToParent.push(msg) };
   let hitTarget: unknown = null;
   let tick = () => {};
-  const hitLayer = {
-    isConnected: false,
-    style: {} as Record<string, string>,
-    setAttribute: () => {},
-    addEventListener: () => {},
-    remove: () => {
-      hitLayer.isConnected = false;
-    },
-  };
+  let pendingRaf: (() => void) | null = null;
+  let computedStyleFn: ((el: unknown) => unknown) | null = null;
+  let hitLayerClaimed = false;
+  let hudHost: FakeDomNode | null = null;
+
+  function makeNode(tagName: string): FakeDomNode {
+    const attrs: Record<string, string> = {};
+    const children: FakeDomNode[] = [];
+    let _id = '';
+    const listeners = new Map<string, (e: unknown) => void>();
+    const node: FakeDomNode = {
+      tagName: tagName.toUpperCase(),
+      get id() {
+        return _id;
+      },
+      set id(val: string) {
+        _id = val;
+        if (val) elementIds.set(val, node);
+      },
+      isConnected: false,
+      style: {} as Record<string, string>,
+      attrs,
+      className: '',
+      children,
+      get firstChild() {
+        return children[0] ?? null;
+      },
+      get firstElementChild() {
+        return children[0] ?? null;
+      },
+      nextElementSibling: null,
+      parentNode: null,
+      parentElement: null,
+      nodeType: 1,
+      shadowRoot: null,
+      textContent: '',
+      setAttribute(name: string, value: string) {
+        attrs[name] = String(value);
+        if (name === SOURCE_EDIT_HUD_ATTRIBUTE) hudHost = node;
+        if (name === 'id') node.id = String(value);
+      },
+      getAttribute(name: string) {
+        return attrs[name] ?? null;
+      },
+      hasAttribute(name: string) {
+        return Object.prototype.hasOwnProperty.call(attrs, name);
+      },
+      removeAttribute(name: string) {
+        delete attrs[name];
+      },
+      addEventListener(type: string, fn: (e: unknown) => void) {
+        listeners.set(type, fn);
+      },
+      appendChild(child: FakeDomNode) {
+        if (child.parentNode && child.parentNode !== node) {
+          child.parentNode.removeChild(child);
+        }
+        const prev = children.at(-1) ?? null;
+        if (prev) prev.nextElementSibling = child;
+        child.nextElementSibling = null;
+        child.parentNode = node;
+        child.parentElement = node;
+        child.isConnected = true;
+        children.push(child);
+        if (child.id) elementIds.set(child.id, child);
+        if (Object.prototype.hasOwnProperty.call(child.attrs, SOURCE_EDIT_HUD_ATTRIBUTE)) {
+          hudHost = child;
+        }
+        return child;
+      },
+      removeChild(child: FakeDomNode) {
+        const idx = children.indexOf(child);
+        if (idx >= 0) {
+          children.splice(idx, 1);
+          for (let i = 0; i < children.length; i += 1) {
+            const cur = children[i];
+            if (cur) cur.nextElementSibling = children[i + 1] ?? null;
+          }
+        }
+        child.parentNode = null;
+        child.parentElement = null;
+        child.isConnected = false;
+        return child;
+      },
+      attachShadow() {
+        const root = makeNode('#shadow-root');
+        root.isConnected = true;
+        node.shadowRoot = root;
+        return root;
+      },
+      remove() {
+        if (node.parentNode) node.parentNode.removeChild(node);
+        else node.isConnected = false;
+        if (node === hitLayer) hitLayerClaimed = false;
+        if (node === hudHost) hudHost = null;
+      },
+    };
+    return node;
+  }
+
+  const hitLayer = makeNode('div');
+  const head = makeNode('head');
+  head.isConnected = true;
+  const documentElement = makeNode('html');
+  documentElement.isConnected = true;
 
   const fakeDocument = {
     body,
+    head,
     querySelectorAll: (selector: string) => selectorMatches.get(selector) ?? [],
     querySelector: (selector: string) => selectorMatches.get(selector)?.[0] ?? null,
-    createElement: () => hitLayer,
-    documentElement: {
-      attrs: {} as Record<string, string>,
-      getAttribute(name: string) {
-        return this.attrs[name] ?? null;
-      },
-      setAttribute(name: string, value: string) {
-        this.attrs[name] = value;
-      },
-      appendChild: () => {
-        hitLayer.isConnected = true;
-      },
+    createElement: (tag: string) => {
+      if (tag === 'div' && !hitLayerClaimed) {
+        hitLayerClaimed = true;
+        return hitLayer;
+      }
+      return makeNode(tag || 'div');
     },
+    documentElement,
     elementFromPoint: () => hitTarget,
     getElementById: (id: string) => elementIds.get(id) ?? null,
     addEventListener: (type: string, fn: (e: unknown) => void) => {
@@ -150,18 +282,49 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   let mutations: object[] = [];
   class MutationObserver {
     observe() {}
+    disconnect() {}
     takeRecords() {
       const records = mutations;
       mutations = [];
       return records;
     }
   }
-  const fakeWindow = {
+  const resizeObservers: Array<{
+    cb: () => void;
+    observed: unknown[];
+    disconnected: boolean;
+  }> = [];
+  class ResizeObserver {
+    private entry: { cb: () => void; observed: unknown[]; disconnected: boolean };
+    constructor(cb: () => void) {
+      this.entry = { cb, observed: [], disconnected: false };
+      resizeObservers.push(this.entry);
+    }
+    observe(el: unknown) {
+      this.entry.observed.push(el);
+    }
+    disconnect() {
+      this.entry.disconnected = true;
+    }
+  }
+  const fakeWindow: Record<string, unknown> = {
     MutationObserver,
+    ResizeObserver,
     CSS: { escape: (value: string) => value.replaceAll(':', '\\:') },
+    getComputedStyle: (el: unknown) => (computedStyleFn ? computedStyleFn(el) : null),
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       windowListeners.set(type, fn);
     },
+    requestAnimationFrame: (fn: () => void) => {
+      pendingRaf = fn;
+      return 1;
+    },
+    scrollX: 0,
+    scrollY: 0,
+    scrollTo: vi.fn((x: number, y: number) => {
+      fakeWindow['scrollX'] = x;
+      fakeWindow['scrollY'] = y;
+    }),
     parent,
   };
   const fakeSetInterval = (fn: () => void) => {
@@ -178,7 +341,8 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
   sandbox(fakeWindow, fakeDocument, { warn: () => {} }, fakeSetInterval);
   return {
     body,
-    documentElement: fakeDocument.documentElement,
+    head,
+    documentElement,
     selectorMatches,
     elementIds,
     documentListeners,
@@ -188,11 +352,29 @@ function runOverlayWithHarness(script = OVERLAY_SCRIPT): ListenerHarness {
     setHitTarget: (target) => {
       hitTarget = target;
     },
+    setComputedStyle: (fn) => {
+      computedStyleFn = fn;
+    },
     runTick: () => tick(),
+    runRaf: () => {
+      const fn = pendingRaf;
+      pendingRaf = null;
+      if (fn) fn();
+    },
+    triggerResize: () => {
+      for (const ro of resizeObservers) {
+        if (!ro.disconnected) ro.cb();
+      }
+    },
+    resizeObservers,
     queueMutations: (records) => {
       mutations.push(...records);
     },
+    fakeWindow,
     hitLayer,
+    getHudHost: () => hudHost,
+    getPreviewStyleEl: () =>
+      (elementIds.get(SOURCE_EDIT_PREVIEW_STYLE_ID) as FakeDomNode | undefined) ?? null,
   };
 }
 
@@ -1304,9 +1486,10 @@ describe('live source-edit preview and deferred selection restore', () => {
     return { h, button, control, clickTarget };
   }
 
-  it('applies allowlisted preview styles/attributes without breaking validation or reattach, then reverts cleanly', () => {
+  it('applies allowlisted preview stylesheet, attributes, className, and live texts without breaking validation or reattach, then reverts cleanly', () => {
     const { h, button, control, clickTarget } = setup(true);
     clickTarget();
+    h.runRaf();
 
     // Wrong source, wrong mode or stale revision are ignored.
     control('SOURCE_EDIT_PREVIEW', { styles: { gap: '40' }, attributes: {} }, {});
@@ -1315,30 +1498,47 @@ describe('live source-edit preview and deferred selection restore', () => {
       styles: { gap: '40' },
       attributes: {},
     });
-    expect(button.style.getPropertyValue('gap')).toBe('12px');
+    expect(h.getPreviewStyleEl()?.textContent ?? '').toBe('');
 
     control('SOURCE_EDIT_PREVIEW', {
-      styles: { gap: '24', fontSize: '16px', color: '#ff0000', position: 'fixed' },
+      styles: {
+        gap: '24',
+        fontSize: '16px',
+        color: '#ff0000',
+        opacity: '0.5',
+        position: 'fixed',
+      },
+      removedStyles: ['borderRadius'],
       attributes: { title: 'Preview title', onclick: 'evil()' },
+      texts: { 'text:only': 'Live Preview' },
+      className: 'btn-live',
     });
-    expect(button.style.getPropertyValue('gap')).toBe('24px');
-    expect(button.style.getPropertyValue('font-size')).toBe('16px');
-    expect(button.style.getPropertyValue('color')).toBe('#ff0000');
-    expect(button.style.getPropertyValue('position')).toBe('');
+    const cssText = h.getPreviewStyleEl()?.textContent ?? '';
+    expect(cssText).toContain(`[data-codesign-source-id="${previewRevision}:10:50"]`);
+    expect(cssText).toContain('gap: 24px !important;');
+    expect(cssText).toContain('font-size: 16px !important;');
+    expect(cssText).toContain('color: #ff0000 !important;');
+    expect(cssText).toContain('opacity: 0.5 !important;');
+    expect(cssText).toContain('border-radius: unset !important;');
+    expect(cssText).not.toContain('position');
+    expect(button.style.getPropertyValue('gap')).toBe('12px');
     expect(button.getAttribute('title')).toBe('Preview title');
     expect(button.getAttribute('onclick')).toBeNull();
+    expect(button.getAttribute('class')).toBe('btn-live');
+    expect(button.childNodes[0]?.textContent).toBe('Live Preview');
+    h.runRaf();
     expect(h.postedToParent.at(-1)).toMatchObject({ type: 'ELEMENT_RECTS' });
 
     // Reattach tick and commit validation revert around provenance checks, so states stay ready.
     const beforeTick = h.postedToParent.length;
     h.runTick();
     expect(h.postedToParent).toHaveLength(beforeTick);
-    expect(button.style.getPropertyValue('gap')).toBe('24px');
+    expect(button.childNodes[0]?.textContent).toBe('Live Preview');
 
     control('SOURCE_EDIT_VALIDATE', {
       requestId: 'req-preview-1',
       targetId: '10:50',
-      fieldKey: 'style:gap',
+      fieldKey: 'text:only',
     });
     expect(h.postedToParent.at(-1)).toMatchObject({
       type: 'SOURCE_EDIT_VALIDATED',
@@ -1352,20 +1552,29 @@ describe('live source-edit preview and deferred selection restore', () => {
         ],
       },
     });
-    expect(button.style.getPropertyValue('gap')).toBe('24px');
+    expect(button.childNodes[0]?.textContent).toBe('Live Preview');
+    expect(h.getPreviewStyleEl()?.textContent).toContain('gap: 24px !important;');
 
-    // Empty draft and CLEAR_PIN both restore the original authored style and attribute values.
+    // Empty draft and CLEAR_PIN both restore the original authored values.
     control('SOURCE_EDIT_PREVIEW', { styles: {}, attributes: {} });
+    expect(h.getPreviewStyleEl()?.textContent).toBe('');
     expect(button.style.getPropertyValue('gap')).toBe('12px');
-    expect(button.style.getPropertyValue('font-size')).toBe('');
-    expect(button.style.getPropertyValue('color')).toBe('#111111');
     expect(button.getAttribute('title')).toBe('Old title');
+    expect(button.getAttribute('class')).toBeNull();
+    expect(button.childNodes[0]?.textContent).toBe('Save');
 
-    control('SOURCE_EDIT_PREVIEW', { styles: { gap: '32' }, attributes: { title: 'Again' } });
-    expect(button.style.getPropertyValue('gap')).toBe('32px');
+    control('SOURCE_EDIT_PREVIEW', {
+      styles: { gap: '32' },
+      attributes: { title: 'Again' },
+      texts: { 'text:only': 'Again Text' },
+      hidden: true,
+    });
+    expect(h.getPreviewStyleEl()?.textContent).toContain('display: none !important;');
+    expect(button.childNodes[0]?.textContent).toBe('Again Text');
     control('CLEAR_PIN');
-    expect(button.style.getPropertyValue('gap')).toBe('12px');
+    expect(h.getPreviewStyleEl()?.textContent).toBe('');
     expect(button.getAttribute('title')).toBe('Old title');
+    expect(button.childNodes[0]?.textContent).toBe('Save');
   });
 
   it('restores selection immediately or waits across reattach ticks for async React mounts', () => {
@@ -1404,5 +1613,533 @@ describe('live source-edit preview and deferred selection restore', () => {
     const beforeLateMount = expired.h.postedToParent.length;
     expired.h.runTick();
     expect(expired.h.postedToParent).toHaveLength(beforeLateMount);
+  });
+});
+
+describe('Shadow DOM HUD, rich element snapshot, inline edit, ResizeObserver, and hot swap', () => {
+  const sourceHash = 'd'.repeat(64);
+  const previewRevision = 'preview-v2';
+
+  function richFixture() {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({
+        sourceHash,
+        previewRevision,
+        targets: { '10:50': 'button', '5:80': 'ul' },
+        fieldPlans: {
+          '10:50': {
+            textLayout: [{ kind: 'text', value: 'Buy now' }],
+            editableFields: [
+              { kind: 'set-text', value: 'Buy now' },
+              { kind: 'set-style', property: 'color', value: 'rgb(10, 20, 30)' },
+            ],
+          },
+        },
+        mapSources: {
+          '10:50': {
+            arrayName: 'items',
+            itemCount: 2,
+            fields: [{ key: 'label', values: ['Buy now', 'Buy later'] }],
+          },
+        },
+      }),
+    );
+
+    const makeCss = (values: Record<string, string>) => ({
+      getPropertyValue: (prop: string) => values[prop] ?? '',
+    });
+
+    const listWrapper: Record<string, unknown> = {
+      nodeType: 1,
+      tagName: 'UL',
+      id: 'list',
+      className: 'flex-col',
+      parentElement: h.body,
+      children: [] as unknown[],
+      outerHTML: '<ul id="list" data-codesign-source-id="preview-v2:5:80"><li>Buy now</li></ul>',
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id'
+          ? `${previewRevision}:5:80`
+          : name === 'data-codesign-item-index'
+            ? '1'
+            : null,
+    };
+
+    const childSpan = {
+      nodeType: 1,
+      tagName: 'SPAN',
+      textContent: 'Badge',
+      parentElement: null as unknown,
+      previousElementSibling: null as unknown,
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id' ? `${previewRevision}:10:50` : null,
+    };
+
+    const button = {
+      nodeType: 1,
+      tagName: 'BUTTON',
+      id: 'cta',
+      className: 'primary-btn',
+      parentElement: listWrapper,
+      previousElementSibling: null as unknown,
+      children: [childSpan],
+      style: { outline: '' },
+      isConnected: true,
+      outerHTML:
+        '<button id="cta" data-codesign-source-id="preview-v2:10:50" data-codesign-item-index="1">Buy now</button>',
+      childNodes: [{ nodeType: 3, textContent: 'Buy now' }],
+      ownerDocument: {
+        createElement: () => ({
+          style: {
+            setProperty: () => {},
+            getPropertyValue: () => '',
+          },
+        }),
+      },
+      getAttribute: (name: string) => {
+        if (name === 'data-codesign-source-id') return `${previewRevision}:10:50`;
+        if (name === 'data-codesign-item-index') return '1';
+        if (name === 'class') return 'primary-btn';
+        if (name === 'href') return 'https://example.com';
+        return null;
+      },
+      getBoundingClientRect: () => ({ top: 8, left: 16, width: 120, height: 36 }),
+    };
+    childSpan.parentElement = button;
+
+    const buttonClone = {
+      ...button,
+      id: 'cta-2',
+      previousElementSibling: button,
+      isConnected: true,
+      getBoundingClientRect: () => ({ top: 64, left: 16, width: 120, height: 36 }),
+    };
+    listWrapper['children'] = [button, buttonClone];
+
+    h.selectorMatches.set('#cta', [button]);
+    h.selectorMatches.set('#cta-2', [buttonClone]);
+    h.selectorMatches.set(`[data-codesign-source-id="${previewRevision}:10:50"]`, [
+      button,
+      buttonClone,
+    ]);
+    h.setComputedStyle((el) => {
+      if (el === listWrapper) return makeCss({ display: 'flex', 'flex-direction': 'column' });
+      if (el === button) {
+        return makeCss({
+          color: 'rgb(10, 20, 30)',
+          'font-size': '14px',
+          'font-family': 'Inter',
+          'padding-top': '8px',
+          'padding-right': '12px',
+          'padding-bottom': '8px',
+          'padding-left': '12px',
+          'margin-top': '4px',
+          'margin-right': '0px',
+          'margin-bottom': '4px',
+          'margin-left': '0px',
+          'border-top-width': '1px',
+          'border-right-width': '1px',
+          'border-bottom-width': '1px',
+          'border-left-width': '1px',
+        });
+      }
+      return null;
+    });
+
+    h.setHitTarget(button);
+    const control = (type: string, extra: Record<string, unknown> = {}) => {
+      h.windowListeners.get('message')?.({
+        source: h.parent,
+        data: { __codesign: true, type, sourceHash, previewRevision, ...extra },
+      });
+    };
+    control('SET_MODE', { mode: 'source-edit' });
+    return { h, button, buttonClone, listWrapper, control };
+  }
+
+  it('collects bounded elementSnapshot and strips synthetic attributes from outerHTML and parentOuterHTML', () => {
+    const { h, button, control } = richFixture();
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 20,
+      clientY: 20,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    const selected = h.postedToParent.at(-1) as Record<string, unknown>;
+    expect(isOverlayMessage(selected)).toBe(true);
+    expect(selected['outerHTML']).not.toContain('data-codesign-source-id');
+    expect(selected['outerHTML']).not.toContain('data-codesign-item-index');
+    expect(selected['parentOuterHTML']).not.toContain('data-codesign-source-id');
+    expect(isSourceEditElementSnapshot(selected['elementSnapshot'])).toBe(true);
+    expect(selected['elementSnapshot']).toMatchObject({
+      computedStyle: { color: 'rgb(10, 20, 30)', fontSize: '14px', fontFamily: 'Inter' },
+      boxModel: {
+        width: 120,
+        height: 36,
+        padding: { top: 8, right: 12, bottom: 8, left: 12 },
+        margin: { top: 4, right: 0, bottom: 4, left: 0 },
+        border: { top: 1, right: 1, bottom: 1, left: 1 },
+      },
+      instanceCount: 2,
+      itemIndex: 1,
+      parentLayout: { display: 'flex', flexDirection: 'column' },
+      siblingIndex: 0,
+      siblingCount: 2,
+      children: [{ tagName: 'span', textPreview: 'Badge', targetId: '10:50' }],
+      elementMeta: { className: 'primary-btn', id: 'cta', href: 'https://example.com' },
+    });
+    expect(button.style.outline).toBe('');
+    control('SET_MODE', { mode: 'default' });
+  });
+
+  it('renders Shadow DOM HUD boxes, clamped dimension pill, secondary instances, and box model bands without touching textObserver', () => {
+    const { h, button, buttonClone, control } = richFixture();
+    const hud = h.getHudHost();
+    expect(hud).not.toBeNull();
+    expect(hud?.getAttribute(SOURCE_EDIT_HUD_ATTRIBUTE)).toBe('');
+    expect(hud?.shadowRoot).not.toBeNull();
+
+    // Hover renders hover box without touching el.style.outline.
+    h.setHitTarget(buttonClone);
+    h.documentListeners.get('pointermove')?.({ type: 'pointermove', clientX: 20, clientY: 70 });
+    const layer = hud?.shadowRoot?.children[1];
+    expect(layer?.children.some((node) => node.className === 'box hover')).toBe(true);
+    expect(buttonClone.style.outline).toBe('');
+
+    // Select button at top: 8 -> pill top clamps to 0px, renders primary + secondary dashed instance.
+    h.setHitTarget(button);
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 20,
+      clientY: 12,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    expect(layer?.children.some((node) => node.className === 'box pinned')).toBe(true);
+    expect(layer?.children.some((node) => node.className === 'box instance')).toBe(true);
+    const pill = layer?.children.find((node) => node.className === 'pill');
+    expect(pill?.textContent).toBe('button · 120×36');
+    expect(pill?.style['top']).toBe('0px');
+
+    // Box model bands toggle via SOURCE_EDIT_HUD_STATE.
+    control('SOURCE_EDIT_HUD_STATE', { highlightBoxModel: true });
+    expect(layer?.children.some((node) => node.className === 'margin-band')).toBe(true);
+    expect(layer?.children.some((node) => node.className === 'padding-band')).toBe(true);
+
+    // Flood textObserver with HUD / preview style mutations (> 4096); text fields must stay ready!
+    const previewStyle = h.getPreviewStyleEl();
+    h.queueMutations(
+      Array.from({ length: 4200 }, () => ({
+        type: 'childList',
+        target: hud as object,
+        removedNodes: [{ nodeType: 3, textContent: 'hud' }],
+        addedNodes: [{ nodeType: 1, firstElementChild: null, nextElementSibling: null }],
+      })),
+    );
+    if (previewStyle) {
+      h.queueMutations([
+        {
+          type: 'childList',
+          target: previewStyle,
+          removedNodes: [],
+          addedNodes: [],
+        },
+      ]);
+    }
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'hud-isolation',
+      targetId: '10:50',
+      fieldKey: 'text:only',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      type: 'SOURCE_EDIT_VALIDATED',
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:only', status: 'ready' },
+          { key: 'style:color', status: 'changed' },
+        ],
+      },
+    });
+  });
+
+  it('tracks pinned elements via ResizeObserver and clears pinnedWatchedSelector on CLEAR_PIN without leaking', () => {
+    const { h, button, control } = richFixture();
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 20,
+      clientY: 20,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    h.runRaf();
+    const initialRectMsgs = h.postedToParent.filter(
+      (m) => (m as { type: string }).type === 'ELEMENT_RECTS',
+    );
+    expect(initialRectMsgs).toHaveLength(1);
+    expect(h.resizeObservers.at(-1)?.observed).toEqual([button]);
+
+    h.triggerResize();
+    h.runRaf();
+    const afterResizeMsgs = h.postedToParent.filter(
+      (m) => (m as { type: string }).type === 'ELEMENT_RECTS',
+    );
+    expect(afterResizeMsgs).toHaveLength(2);
+
+    control('CLEAR_PIN');
+    expect(h.resizeObservers.at(-1)?.disconnected).toBe(true);
+    const beforeClearRaf = h.postedToParent.filter(
+      (m) => (m as { type: string }).type === 'ELEMENT_RECTS',
+    ).length;
+    h.windowListeners.get('scroll')?.({});
+    h.runRaf();
+    const afterClearRaf = h.postedToParent.filter(
+      (m) => (m as { type: string }).type === 'ELEMENT_RECTS',
+    ).length;
+    expect(afterClearRaf).toBe(beforeClearRaf);
+  });
+
+  it('emits SOURCE_EDIT_INLINE_EDIT_REQUEST on dblclick with itemIndex and typography', () => {
+    const { h } = richFixture();
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 20,
+      clientY: 20,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    const preventDefault = vi.fn();
+    const stopImmediatePropagation = vi.fn();
+    h.documentListeners.get('dblclick')?.({
+      type: 'dblclick',
+      clientX: 20,
+      clientY: 20,
+      preventDefault,
+      stopImmediatePropagation,
+      target: h.hitLayer,
+    });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopImmediatePropagation).toHaveBeenCalledOnce();
+    const msg = h.postedToParent.at(-1);
+    expect(isSourceEditInlineEditRequestMessage(msg)).toBe(true);
+    expect(msg).toMatchObject({
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+      selector: '#cta',
+      targetId: '10:50',
+      textKey: 'text:only',
+      text: 'Buy now',
+      itemIndex: 1,
+      typography: { fontSize: '14px', fontFamily: 'Inter', color: 'rgb(10, 20, 30)' },
+      sourceHash,
+      previewRevision,
+    });
+  });
+
+  it('emits SOURCE_EDIT_INLINE_EDIT_REQUEST for mapSource-only targets and ignores non-ready text fields', () => {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({
+        sourceHash,
+        previewRevision,
+        targets: { '10:50': 'li', '60:90': 'p' },
+        fieldPlans: {
+          '60:90': {
+            textLayout: [{ kind: 'text', value: 'Expected' }],
+            editableFields: [{ kind: 'set-text', value: 'Expected' }],
+          },
+        },
+        mapSources: {
+          '10:50': {
+            arrayName: 'cards',
+            itemCount: 2,
+            fields: [{ key: 'title', values: ['Alpha', 'Beta'] }],
+          },
+        },
+      }),
+    );
+    const li = {
+      nodeType: 1,
+      tagName: 'LI',
+      id: 'card-item',
+      parentElement: h.body,
+      style: {},
+      isConnected: true,
+      outerHTML: '<li id="card-item">Beta</li>',
+      childNodes: [{ nodeType: 3, textContent: 'Beta' }],
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id'
+          ? `${previewRevision}:10:50`
+          : name === 'data-codesign-item-index'
+            ? '1'
+            : null,
+      getBoundingClientRect: () => ({ top: 40, left: 20, width: 200, height: 44 }),
+    };
+    const changedP = {
+      nodeType: 1,
+      tagName: 'P',
+      id: 'changed-p',
+      parentElement: h.body,
+      style: {},
+      isConnected: true,
+      outerHTML: '<p id="changed-p">Mutated</p>',
+      childNodes: [{ nodeType: 3, textContent: 'Mutated' }],
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id' ? `${previewRevision}:60:90` : null,
+      getBoundingClientRect: () => ({ top: 100, left: 20, width: 200, height: 24 }),
+    };
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: { __codesign: true, type: 'SET_MODE', mode: 'source-edit' },
+    });
+
+    h.setHitTarget(li);
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 25,
+      clientY: 50,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    h.documentListeners.get('dblclick')?.({
+      type: 'dblclick',
+      clientX: 25,
+      clientY: 50,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    const mapMsg = h.postedToParent.at(-1);
+    expect(isSourceEditInlineEditRequestMessage(mapMsg)).toBe(true);
+    expect(mapMsg).toMatchObject({
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+      targetId: '10:50',
+      textKey: 'map-text:1:title',
+      text: 'Beta',
+      itemIndex: 1,
+    });
+
+    const beforeChanged = h.postedToParent.length;
+    h.setHitTarget(changedP);
+    h.documentListeners.get('pointerdown')?.({
+      type: 'pointerdown',
+      clientX: 25,
+      clientY: 110,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    const afterSelect = h.postedToParent.length;
+    expect(afterSelect).toBeGreaterThan(beforeChanged);
+    h.documentListeners.get('dblclick')?.({
+      type: 'dblclick',
+      clientX: 25,
+      clientY: 110,
+      preventDefault: () => {},
+      stopImmediatePropagation: () => {},
+      target: h.hitLayer,
+    });
+    expect(h.postedToParent).toHaveLength(afterSelect);
+  });
+
+  it('executes SOURCE_EDIT_HOT_SWAP preserving scroll/screen and restoring selection, or reports errors', () => {
+    const { h } = richFixture();
+    h.fakeWindow['scrollX'] = 12;
+    h.fakeWindow['scrollY'] = 180;
+    h.documentElement.setAttribute('data-oc-active-screen', 'checkout');
+    const swappedBtn = {
+      nodeType: 1,
+      tagName: 'BUTTON',
+      id: 'cta',
+      parentElement: h.body,
+      style: {},
+      isConnected: true,
+      outerHTML: '<button id="cta">Swapped</button>',
+      childNodes: [{ nodeType: 3, textContent: 'Swapped' }],
+      getAttribute: (name: string) =>
+        name === 'data-codesign-source-id' ? 'rev-next:20:60' : null,
+      getBoundingClientRect: () => ({ top: 10, left: 10, width: 100, height: 32 }),
+    };
+    const nextHash = 'e'.repeat(64);
+    h.fakeWindow['__codesign_hot_swap__'] = vi.fn(() => {
+      h.selectorMatches.set('#cta', [swappedBtn]);
+      return true;
+    });
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: {
+        __codesign: true,
+        type: 'SOURCE_EDIT_HOT_SWAP',
+        requestId: 'swap-1',
+        instrumentedSource: '<button>Swapped</button>',
+        kind: 'jsx',
+        restoreSelector: '#cta',
+        sourceEditContext: {
+          sourceHash: nextHash,
+          previewRevision: 'rev-next',
+          targets: { '20:60': 'button' },
+          fieldPlans: {
+            '20:60': {
+              textLayout: [{ kind: 'text', value: 'Swapped' }],
+              editableFields: [{ kind: 'set-text', value: 'Swapped' }],
+            },
+          },
+        },
+      },
+    });
+
+    const swappedMsg = h.postedToParent.at(-1);
+    expect(isSourceEditHotSwappedMessage(swappedMsg)).toBe(true);
+    expect(swappedMsg).toEqual({
+      __codesign: true,
+      type: 'SOURCE_EDIT_HOT_SWAPPED',
+      requestId: 'swap-1',
+      ok: true,
+    });
+    expect(h.fakeWindow['scrollTo']).toHaveBeenCalledWith(12, 180);
+    expect(h.documentElement.getAttribute('data-oc-active-screen')).toBe('checkout');
+    const restoredSelection = h.postedToParent.find(
+      (msg) =>
+        (msg as { type?: string; sourceEdit?: { previewRevision?: string } }).type ===
+          'ELEMENT_SELECTED' &&
+        (msg as { sourceEdit?: { previewRevision?: string } }).sourceEdit?.previewRevision ===
+          'rev-next',
+    );
+    expect(restoredSelection).toMatchObject({
+      selector: '#cta',
+      sourceEdit: { targetId: '20:60', previewRevision: 'rev-next' },
+    });
+
+    // Error path when hot-swap throws.
+    h.fakeWindow['__codesign_hot_swap__'] = () => {
+      throw new Error('Compile boom');
+    };
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: {
+        __codesign: true,
+        type: 'SOURCE_EDIT_HOT_SWAP',
+        requestId: 'swap-2',
+        instrumentedSource: 'broken(',
+        kind: 'jsx',
+        sourceEditContext: {
+          sourceHash: nextHash,
+          previewRevision: 'rev-next-2',
+          targets: {},
+        },
+      },
+    });
+    const failedMsg = h.postedToParent.at(-1);
+    expect(isSourceEditHotSwappedMessage(failedMsg)).toBe(true);
+    expect(failedMsg).toEqual({
+      __codesign: true,
+      type: 'SOURCE_EDIT_HOT_SWAPPED',
+      requestId: 'swap-2',
+      ok: false,
+      error: 'Compile boom',
+    });
   });
 });

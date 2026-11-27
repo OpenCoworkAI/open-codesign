@@ -314,14 +314,22 @@ describe('revision-bound local source edits', () => {
     expect(api.inspection?.previewRevision).not.toBe(oldRevision);
     expect(api.selection).toBeNull();
   });
-  it('keeps edit routing while a watcher rereads and reinspects the new bytes', async () => {
+  it('keeps live inspection intact during unchanged pending rereads and reinspects only when bytes change', async () => {
     await enableAndSelect();
     const revision = api.inspection?.previewRevision;
+    const inspectCountBefore = inspect.mock.calls.length;
     props = { ...props, loading: true };
     await render();
     expect(api.active).toBe(true);
     expect(api.eligible).toBe(false);
-    expect(api.inspection).toBeNull();
+    expect(api.inspection?.previewRevision).toBe(revision);
+    expect(api.selection?.id).toBe(target.id);
+    // Settling with identical bytes does not mint a new revision or reinspect.
+    props = { ...props, loading: false };
+    await render();
+    expect(api.inspection?.previewRevision).toBe(revision);
+    expect(inspect).toHaveBeenCalledTimes(inspectCountBefore);
+    // New bytes from disk trigger reinspection with a new revision.
     props = {
       ...props,
       loading: false,
@@ -432,12 +440,15 @@ describe('revision-bound local source edits', () => {
     expect(apply).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
   });
-  it('stores ancestor choices separately even without a source target and clears them on context changes', async () => {
+  it('preserves ancestors across unchanged pending reads and clears them on context/content changes', async () => {
     await enableAndSelect();
     await act(async () => api.select(undefined, [{ selector: '/main[1]', tagName: 'main' }]));
     expect(api.selection).toBeNull();
     expect(api.ancestors).toEqual([{ selector: '/main[1]', tagName: 'main' }]);
     props = { ...props, loading: true };
+    await render();
+    expect(api.ancestors).toEqual([{ selector: '/main[1]', tagName: 'main' }]);
+    props = { ...props, loading: false, selectedPath: 'Other.jsx' };
     await render();
     expect(api.ancestors).toEqual([]);
   });
@@ -552,5 +563,169 @@ describe('revision-bound local source edits', () => {
     await act(async () => api.apply([{ kind: 'set-text', value: 'Third' }]));
     await act(async () => api.exit());
     expect(api.takeRestoreSelector()).toBeNull();
+  });
+
+  it.each(['index.html', 'landing.htm'])('supports workspace %s source files', async (htmlPath) => {
+    inspect.mockResolvedValueOnce({ ...ready, path: htmlPath });
+    props = {
+      ...props,
+      selectedPath: htmlPath,
+      source: { path: htmlPath, content: '<p>Old</p>', workspaceDesignId: 'a' },
+    };
+    await render();
+    expect(api.eligible).toBe(true);
+    await act(async () => api.enable());
+    expect(api.active).toBe(true);
+    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ path: htmlPath }));
+  });
+
+  it('runs undo and redo against inspection history and invokes onAfterCommit hot-swap', async () => {
+    const undo = vi.fn(async (req: { previewRevision: string }) => ({
+      ...applied,
+      content: '<p>Restored</p>',
+      sourceHash: 'c'.repeat(64),
+      previewRevision: req.previewRevision,
+      canUndo: false,
+      canRedo: true,
+    }));
+    const redo = vi.fn(async (req: { previewRevision: string }) => ({
+      ...applied,
+      content: '<p>New</p>',
+      sourceHash: 'b'.repeat(64),
+      previewRevision: req.previewRevision,
+      canUndo: true,
+      canRedo: false,
+    }));
+    const onAfterCommit = vi.fn(async (nextInspect) => {
+      // Simulate post-swap synchronous selection arriving before onAfterCommit finishes.
+      api.select(
+        {
+          targetId: target.id,
+          sourceHash: nextInspect.sourceHash,
+          previewRevision: nextInspect.previewRevision,
+        },
+        [],
+        {
+          selector: '/p[1]',
+          tag: 'p',
+          outerHTML: '<p>New</p>',
+          rect: { top: 0, left: 0, width: 10, height: 10 },
+        },
+      );
+      return true;
+    });
+    Object.defineProperty(window, 'codesign', {
+      configurable: true,
+      value: { sourceEdits: { inspect, apply, applyBatch, undo, redo } },
+    });
+    props = { ...props, onAfterCommit };
+    await enableAndSelect();
+    expect(api.canUndo).toBe(false);
+    await act(async () => api.undo());
+    expect(undo).not.toHaveBeenCalled();
+
+    inspect.mockResolvedValueOnce({
+      ...ready,
+      sourceHash: 'b'.repeat(64),
+      canUndo: true,
+      canRedo: false,
+      targets: [{ ...target, editableFields: [{ kind: 'set-text', value: 'New' }] }],
+    });
+    await act(async () => api.apply({ kind: 'set-text', value: 'New' }));
+    expect(onAfterCommit).toHaveBeenCalledOnce();
+    expect(api.canUndo).toBe(true);
+    expect(api.takeRestoreSelector()).toBeNull();
+    expect(api.picked?.selector).toBe('/p[1]');
+
+    inspect.mockResolvedValueOnce({
+      ...ready,
+      sourceHash: 'c'.repeat(64),
+      canUndo: false,
+      canRedo: true,
+      targets: [{ ...target, editableFields: [{ kind: 'set-text', value: 'Restored' }] }],
+    });
+    await act(async () => api.undo());
+    expect(undo).toHaveBeenCalledOnce();
+    expect(api.canUndo).toBe(false);
+    expect(api.canRedo).toBe(true);
+
+    inspect.mockResolvedValueOnce({
+      ...ready,
+      sourceHash: 'b'.repeat(64),
+      canUndo: true,
+      canRedo: false,
+      targets: [{ ...target, editableFields: [{ kind: 'set-text', value: 'New' }] }],
+    });
+    await act(async () => api.redo());
+    expect(redo).toHaveBeenCalledOnce();
+    expect(api.canUndo).toBe(true);
+    expect(api.canRedo).toBe(false);
+  });
+
+  it('routes structural, visibility, map-item, style upsert quick actions and inline edit state cleanly', async () => {
+    const richTarget: SourceEditTarget = {
+      ...target,
+      capabilities: {
+        canUpsertStyle: true,
+        canUpsertAttribute: true,
+        canEditClassName: true,
+        canReorderUp: true,
+        canReorderDown: true,
+        canDuplicate: true,
+        canDelete: true,
+        sharedDefinition: false,
+        styleMode: 'inline',
+      },
+      mapSource: {
+        arrayName: 'items',
+        itemCount: 2,
+        fields: [{ key: 'label', values: ['First', 'Second'] }],
+      },
+    };
+    inspect.mockResolvedValue({ ...ready, targets: [richTarget] });
+    await render();
+    await act(async () => api.enable());
+    const revision = api.inspection?.previewRevision;
+    if (!revision) throw new Error('Missing inspection');
+    await act(async () =>
+      api.select({ targetId: richTarget.id, sourceHash: hash, previewRevision: revision }),
+    );
+    await act(async () => api.applyQuickAction({ kind: 'duplicate-element', itemIndex: 0 }));
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: { kind: 'duplicate-element', itemIndex: 0 } }),
+    );
+    const rev2 = api.inspection?.previewRevision;
+    if (!rev2) throw new Error('Missing inspection');
+    await act(async () =>
+      api.select({ targetId: richTarget.id, sourceHash: hash, previewRevision: rev2 }),
+    );
+    await act(async () =>
+      api.applyQuickAction({ kind: 'set-style', property: 'padding', value: '12px' }),
+    );
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: { kind: 'set-style', property: 'padding', value: '12px' },
+      }),
+    );
+
+    const rev3 = api.inspection?.previewRevision;
+    if (!rev3) throw new Error('Missing inspection');
+    await act(async () =>
+      api.openInlineEdit({
+        __codesign: true,
+        type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+        selector: '/p[1]',
+        targetId: richTarget.id,
+        textKey: 'text:only',
+        text: 'Old',
+        rect: { top: 0, left: 0, width: 40, height: 20 },
+        typography: {},
+        sourceHash: hash,
+        previewRevision: rev3,
+      }),
+    );
+    expect(api.inlineEditRequest?.text).toBe('Old');
+    await act(async () => api.clearInlineEdit());
+    expect(api.inlineEditRequest).toBeNull();
   });
 });

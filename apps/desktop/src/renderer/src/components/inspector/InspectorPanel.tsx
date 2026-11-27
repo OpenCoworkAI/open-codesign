@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { BookmarkPlus, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { InspectorSection } from './controls';
 import type { PaletteColor } from './palette';
@@ -99,12 +99,34 @@ export function InspectorRail({
   );
 }
 
-/** Read-only DESIGN.md palette and the literals the page already uses. */
-export function PageColorsSection({ palette }: { palette: readonly PaletteColor[] }) {
+/** Read-only DESIGN.md palette and the literals the page already uses, with optional sync back to DESIGN.md. */
+export function PageColorsSection({
+  palette,
+  onSyncToDesignMd,
+  syncingDesignMd = false,
+}: {
+  palette: readonly PaletteColor[];
+  onSyncToDesignMd?: (() => void) | undefined;
+  syncingDesignMd?: boolean | undefined;
+}) {
   const t = useT();
   const design = palette.filter((color) => color.source === 'design');
   const used = palette.filter((color) => color.source === 'used');
   if (design.length === 0 && used.length === 0) return null;
+
+  const syncButton = onSyncToDesignMd ? (
+    <button
+      type="button"
+      disabled={syncingDesignMd}
+      onClick={onSyncToDesignMd}
+      title={t('inspector.page.syncDesignMd')}
+      className="inline-flex items-center gap-[4px] rounded-[var(--radius-sm)] px-[var(--space-1_5)] py-[2px] text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-tint)] disabled:opacity-50"
+    >
+      <BookmarkPlus className="size-[11px]" aria-hidden />
+      {syncingDesignMd ? t('inspector.page.syncingDesignMd') : t('inspector.page.syncDesignMd')}
+    </button>
+  ) : undefined;
+
   const tiles = (colors: readonly PaletteColor[]) => (
     <div className="grid grid-cols-4 gap-[var(--space-2)]">
       {colors.map((color) => (
@@ -124,12 +146,17 @@ export function PageColorsSection({ palette }: { palette: readonly PaletteColor[
   return (
     <>
       {design.length > 0 ? (
-        <InspectorSection title={t('inspector.page.designColors')}>
+        <InspectorSection
+          title={t('inspector.page.designColors')}
+          action={used.length === 0 ? syncButton : undefined}
+        >
           {tiles(design)}
         </InspectorSection>
       ) : null}
       {used.length > 0 ? (
-        <InspectorSection title={t('inspector.page.usedColors')}>{tiles(used)}</InspectorSection>
+        <InspectorSection title={t('inspector.page.usedColors')} action={syncButton}>
+          {tiles(used)}
+        </InspectorSection>
       ) : null}
     </>
   );

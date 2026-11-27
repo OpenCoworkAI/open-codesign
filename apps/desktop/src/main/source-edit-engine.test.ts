@@ -5,6 +5,7 @@ import {
   SourceEditApplyResultV1,
   SourceEditInspectResultV1,
   type SourceEditOperation,
+  type SourceEditStyleProperty,
 } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { analyzeSourceEdit, planSourceEdit, planSourceEditBatch } from './source-edit-engine';
@@ -186,14 +187,19 @@ describe('source-definition span editing support matrix', () => {
     const source = `function App(){const [count,setCount]=React.useState(0);return <header onClick={${handler}}>Static</header>}`;
     expect(applied(source, { kind: 'set-text', value: 'New' }).scope).toBe('source-definition');
   });
-  it('leaves static layout editable despite dynamic/map/custom descendants', () => {
+  it('leaves static layout editable despite dynamic/map/custom descendants and unlocks map host attributes', () => {
     const source =
       'function App(){ const xs=[1]; return <header title="Layout" style={{gap: 8}}>{xs.map(x => <span title="dynamic">{x}</span>)}<Card><b>Forwarded</b></Card><footer>Static</footer></header>;}';
     const result = inspect(source);
     expect(
       result.targets.find((target) => target.tagName === 'header')?.editableFields,
     ).toContainEqual({ kind: 'set-style', property: 'gap', value: '8' });
-    expect(result.targets.find((target) => target.tagName === 'span')?.editableFields).toEqual([]);
+    const mappedSpan = result.targets.find((target) => target.tagName === 'span');
+    expect(mappedSpan?.editableFields).toEqual([
+      { kind: 'set-attribute', name: 'title', value: 'dynamic' },
+    ]);
+    expect(mappedSpan?.capabilities?.sharedDefinition).toBe(true);
+    expect(mappedSpan?.capabilities?.enclosingComponent).toBe('App');
     expect(result.targets.find((target) => target.tagName === 'b')?.editableFields).toEqual([]);
     expect(
       result.targets.find((target) => target.tagName === 'footer')?.editableFields,
@@ -487,20 +493,29 @@ describe('conservative rejection and independent revalidation', () => {
     expect(targets.map((target) => target.tagName)).toEqual(['my-widget', 'script', 'style']);
     expect(targets.every((target) => target.editableFields.length === 0)).toBe(true);
   });
-  it('edits a shared text definition without asserting instance uniqueness', () => {
+  it('unlocks shared helper components with sharedDefinition and enclosingComponent metadata', () => {
     const source =
       'function Card(){return <header title="one">Shared</header>} function App(){return <Card/>}';
-    expect(inspect(source).targets[0]?.editableFields).toEqual([
+    const target = inspect(source).targets[0];
+    expect(target?.editableFields).toEqual([
       { kind: 'set-text', value: 'Shared' },
+      { kind: 'set-attribute', name: 'title', value: 'one' },
     ]);
+    expect(target?.capabilities).toMatchObject({
+      sharedDefinition: true,
+      enclosingComponent: 'Card',
+      canUpsertStyle: true,
+      canUpsertAttribute: true,
+    });
     expect(apply(source, { kind: 'set-text', value: 'x' })).toMatchObject({
       status: 'applied',
       scope: 'source-definition',
       content: source.replace('>Shared<', '>{"x"}<'),
     });
     expect(apply(source, { kind: 'set-attribute', name: 'title', value: 'x' })).toMatchObject({
-      status: 'rejected',
-      reason: 'unsupported-field',
+      status: 'applied',
+      scope: 'source-definition',
+      content: source.replace('title="one"', 'title={"x"}'),
     });
   });
   it.each([
@@ -516,11 +531,9 @@ describe('conservative rejection and independent revalidation', () => {
   });
   it.each([
     'shared',
-    '{ ...shared, gap: 8 }',
     '{ gap: 8, gap: 9 }',
     '{ ["gap"]: 8 }',
     '{ gap }',
-    '{ gap: size }',
     '{ get gap(){ return 8 } }',
   ])('rejects ambiguous/dynamic style %s', (style) => {
     const source = `function App(){return <header style={${style}}>A</header>}`;
@@ -529,14 +542,45 @@ describe('conservative rejection and independent revalidation', () => {
       reason: 'unsupported-field',
     });
   });
-  it('rejects dynamic and missing attributes, but not unrelated static fields', () => {
+  it('allows updating/inserting styles after a spread, skips pre-spread properties, and overrides token expressions', () => {
+    const preSpread = 'function App(){return <header style={{ gap: 8, ...shared }}>A</header>}';
+    expect(inspect(preSpread).targets[0]?.editableFields).toEqual([
+      { kind: 'set-text', value: 'A' },
+    ]);
+    expect(applied(preSpread, { kind: 'set-style', property: 'gap', value: '9' }).content).toBe(
+      'function App(){return <header style={{ gap: 8, ...shared, gap: 9 }}>A</header>}',
+    );
+
+    const postSpread = 'function App(){return <header style={{ ...shared, gap: 8 }}>A</header>}';
+    expect(applied(postSpread, { kind: 'set-style', property: 'gap', value: '16' }).content).toBe(
+      'function App(){return <header style={{ ...shared, gap: 16 }}>A</header>}',
+    );
+    expect(
+      applied(postSpread, { kind: 'set-style', property: 'color', value: '#112233' }).content,
+    ).toBe(
+      'function App(){return <header style={{ ...shared, gap: 8, color: "#112233" }}>A</header>}',
+    );
+
+    const tokenBound = 'function App(){return <header style={{ gap: size }}>A</header>}';
+    expect(inspect(tokenBound).targets[0]?.styleBindings).toEqual([
+      { property: 'gap', expression: 'size', editable: false },
+    ]);
+    expect(applied(tokenBound, { kind: 'set-style', property: 'gap', value: '9' }).content).toBe(
+      'function App(){return <header style={{ gap: 9 }}>A</header>}',
+    );
+  });
+  it('rejects dynamic or invalid-for-tag attributes, upserts missing safe attributes, and keeps unrelated static fields editable', () => {
     const source = 'function App(){return <header title={name} style={{gap:8}}>A</header>}';
     expect(apply(source, { kind: 'set-attribute', name: 'title', value: 'x' }).status).toBe(
       'rejected',
     );
-    expect(apply(source, { kind: 'set-attribute', name: 'alt', value: 'x' }).status).toBe(
-      'rejected',
-    );
+    expect(apply(source, { kind: 'set-attribute', name: 'alt', value: 'x' })).toMatchObject({
+      status: 'rejected',
+      reason: 'unsupported-field',
+    });
+    expect(
+      applied(source, { kind: 'set-attribute', name: 'aria-label', value: 'x' }).content,
+    ).toContain('aria-label={"x"}');
     expect(applied(source, { kind: 'set-style', property: 'gap', value: '9' }).content).toContain(
       'gap:9',
     );
@@ -545,12 +589,13 @@ describe('conservative rejection and independent revalidation', () => {
     'url(https://example.test)',
     'URL(x)',
     'u\\72l(x)',
-    'var(--shared)',
+    'var(invalid)',
+    'var(--bad!)',
     'expression(alert(1))',
     '1px;display:none',
-    'calc(1px + 2px)',
+    'calc(1px + evil(2px))',
     '-2px',
-  ])('rejects unsafe or unsupported CSS %s', (value) => {
+  ])('rejects unsafe or unsupported CSS %s on gap', (value) => {
     expect(apply(simple, { kind: 'set-style', property: 'gap', value })).toMatchObject({
       status: 'rejected',
       reason: 'invalid-style',
@@ -567,8 +612,14 @@ describe('conservative rejection and independent revalidation', () => {
       reason: 'invalid-operation',
     });
   });
-  it('rejects HTML paths and parse failures', () => {
-    expect(analyzeSourceEdit({ path: 'index.html', source: simple })).toMatchObject({
+  it('supports HTML paths while rejecting unsupported extensions and JSX parse failures', () => {
+    expect(
+      analyzeSourceEdit({
+        path: 'index.html',
+        source: '<!doctype html><html><body><header>Hello</header></body></html>',
+      }),
+    ).toMatchObject({ status: 'ready' });
+    expect(analyzeSourceEdit({ path: 'notes.txt', source: simple })).toMatchObject({
       status: 'rejected',
       reason: 'unsupported-path',
     });
@@ -714,10 +765,374 @@ describe('batched single-target source edits', () => {
       ...base,
       operations: [
         { kind: 'set-text', value: 'Valid text' },
-        { kind: 'set-style', property: 'gap', value: 'var(--evil)' },
+        { kind: 'set-style', property: 'gap', value: 'expression(alert(1))' },
       ],
     });
     expect(badStyle).toMatchObject({ status: 'rejected', reason: 'invalid-style' });
     expect(badStyle).not.toHaveProperty('content');
+  });
+});
+
+describe('v2 capabilities, styles, attributes, structural edits, and static map provenance', () => {
+  it('locks SVG vector primitive upsert while allowing authored static edits', () => {
+    const source =
+      'function App(){return <svg aria-label="Logo" style={{ color: "#111" }}><path d="M0 0" /></svg>}';
+    const inspected = inspect(source);
+    const svg = inspected.targets.find((t) => t.tagName === 'svg');
+    const path = inspected.targets.find((t) => t.tagName === 'path');
+    expect(svg?.capabilities?.canUpsertStyle).toBe(false);
+    expect(svg?.capabilities?.canUpsertAttribute).toBe(false);
+    expect(path?.capabilities?.canUpsertStyle).toBe(false);
+    expect(path?.capabilities?.canUpsertAttribute).toBe(false);
+
+    expect(
+      applied(source, { kind: 'set-attribute', name: 'aria-label', value: 'Brand' }, 'svg').content,
+    ).toContain('aria-label={"Brand"}');
+    expect(
+      applied(source, { kind: 'set-style', property: 'color', value: '#222' }, 'svg').content,
+    ).toContain('color: "#222"');
+    expect(
+      apply(source, { kind: 'set-style', property: 'padding', value: '8px' }, 'path'),
+    ).toMatchObject({
+      status: 'rejected',
+      reason: 'unsupported-field',
+    });
+    expect(
+      apply(source, { kind: 'set-attribute', name: 'title', value: 'Icon' }, 'path'),
+    ).toMatchObject({
+      status: 'rejected',
+      reason: 'unsupported-field',
+    });
+  });
+
+  it('validates all 31 CSS properties, var(--*), calc/clamp, and rejects unsafe values', () => {
+    const targetSrc = 'function App(){return <div style={{ color: "#111" }}>Card</div>}';
+    const validPairs: Array<[SourceEditStyleProperty, string]> = [
+      ['color', 'var(--ocd-tweak-accent)'],
+      ['background', 'linear-gradient(135deg, #111111, oklch(0.6 0.2 250))'],
+      ['backgroundColor', 'color-mix(in srgb, #111 80%, white)'],
+      ['fontFamily', '"DM Sans", system-ui, sans-serif'],
+      ['fontSize', 'clamp(14px, calc(1rem + 0.5vw), 24px)'],
+      ['fontWeight', 'semibold'],
+      ['lineHeight', '1.5'],
+      ['letterSpacing', '-0.02em'],
+      ['textAlign', 'center'],
+      ['textTransform', 'uppercase'],
+      ['padding', '12px 16px 12px 16px'],
+      ['margin', '-8px auto 16px auto'],
+      ['gap', 'var(--ds-space-4) 16px'],
+      ['width', 'auto'],
+      ['height', 'calc(100vh - 64px)'],
+      ['maxWidth', 'none'],
+      ['minHeight', '240px'],
+      ['border', '1px solid rgba(0, 0, 0, 0.1)'],
+      ['borderColor', 'var(--ds-border)'],
+      ['borderWidth', '1px 2px'],
+      ['borderRadius', '8px 8px 0 0'],
+      ['boxShadow', '0 4px 12px rgba(0, 0, 0, 0.15)'],
+      ['opacity', '0.85'],
+      ['overflow', 'hidden'],
+      ['display', 'inline-flex'],
+      ['flexDirection', 'column'],
+      ['justifyContent', 'space-between'],
+      ['alignItems', 'center'],
+      ['flexWrap', 'wrap'],
+      ['gridTemplateColumns', 'repeat(3, minmax(0, 1fr))'],
+      ['objectFit', 'cover'],
+    ];
+    for (const [property, value] of validPairs) {
+      const res = applied(targetSrc, { kind: 'set-style', property, value }, 'div');
+      expect(res.status).toBe('applied');
+    }
+    expect(
+      apply(targetSrc, { kind: 'set-style', property: 'opacity', value: '1.5' }, 'div'),
+    ).toMatchObject({
+      status: 'rejected',
+      reason: 'invalid-style',
+    });
+    expect(
+      apply(targetSrc, { kind: 'set-style', property: 'display', value: 'fixed' }, 'div'),
+    ).toMatchObject({
+      status: 'rejected',
+      reason: 'invalid-style',
+    });
+    expect(
+      apply(
+        targetSrc,
+        { kind: 'set-style', property: 'background', value: 'url(https://evil.test/x.png)' },
+        'div',
+      ),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-style' });
+  });
+
+  it('upserts and removes inline styles, handles background/backgroundColor normalization, and extracts token provenance', () => {
+    const noStyle = 'function App(){return <div className="p-4 bg-white">Card</div>}';
+    const inspectedNoStyle = inspect(noStyle);
+    expect(inspectedNoStyle.targets[0]?.capabilities?.styleMode).toBe('tailwind');
+    expect(inspectedNoStyle.targets[0]?.className).toBe('p-4 bg-white');
+    expect(inspectedNoStyle.targets[0]?.sourceLocation).toEqual({
+      startLine: 1,
+      startCol: 23,
+      endLine: 1,
+      endCol: 63,
+    });
+
+    const inserted = applied(
+      noStyle,
+      { kind: 'set-style', property: 'padding', value: '16px' },
+      'div',
+    );
+    expect(inserted.content).toBe(
+      'function App(){return <div className="p-4 bg-white" style={{ padding: "16px" }}>Card</div>}',
+    );
+    const updatedClass = applied(
+      noStyle,
+      { kind: 'set-class-name', value: 'p-6 bg-slate-900' },
+      'div',
+    );
+    expect(updatedClass.content).toContain('className="p-6 bg-slate-900"');
+
+    const removedLast = applied(
+      inserted.content,
+      { kind: 'remove-style', property: 'padding' },
+      'div',
+    );
+    expect(removedLast.content).toBe(noStyle);
+
+    const bgSrc =
+      'function App(){return <div style={{ background: "linear-gradient(red, blue)", gap: 8 }}>Box</div>}';
+    const bgNorm = applied(
+      bgSrc,
+      { kind: 'set-style', property: 'backgroundColor', value: '#224466' },
+      'div',
+    );
+    expect(bgNorm.content).toBe(
+      'function App(){return <div style={{ backgroundColor: "#224466", gap: 8 }}>Box</div>}',
+    );
+    const bgBack = applied(
+      bgNorm.content,
+      { kind: 'set-style', property: 'background', value: 'linear-gradient(#111, #222)' },
+      'div',
+    );
+    expect(bgBack.content).toBe(
+      'function App(){return <div style={{ background: "linear-gradient(#111, #222)", gap: 8 }}>Box</div>}',
+    );
+
+    const tokensSrc =
+      'const TWEAK_DEFAULTS = { accent: "#6366f1" };\nfunction App(){ const t = TWEAK_DEFAULTS; return <div style={{ color: t.accent, backgroundColor: "var(--ocd-tweak-surface)" }}>Hi</div>; }';
+    const tokenInspected = inspect(tokensSrc);
+    expect(tokenInspected.targets[0]?.styleBindings).toEqual([
+      { property: 'color', expression: 't.accent', tokenName: 'accent', editable: false },
+      {
+        property: 'backgroundColor',
+        expression: 'var(--ocd-tweak-surface)',
+        tokenName: 'surface',
+        editable: true,
+      },
+    ]);
+    expect(
+      applied(tokensSrc, { kind: 'set-style', property: 'color', value: '#ff0000' }, 'div').content,
+    ).toContain('color: "#ff0000"');
+  });
+
+  it('upserts/removes attributes and rejects unsafe href/src URL schemes', () => {
+    const src = 'function App(){return <a href="https://example.com">Docs</a>}';
+    expect(
+      applied(src, { kind: 'set-attribute', name: 'aria-label', value: 'Documentation' }, 'a')
+        .content,
+    ).toContain('aria-label={"Documentation"}');
+    expect(applied(src, { kind: 'remove-attribute', name: 'href' }, 'a').content).toBe(
+      'function App(){return <a>Docs</a>}',
+    );
+    expect(
+      apply(src, { kind: 'set-attribute', name: 'href', value: 'javascript:alert(1)' }, 'a'),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-operation' });
+    expect(
+      apply(src, { kind: 'set-attribute', name: 'href', value: 'data:image/png;base64,AAAA' }, 'a'),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-operation' });
+
+    const imgSrc = 'function App(){return <img src="logo.png" alt="Logo" />}';
+    expect(
+      applied(
+        imgSrc,
+        { kind: 'set-attribute', name: 'src', value: 'data:image/png;base64,AAAA' },
+        'img',
+      ).content,
+    ).toContain('src={"data:image/png;base64,AAAA"}');
+    expect(
+      apply(
+        imgSrc,
+        { kind: 'set-attribute', name: 'src', value: 'data:text/html,<script>1</script>' },
+        'img',
+      ),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-operation' });
+  });
+
+  it('performs toggle-visibility, reorder-sibling, duplicate-element, and delete-element cleanly', () => {
+    const src = `function App() {
+  return (
+    <main>
+      <h1>First</h1>
+      <p>Second</p>
+    </main>
+  );
+}`;
+    const inspected = inspect(src);
+    const main = inspected.targets.find((t) => t.tagName === 'main');
+    const h1 = inspected.targets.find((t) => t.tagName === 'h1');
+    const p = inspected.targets.find((t) => t.tagName === 'p');
+    expect(main?.capabilities).toMatchObject({
+      canReorderUp: false,
+      canReorderDown: false,
+      canDuplicate: false,
+      canDelete: false,
+    });
+    expect(h1?.capabilities).toMatchObject({
+      canReorderUp: false,
+      canReorderDown: true,
+      canDuplicate: true,
+      canDelete: true,
+    });
+    expect(p?.capabilities).toMatchObject({
+      canReorderUp: true,
+      canReorderDown: false,
+      canDuplicate: true,
+      canDelete: true,
+    });
+
+    const hidden = applied(src, { kind: 'toggle-visibility', hidden: true }, 'p');
+    expect(hidden.content).toContain('<p style={{ display: "none" }}>Second</p>');
+    const shown = applied(hidden.content, { kind: 'toggle-visibility', hidden: false }, 'p');
+    expect(shown.content).toBe(src);
+
+    const reordered = applied(src, { kind: 'reorder-sibling', direction: 'down' }, 'h1');
+    expect(reordered.content.indexOf('<p>Second</p>')).toBeLessThan(
+      reordered.content.indexOf('<h1>First</h1>'),
+    );
+
+    const duplicated = applied(src, { kind: 'duplicate-element' }, 'h1');
+    expect(duplicated.content).toContain('<h1>First</h1>\n      <h1>First</h1>');
+
+    const deleted = applied(src, { kind: 'delete-element' }, 'p');
+    expect(deleted.content).toBe(`function App() {
+  return (
+    <main>
+      <h1>First</h1>
+    </main>
+  );
+}`);
+  });
+
+  it('tracks static .map() array provenance, emits mapItemBindings, and edits/mutates array items', () => {
+    const src = `const cards = [
+  { id: 1, title: "Fast", body: "Instant renders" },
+  { id: 2, title: "Safe", body: "AST verified" },
+];
+function App() {
+  return (
+    <section>
+      {cards.map((item, idx) => (
+        <article key={idx}>
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </article>
+      ))}
+    </section>
+  );
+}`;
+    const inspected = inspect(src);
+    const article = inspected.targets.find((t) => t.tagName === 'article');
+    const h3 = inspected.targets.find((t) => t.tagName === 'h3');
+    expect(article?.mapSource).toEqual({
+      arrayName: 'cards',
+      itemCount: 2,
+      fields: [
+        { key: 'title', property: 'title', values: ['Fast', 'Safe'] },
+        { key: 'body', property: 'body', values: ['Instant renders', 'AST verified'] },
+      ],
+    });
+    expect(h3?.mapSource).toEqual({
+      arrayName: 'cards',
+      itemCount: 2,
+      fields: [{ key: 'title', property: 'title', values: ['Fast', 'Safe'] }],
+    });
+    expect(inspected.mapItemBindings).toEqual([
+      {
+        targetId: article?.id,
+        paramsStart: src.indexOf('item, idx'),
+        paramsEnd: src.indexOf('item, idx') + 4,
+        wrapParens: false,
+        existingIndexName: 'idx',
+        rootInsertionOffset: article?.insertionOffset,
+      },
+    ]);
+
+    const unparen =
+      'const tags = ["Alpha", "Beta"]; function App(){ return <ul>{tags.map(tag => <li>{tag}</li>)}</ul>; }';
+    const unparenInspected = inspect(unparen);
+    expect(unparenInspected.mapItemBindings?.[0]).toMatchObject({
+      wrapParens: true,
+      paramsStart: unparen.indexOf('tag =>'),
+      paramsEnd: unparen.indexOf('tag =>') + 3,
+    });
+    expect(
+      applied(
+        unparen,
+        { kind: 'set-map-item-text', itemIndex: 1, fieldKey: 'tag', value: 'Gamma' },
+        'li',
+      ).content,
+    ).toContain('["Alpha", "Gamma"]');
+
+    const editedText = applied(
+      src,
+      { kind: 'set-map-item-text', itemIndex: 1, fieldKey: 'title', value: 'Verified' },
+      'h3',
+    );
+    expect(editedText.content).toContain('{ id: 2, title: "Verified", body: "AST verified" }');
+
+    const dupItem = applied(src, { kind: 'duplicate-element', itemIndex: 0 }, 'article');
+    expect(dupItem.content.match(/title: "Fast"/g)).toHaveLength(2);
+
+    const movedItem = applied(
+      src,
+      { kind: 'reorder-sibling', direction: 'up', itemIndex: 1 },
+      'article',
+    );
+    expect(movedItem.content.indexOf('title: "Safe"')).toBeLessThan(
+      movedItem.content.indexOf('title: "Fast"'),
+    );
+
+    const delItem = applied(src, { kind: 'delete-element', itemIndex: 0 }, 'article');
+    expect(delItem.content).not.toContain('title: "Fast"');
+    expect(delItem.content).toContain('title: "Safe"');
+  });
+
+  it('batches up to 32 operations including style upsert, remove, className, and attribute ops', () => {
+    const src = 'function App(){return <div style={{ color: "#111", gap: 8 }}>Hello</div>}';
+    const inspected = inspect(src);
+    const target = inspected.targets[0];
+    if (!target) throw new Error('Missing div');
+    const ops: SourceEditOperation[] = [
+      { kind: 'set-text', value: 'Updated' },
+      { kind: 'set-attribute', name: 'title', value: 'Tip' },
+      { kind: 'set-class-name', value: 'p-4 text-sm' },
+      { kind: 'remove-style', property: 'gap' },
+      { kind: 'set-style', property: 'padding', value: '16px' },
+    ];
+    const result = planSourceEditBatch({
+      path: 'App.jsx',
+      source: src,
+      expectedSourceHash: inspected.sourceHash,
+      targetId: target.id,
+      scope: 'source-definition',
+      operations: ops,
+    });
+    expect(result.status).toBe('applied');
+    if (result.status !== 'applied') throw new Error(result.message);
+    expect(result.content).toContain('{"Updated"}');
+    expect(result.content).toContain('title={"Tip"}');
+    expect(result.content).toContain('className="p-4 text-sm"');
+    expect(result.content).not.toContain('gap');
+    expect(result.content).toContain('padding: "16px"');
   });
 });

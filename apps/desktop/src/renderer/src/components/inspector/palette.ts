@@ -17,6 +17,29 @@ export interface PaletteColor {
 const MAX_PALETTE = 16;
 const SOURCE_COLOR_RE =
   /#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3,4}\b|rgba?\([^)\n]{1,64}\)|hsla?\([^)\n]{1,64}\)/g;
+const TWEAK_CSS_VAR_RE = /^var\(\s*--ocd-tweak-([a-z0-9-]+)(?:\s*,[^)]*)?\s*\)$/i;
+
+/** Converts a tweak token key into the canonical kebab-case suffix used by the runtime bridge. */
+export function toTweakCssVarKey(key: string): string {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[_\s]+/g, '-')
+    .replace(/[^A-Za-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+}
+
+/** Returns the live CSS variable expression for a tweak token name. */
+export function tweakCssVarForToken(tokenName: string): string {
+  return `var(--ocd-tweak-${toTweakCssVarKey(tokenName)})`;
+}
+
+/** Extracts the kebab-case token key from a `var(--ocd-tweak-<k>)` CSS value, if any. */
+export function parseTweakCssVar(value: string): string | null {
+  const match = TWEAK_CSS_VAR_RE.exec(value.trim());
+  return match?.[1] ? match[1].toLowerCase() : null;
+}
 
 /** A comparison key for color literals; never written back to source. */
 export function colorKey(value: string): string | null {
@@ -99,8 +122,27 @@ export function buildPalette(input: {
   return [...byKey.values()].slice(0, MAX_PALETTE);
 }
 
+/** Matches either a literal color or a `var(--ocd-tweak-<k>)` token reference against the palette. */
 export function paletteMatch(palette: readonly PaletteColor[], value: string): PaletteColor | null {
+  const tweakKey = parseTweakCssVar(value);
+  if (tweakKey !== null) {
+    return (
+      palette.find(
+        (color) => color.source === 'token' && toTweakCssVarKey(color.name) === tweakKey,
+      ) ?? null
+    );
+  }
   const key = colorKey(value);
   if (!key) return null;
   return palette.find((color) => color.name && colorKey(color.value) === key) ?? null;
+}
+
+/** Reports whether a swatch corresponds to the active value (literal color or tweak token var). */
+export function paletteSwatchSelected(color: PaletteColor, value: string): boolean {
+  const tweakKey = parseTweakCssVar(value);
+  if (tweakKey !== null) {
+    return color.source === 'token' && toTweakCssVarKey(color.name) === tweakKey;
+  }
+  const valueKey = colorKey(value);
+  return valueKey !== null && colorKey(color.value) === valueKey;
 }

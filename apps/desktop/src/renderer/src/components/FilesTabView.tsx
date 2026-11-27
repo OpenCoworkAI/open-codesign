@@ -3,14 +3,23 @@ import {
   buildInteractivePreviewDocument,
   INTERACTIVE_PREVIEW_SANDBOX,
   isRenderablePath,
+  prepareInteractivePreviewHotSwap,
   type SourceEditSelection,
 } from '@open-codesign/runtime';
 import {
   type CommentRow,
   DEFAULT_SOURCE_ENTRY,
+  type DesignMdBodySection,
+  type DesignMdFrontmatter,
   inspectTweakSource,
   LEGACY_SOURCE_ENTRY,
   type PreviewMode,
+  parseDesignMd,
+  type SourceEditAstHandoffContext,
+  type SourceEditElementSnapshot,
+  type SourceEditOperation,
+  type SourceEditTarget,
+  serializeDesignMd,
 } from '@open-codesign/shared';
 import {
   ChevronRight,
@@ -62,10 +71,13 @@ import {
   postModeToPreviewWindow,
   postPinSelectorToPreviewWindow,
   postSourceEditAncestorToPreviewWindow,
+  postSourceEditHudStateToPreviewWindow,
   postSourceEditPreviewToPreviewWindow,
   postSourceEditRestoreToPreviewWindow,
+  requestSourceEditHotSwap,
   requestSourceEditValidation,
   type SourceEditAncestor,
+  type SourceEditInlineEditRequestMessage,
   stablePreviewSourceKey,
 } from '../preview/helpers';
 import {
@@ -77,10 +89,13 @@ import {
   resolveDesignPreviewSource,
 } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import { CanvasFloatingToolbar } from './inspector/CanvasFloatingToolbar';
 import { ElementInspector } from './inspector/ElementInspector';
 import type { PreviewDraft } from './inspector/element-model';
+import { InlineTextOverlay, type InlineTextRequest } from './inspector/InlineTextOverlay';
 import { InspectorRail, PageColorsSection } from './inspector/InspectorPanel';
-import { buildPalette, designMdColors, tweakColorTokens } from './inspector/palette';
+import { buildPalette, colorKey, designMdColors, tweakColorTokens } from './inspector/palette';
+import { toNativeColorInputValue } from './TweakPanel.inputs';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
 
@@ -1034,6 +1049,7 @@ interface WorkspaceFilePreviewMessageHandlerInput {
     ancestors?: SourceEditAncestor[],
     element?: SourceEditPickedElement,
   ) => void;
+  onInlineEditRequest?: ((msg: SourceEditInlineEditRequestMessage) => void) | undefined;
   onSelectionCleared?: (() => void) | undefined;
   sourcePath?: string | undefined;
   comments?: CommentRow[] | undefined;
@@ -1072,6 +1088,7 @@ export function createWorkspaceFilePreviewMessageHandlers({
   sourceEditMode = false,
   onSourceEditExit,
   onSourceEditSelected,
+  onInlineEditRequest,
   onSelectionCleared,
   sourcePath,
   comments = [],
@@ -1084,6 +1101,7 @@ export function createWorkspaceFilePreviewMessageHandlers({
   return {
     onPreviewEscape: sourceEditMode ? () => onSourceEditExit?.() : handlePreviewFullscreenEscape,
     onSelectionCleared: () => onSelectionCleared?.(),
+    ...(onInlineEditRequest ? { onInlineEditRequest } : {}),
     onElementSelected: (msg) => {
       if (sourceEditMode) {
         onSourceEditSelected?.(msg.sourceEdit, msg.sourceEditAncestors ?? [], {
@@ -1091,6 +1109,10 @@ export function createWorkspaceFilePreviewMessageHandlers({
           tag: msg.tag,
           outerHTML: msg.outerHTML,
           rect: msg.rect,
+          ...(typeof msg.parentOuterHTML === 'string' && msg.parentOuterHTML.length > 0
+            ? { parentOuterHTML: msg.parentOuterHTML }
+            : {}),
+          ...(msg.elementSnapshot !== undefined ? { elementSnapshot: msg.elementSnapshot } : {}),
         });
         return;
       }
@@ -1136,6 +1158,195 @@ interface WorkspacePreviewSource {
 export function workspacePreviewSourceStableKey(source: WorkspacePreviewSource | null): string {
   if (!source) return '';
   return `${source.path}:${stablePreviewSourceKey(source.content)}`;
+}
+
+const HANDOFF_EXCERPT_MAX_CHARS = 500;
+const HANDOFF_COMPUTED_STYLE_KEYS = [
+  'color',
+  'backgroundColor',
+  'fontFamily',
+  'fontSize',
+  'fontWeight',
+  'lineHeight',
+  'padding',
+  'margin',
+  'gap',
+  'display',
+  'flexDirection',
+  'borderRadius',
+] as const;
+
+function lineColAtOffset(source: string, offset: number): { line: number; col: number } {
+  const bounded = Math.max(0, Math.min(offset, source.length));
+  let line = 1;
+  let lastBreak = -1;
+  for (let i = 0; i < bounded; i++) {
+    if (source.charCodeAt(i) === 10) {
+      line++;
+      lastBreak = i;
+    }
+  }
+  return { line, col: bounded - lastBreak };
+}
+
+export function buildSourceEditAstHandoffContext(input: {
+  source: string;
+  selection: SourceEditTarget | null;
+  elementSnapshot?: SourceEditElementSnapshot | null;
+  ancestors?: readonly SourceEditAncestor[];
+}): SourceEditAstHandoffContext | undefined {
+  const { source, selection, elementSnapshot } = input;
+  if (!selection || source.length === 0) return undefined;
+
+  const loc = selection.sourceLocation;
+  const startPos = loc
+    ? { line: loc.startLine, col: loc.startCol }
+    : lineColAtOffset(source, selection.start);
+  const endPos = loc
+    ? { line: loc.endLine, col: loc.endCol }
+    : lineColAtOffset(source, selection.end);
+
+  const rawExcerpt = source.slice(
+    Math.max(0, selection.start),
+    Math.min(source.length, selection.end),
+  );
+  const sourceExcerpt =
+    rawExcerpt.length > HANDOFF_EXCERPT_MAX_CHARS
+      ? `${rawExcerpt.slice(0, HANDOFF_EXCERPT_MAX_CHARS - 1)}…`
+      : rawExcerpt;
+
+  const enclosingComponent = selection.capabilities?.enclosingComponent;
+  const mapContext = selection.mapSource
+    ? `${selection.mapSource.arrayName}.map(...) (${selection.mapSource.itemCount} items${
+        elementSnapshot?.itemIndex !== undefined ? `, item #${elementSnapshot.itemIndex + 1}` : ''
+      })`
+    : undefined;
+
+  const unsupportedReasons =
+    selection.unsupported.length > 0
+      ? selection.unsupported.map((item) => item.message || item.reason)
+      : undefined;
+
+  const textProvenance =
+    selection.textSources && selection.textSources.length > 0
+      ? selection.textSources.map((src) =>
+          src.textId ? `${src.textId}:${src.origin}` : src.origin,
+        )
+      : selection.textLayout && selection.textLayout.length > 0
+        ? selection.textLayout.map((seg) =>
+            seg.kind === 'text'
+              ? `literal:${JSON.stringify(seg.value.slice(0, 60))}`
+              : seg.kind === 'dynamic'
+                ? 'dynamic-expression'
+                : `child:${seg.targetId}`,
+          )
+        : undefined;
+
+  const computedStyles: Partial<Record<string, string>> = {};
+  if (elementSnapshot?.computedStyle) {
+    for (const key of HANDOFF_COMPUTED_STYLE_KEYS) {
+      const val = elementSnapshot.computedStyle[key];
+      if (typeof val === 'string' && val.length > 0) {
+        computedStyles[key] = val;
+      }
+    }
+  }
+
+  return {
+    startLine: startPos.line,
+    startCol: startPos.col,
+    endLine: endPos.line,
+    endCol: endPos.col,
+    sourceExcerpt,
+    ...(enclosingComponent ? { enclosingComponent } : {}),
+    ...(mapContext ? { mapContext } : {}),
+    ...(unsupportedReasons ? { unsupportedReasons } : {}),
+    ...(textProvenance ? { textProvenance } : {}),
+    ...(Object.keys(computedStyles).length > 0 ? { computedStyles } : {}),
+  };
+}
+
+export function syncPaletteToDesignMdContent(
+  existingRaw: string | null,
+  palette: readonly { value: string; name: string; source: 'token' | 'design' | 'used' }[],
+  designName?: string | null,
+): string {
+  const fallbackName = designName?.trim() || 'Design System';
+  let frontmatter: DesignMdFrontmatter = { name: fallbackName };
+  let sections: DesignMdBodySection[] = [];
+
+  if (existingRaw && existingRaw.trim().length > 0) {
+    try {
+      const parsed = parseDesignMd(existingRaw);
+      const fm = parsed.frontmatter;
+      frontmatter = {
+        name:
+          typeof fm['name'] === 'string' && fm['name'].trim().length > 0
+            ? fm['name']
+            : fallbackName,
+      };
+      if (typeof fm['version'] === 'string') frontmatter.version = fm['version'];
+      if (typeof fm['description'] === 'string') frontmatter.description = fm['description'];
+      if (fm['colors'] && typeof fm['colors'] === 'object' && !Array.isArray(fm['colors'])) {
+        frontmatter.colors = { ...(fm['colors'] as Record<string, string>) };
+      }
+      if (
+        fm['typography'] &&
+        typeof fm['typography'] === 'object' &&
+        !Array.isArray(fm['typography'])
+      ) {
+        frontmatter.typography = fm['typography'] as NonNullable<DesignMdFrontmatter['typography']>;
+      }
+      if (fm['rounded'] && typeof fm['rounded'] === 'object' && !Array.isArray(fm['rounded'])) {
+        frontmatter.rounded = fm['rounded'] as Record<string, string>;
+      }
+      if (fm['spacing'] && typeof fm['spacing'] === 'object' && !Array.isArray(fm['spacing'])) {
+        frontmatter.spacing = fm['spacing'] as Record<string, string | number>;
+      }
+      if (
+        fm['components'] &&
+        typeof fm['components'] === 'object' &&
+        !Array.isArray(fm['components'])
+      ) {
+        frontmatter.components = fm['components'] as Record<string, Record<string, string>>;
+      }
+      sections =
+        parsed.bodySections.length > 0
+          ? parsed.bodySections
+          : parsed.body.trim().length > 0
+            ? [{ heading: 'Overview', content: parsed.body.trim() }]
+            : [];
+    } catch {
+      sections = [{ heading: 'Overview', content: existingRaw.trim() }];
+    }
+  }
+
+  const nextColors: Record<string, string> = { ...(frontmatter.colors ?? {}) };
+  const knownKeys = new Set(
+    Object.values(nextColors)
+      .map((val) => colorKey(val))
+      .filter((key): key is string => Boolean(key)),
+  );
+  let nextIndex = 1;
+  const nextUnnamedKey = () => {
+    while (`color${nextIndex}` in nextColors) nextIndex++;
+    const key = `color${nextIndex}`;
+    nextIndex++;
+    return key;
+  };
+
+  for (const swatch of palette) {
+    const hex = toNativeColorInputValue(swatch.value) ?? colorKey(swatch.value);
+    if (!hex || knownKeys.has(hex)) continue;
+    const trimmedName = swatch.name.trim();
+    const desiredName =
+      trimmedName.length > 0 && !(trimmedName in nextColors) ? trimmedName : nextUnnamedKey();
+    nextColors[desiredName] = hex;
+    knownKeys.add(hex);
+  }
+
+  frontmatter.colors = nextColors;
+  return serializeDesignMd({ frontmatter, sections });
 }
 
 export function splitMarkdownFrontmatter(content: string): {
@@ -1655,6 +1866,8 @@ export function WorkspaceFilePreview({
   const [readError, setReadError] = useState<string | null>(null);
   const [sourceReadPending, setSourceReadPending] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewBounds, setPreviewBounds] = useState({ width: 0, height: 0 });
   const previousPreview = useRef<{
     designId: string | null;
     path: string;
@@ -1666,12 +1879,38 @@ export function WorkspaceFilePreview({
   })
     ? previewSource
     : null;
+  const workspaceDevServerRequired =
+    Boolean(activePreviewSource?.path.toLowerCase().endsWith('.html')) &&
+    htmlRequiresWorkspaceDevServer(activePreviewSource?.content ?? '');
+  const swappedPreviewRef = useRef<{
+    swapKey: string;
+    baseSrcDoc: string;
+    liveHash: string;
+  } | null>(null);
+  const lastBaseSrcDocRef = useRef<{ swapKey: string; srcDoc: string } | null>(null);
   const unlistedSourcePath =
     activePreviewSource?.workspaceDesignId === currentDesignId &&
     activePreviewSource &&
     !workspaceFiles.some((entry) => entry.path === activePreviewSource.path)
       ? activePreviewSource.path
       : null;
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el || typeof ResizeObserver !== 'function') return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setPreviewBounds((prev) =>
+        prev.width === rect.width && prev.height === rect.height
+          ? prev
+          : { width: rect.width, height: rect.height },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!currentDesignId || !unlistedSourcePath) return;
@@ -1687,6 +1926,7 @@ export function WorkspaceFilePreview({
     };
   }, [currentDesignId, unlistedSourcePath]);
 
+  const previewSwapKeyRef = useRef('');
   const sourceEdit = useWorkspaceSourceEdit({
     designId: currentDesignId,
     selectedPath: path,
@@ -1699,6 +1939,44 @@ export function WorkspaceFilePreview({
       const result = await requestSourceEditValidation(win, request, { signal });
       return iframeRef.current?.contentWindow === win ? result : null;
     },
+    onAfterCommit: async (nextInspect, restoreTargetSelector, signal) => {
+      if (!/\.(jsx|tsx)$/i.test(nextInspect.path)) return false;
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return false;
+      const swapKey = previewSwapKeyRef.current;
+      const baseDoc = lastBaseSrcDocRef.current;
+      if (!baseDoc || baseDoc.swapKey !== swapKey) return false;
+      const prepared = prepareInteractivePreviewHotSwap(nextInspect.source, {
+        source: nextInspect.source,
+        sourceHash: nextInspect.sourceHash,
+        previewRevision: nextInspect.previewRevision,
+        targets: nextInspect.targets,
+        mapItemBindings: nextInspect.mapItemBindings,
+      });
+      const swapped = await requestSourceEditHotSwap(
+        win,
+        {
+          instrumentedSource: prepared.instrumentedSource,
+          sourceEditContext: prepared.context,
+          kind: nextInspect.path.toLowerCase().endsWith('.tsx') ? 'tsx' : 'jsx',
+          ...(restoreTargetSelector ? { restoreSelector: restoreTargetSelector } : {}),
+        },
+        { signal },
+      );
+      if (
+        !swapped ||
+        iframeRef.current?.contentWindow !== win ||
+        previewSwapKeyRef.current !== swapKey
+      ) {
+        return false;
+      }
+      swappedPreviewRef.current = {
+        swapKey,
+        baseSrcDoc: baseDoc.srcDoc,
+        liveHash: nextInspect.sourceHash,
+      };
+      return true;
+    },
     onPersist: setPreviewSource,
     onSaved: (warnings) =>
       useCodesignStore.getState().pushToast({
@@ -1707,6 +1985,8 @@ export function WorkspaceFilePreview({
         ...(warnings.length > 0 ? { description: warnings.join('\n') } : {}),
       }),
   });
+  const previewSwapKey = `${currentDesignId ?? ''}\0${currentDesign?.workspacePath ?? ''}\0${activePreviewSource?.path ?? ''}\0${sourceEdit.active ? '1' : '0'}\0${renderable ? '1' : '0'}\0${workspaceDevServerRequired ? '1' : '0'}`;
+  previewSwapKeyRef.current = previewSwapKey;
   const previewInteractionMode = sourceEdit.active
     ? 'source-edit'
     : interactive
@@ -1714,6 +1994,7 @@ export function WorkspaceFilePreview({
       : 'default';
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [designMd, setDesignMd] = useState<string | null>(null);
+  const [syncingDesignMd, setSyncingDesignMd] = useState(false);
   useEffect(() => {
     void currentDesignUpdatedAt;
     const read = window.codesign?.files?.read;
@@ -1754,6 +2035,7 @@ export function WorkspaceFilePreview({
     [sourceEdit.inspection],
   );
 
+  const { getExpectedRevisions } = sourceEdit;
   useLayoutEffect(() => {
     function onMessage(event: MessageEvent): void {
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
@@ -1763,6 +2045,7 @@ export function WorkspaceFilePreview({
           sourceEditMode: sourceEdit.active,
           onSourceEditExit: sourceEdit.exit,
           onSourceEditSelected: sourceEdit.select,
+          onInlineEditRequest: sourceEdit.openInlineEdit,
           onSelectionCleared: () => {
             sourceEdit.clearSelection();
             if (interactive) useCodesignStore.getState().clearCanvasElement();
@@ -1783,7 +2066,7 @@ export function WorkspaceFilePreview({
           },
           pushIframeError,
         }),
-        sourceEdit.inspection ?? undefined,
+        getExpectedRevisions(),
       );
     }
 
@@ -1793,8 +2076,9 @@ export function WorkspaceFilePreview({
     sourceEdit.active,
     sourceEdit.exit,
     sourceEdit.select,
+    sourceEdit.openInlineEdit,
     sourceEdit.clearSelection,
-    sourceEdit.inspection,
+    getExpectedRevisions,
     pushIframeError,
     activePreviewSource?.path,
     comments,
@@ -1803,6 +2087,49 @@ export function WorkspaceFilePreview({
     openCommentBubble,
     applyLiveRects,
     interactive,
+  ]);
+
+  const {
+    canUndo: sourceEditCanUndo,
+    canRedo: sourceEditCanRedo,
+    undo: sourceEditUndo,
+    redo: sourceEditRedo,
+    inlineEditRequest: activeInlineEdit,
+  } = sourceEdit;
+  useEffect(() => {
+    if (!interactive || !sourceEdit.active) return;
+    function isEditableTarget(node: EventTarget | null): boolean {
+      if (!(node instanceof Element)) return false;
+      const tag = node.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return (node as HTMLElement).isContentEditable;
+    }
+    function onWindowKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.key.toLowerCase() !== 'z') return;
+      if (activeInlineEdit) return;
+      if (isEditableTarget(event.target) || isEditableTarget(document.activeElement)) return;
+      if (event.shiftKey) {
+        if (!sourceEditCanRedo) return;
+        event.preventDefault();
+        void sourceEditRedo();
+      } else {
+        if (!sourceEditCanUndo) return;
+        event.preventDefault();
+        void sourceEditUndo();
+      }
+    }
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => window.removeEventListener('keydown', onWindowKeyDown);
+  }, [
+    interactive,
+    sourceEdit.active,
+    activeInlineEdit,
+    sourceEditCanUndo,
+    sourceEditCanRedo,
+    sourceEditUndo,
+    sourceEditRedo,
   ]);
 
   useEffect(() => {
@@ -1931,29 +2258,40 @@ export function WorkspaceFilePreview({
     () => workspacePreviewSourceStableKey(activePreviewSource),
     [activePreviewSource],
   );
-  const workspaceDevServerRequired =
-    Boolean(activePreviewSource?.path.toLowerCase().endsWith('.html')) &&
-    htmlRequiresWorkspaceDevServer(activePreviewSource?.content ?? '');
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Only the default preview masks tweak changes; source editing always uses exact bytes and a new inspected revision.
   const srcDoc = useMemo(() => {
     if (!activePreviewSource || !renderable || workspaceDevServerRequired) return null;
+    const activeSwap = swappedPreviewRef.current;
+    if (
+      activeSwap &&
+      activeSwap.swapKey === previewSwapKey &&
+      sourceEdit.inspection?.sourceHash === activeSwap.liveHash
+    ) {
+      return activeSwap.baseSrcDoc;
+    }
+    swappedPreviewRef.current = null;
     try {
       const baseHref = workspaceBaseHrefForFile({
         designId: currentDesignId,
         workspacePath: currentDesign?.workspacePath,
         filePath: activePreviewSource.path,
       });
-      return buildInteractivePreviewDocument(activePreviewSource.content, {
+      const built = buildInteractivePreviewDocument(activePreviewSource.content, {
         path: activePreviewSource.path,
         baseHref,
         ...(sourceEdit.inspection ? { sourceEdit: sourceEdit.inspection } : {}),
       });
+      lastBaseSrcDocRef.current = { swapKey: previewSwapKey, srcDoc: built };
+      return built;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
+      const errDoc = `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
+      lastBaseSrcDocRef.current = { swapKey: previewSwapKey, srcDoc: errDoc };
+      return errDoc;
     }
   }, [
+    previewSwapKey,
     currentDesign?.workspacePath,
     currentDesignId,
     activePreviewSource?.path,
@@ -1989,6 +2327,47 @@ export function WorkspaceFilePreview({
     onFullscreenAvailable?.(renderable && Boolean(srcDoc) && !workspaceDevServerRequired);
     return () => onFullscreenAvailable?.(false);
   }, [renderable, srcDoc, workspaceDevServerRequired, onFullscreenAvailable]);
+
+  const handleSyncToDesignMd = useCallback(async () => {
+    const filesApi = window.codesign?.files;
+    if (!currentDesignId || !filesApi?.write || syncingDesignMd) return;
+    setSyncingDesignMd(true);
+    try {
+      let latestRaw: string | null = designMd;
+      if (filesApi.read) {
+        try {
+          const readResult = await filesApi.read(currentDesignId, 'DESIGN.md');
+          latestRaw = readResult.content;
+        } catch {
+          latestRaw = null;
+        }
+      }
+      const nextContent = syncPaletteToDesignMdContent(
+        latestRaw,
+        palette,
+        currentDesign?.name ?? null,
+      );
+      await filesApi.write(
+        currentDesignId,
+        'DESIGN.md',
+        nextContent,
+        latestRaw !== null ? { expectedContent: latestRaw } : undefined,
+      );
+      setDesignMd(nextContent);
+      useCodesignStore.getState().pushToast({
+        variant: 'success',
+        title: t('canvas.sourceEdit.saved'),
+      });
+    } catch (err) {
+      useCodesignStore.getState().pushToast({
+        variant: 'error',
+        title: t('canvas.workspace.updateFailed'),
+        description: err instanceof Error ? err.message : t('errors.unknown'),
+      });
+    } finally {
+      setSyncingDesignMd(false);
+    }
+  }, [currentDesignId, currentDesign?.name, designMd, palette, syncingDesignMd, t]);
 
   if (nativePreview) {
     const url = workspaceUrlForFile({ designId: currentDesignId, filePath: path });
@@ -2032,8 +2411,16 @@ export function WorkspaceFilePreview({
   const askAi = sourceEdit.picked
     ? () => {
         const picked = sourceEdit.picked;
-        const sourcePath = activePreviewSource?.path;
         if (!picked) return;
+        const sourcePath = activePreviewSource?.path;
+        const astContext = activePreviewSource
+          ? buildSourceEditAstHandoffContext({
+              source: activePreviewSource.content,
+              selection: sourceEdit.selection,
+              elementSnapshot: sourceEdit.elementSnapshot,
+              ancestors: sourceEdit.ancestors,
+            })
+          : undefined;
         sourceEdit.exit();
         openCommentBubble({
           ...(sourcePath ? { sourcePath } : {}),
@@ -2041,9 +2428,35 @@ export function WorkspaceFilePreview({
           tag: picked.tag,
           outerHTML: picked.outerHTML,
           rect: picked.rect,
+          ...(picked.parentOuterHTML ? { parentOuterHTML: picked.parentOuterHTML } : {}),
+          ...(astContext ? { astContext } : {}),
         });
       }
     : undefined;
+
+  const selectedCapabilities = sourceEdit.selection?.capabilities;
+  const selectedItemIndex = sourceEdit.elementSnapshot?.itemIndex;
+  const selectedMapSource = sourceEdit.selection?.mapSource;
+  const isSelectedHidden = Boolean(
+    sourceEdit.elementSnapshot?.computedStyle?.display === 'none' ||
+      sourceEdit.selection?.editableFields.some(
+        (field) =>
+          field.kind === 'set-style' && field.property === 'display' && field.value === 'none',
+      ),
+  );
+  const inlineTextRequest: InlineTextRequest | null =
+    sourceEdit.active && sourceEdit.inlineEditRequest
+      ? {
+          targetId: sourceEdit.inlineEditRequest.targetId,
+          textId: sourceEdit.inlineEditRequest.textKey,
+          initialText: sourceEdit.inlineEditRequest.text,
+          rect: sourceEdit.inlineEditRequest.rect,
+          multiline:
+            sourceEdit.inlineEditRequest.text.includes('\n') ||
+            sourceEdit.inlineEditRequest.rect.height > 44,
+          typography: sourceEdit.inlineEditRequest.typography,
+        }
+      : null;
 
   return (
     <div
@@ -2063,31 +2476,141 @@ export function WorkspaceFilePreview({
       }}
     >
       <div className="relative flex min-h-0 flex-1">
-        <iframe
-          key={srcDoc}
-          ref={iframeRef}
-          title={`design-preview-${path}`}
-          sandbox={INTERACTIVE_PREVIEW_SANDBOX}
-          srcDoc={srcDoc}
-          onLoad={() => {
-            const win = iframeRef.current?.contentWindow;
-            postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
-            if (sourceEdit.active && sourceEdit.inspection) {
-              const selector = sourceEdit.takeRestoreSelector();
-              if (selector)
-                postSourceEditRestoreToPreviewWindow(win, selector, sourceEdit.inspection);
-            }
-            if (
-              interactive &&
-              !sourceEdit.active &&
-              commentBubble &&
-              commentBubble.sourcePath === activePreviewSource?.path
-            ) {
-              postPinSelectorToPreviewWindow(win, commentBubble.selector, pushIframeError);
-            }
-          }}
-          className="min-w-0 flex-1 h-full bg-white border-0 block"
-        />
+        <div ref={previewContainerRef} className="relative h-full min-w-0 flex-1">
+          <iframe
+            key={srcDoc}
+            ref={iframeRef}
+            title={`design-preview-${path}`}
+            sandbox={INTERACTIVE_PREVIEW_SANDBOX}
+            srcDoc={srcDoc}
+            onLoad={() => {
+              const win = iframeRef.current?.contentWindow;
+              postModeToPreviewWindow(win, previewInteractionMode, pushIframeError);
+              if (sourceEdit.active && sourceEdit.inspection) {
+                const selector = sourceEdit.takeRestoreSelector();
+                if (selector)
+                  postSourceEditRestoreToPreviewWindow(win, selector, sourceEdit.inspection);
+              }
+              if (
+                interactive &&
+                !sourceEdit.active &&
+                commentBubble &&
+                commentBubble.sourcePath === activePreviewSource?.path
+              ) {
+                postPinSelectorToPreviewWindow(win, commentBubble.selector, pushIframeError);
+              }
+            }}
+            className="block h-full w-full border-0 bg-white"
+          />
+          {sourceEdit.active && sourceEdit.picked && !inlineTextRequest ? (
+            <CanvasFloatingToolbar
+              rect={sourceEdit.picked.rect}
+              containerWidth={previewBounds.width > 0 ? previewBounds.width : 800}
+              containerHeight={previewBounds.height > 0 ? previewBounds.height : 600}
+              hidden={isSelectedHidden}
+              busy={sourceEdit.busy || sourceReadPending}
+              canSelectParent={sourceEdit.ancestors.length > 0}
+              canReorderUp={Boolean(
+                selectedCapabilities?.canReorderUp &&
+                  (!selectedMapSource || (selectedItemIndex ?? 0) > 0),
+              )}
+              canReorderDown={Boolean(
+                selectedCapabilities?.canReorderDown &&
+                  (!selectedMapSource ||
+                    (selectedItemIndex ?? selectedMapSource.itemCount) + 1 <
+                      selectedMapSource.itemCount),
+              )}
+              canDuplicate={Boolean(selectedCapabilities?.canDuplicate)}
+              canToggleVisibility={Boolean(
+                selectedCapabilities &&
+                  (selectedCapabilities.canUpsertStyle ||
+                    selectedCapabilities.canEditClassName ||
+                    selectedCapabilities.canUpsertAttribute),
+              )}
+              canDelete={Boolean(selectedCapabilities?.canDelete)}
+              horizontalFlow={Boolean(
+                sourceEdit.elementSnapshot?.parentLayout?.display.includes('flex') &&
+                  sourceEdit.elementSnapshot.parentLayout.flexDirection?.startsWith('row'),
+              )}
+              onSelectParent={() => {
+                const parent = sourceEdit.ancestors[0];
+                if (!parent || !sourceEdit.inspection || sourceEdit.busy) return;
+                postSourceEditAncestorToPreviewWindow(
+                  iframeRef.current?.contentWindow,
+                  parent.selector,
+                  sourceEdit.inspection,
+                  pushIframeError,
+                );
+              }}
+              onReorderUp={() =>
+                void sourceEdit.applyQuickAction({
+                  kind: 'reorder-sibling',
+                  direction: 'up',
+                  ...(selectedItemIndex !== undefined ? { itemIndex: selectedItemIndex } : {}),
+                })
+              }
+              onReorderDown={() =>
+                void sourceEdit.applyQuickAction({
+                  kind: 'reorder-sibling',
+                  direction: 'down',
+                  ...(selectedItemIndex !== undefined ? { itemIndex: selectedItemIndex } : {}),
+                })
+              }
+              onDuplicate={() =>
+                void sourceEdit.applyQuickAction({
+                  kind: 'duplicate-element',
+                  ...(selectedItemIndex !== undefined ? { itemIndex: selectedItemIndex } : {}),
+                })
+              }
+              onToggleVisibility={() =>
+                void sourceEdit.applyQuickAction({
+                  kind: 'toggle-visibility',
+                  hidden: !isSelectedHidden,
+                })
+              }
+              onDelete={() =>
+                void sourceEdit.applyQuickAction({
+                  kind: 'delete-element',
+                  ...(selectedItemIndex !== undefined ? { itemIndex: selectedItemIndex } : {}),
+                })
+              }
+              onAskAi={askAi}
+            />
+          ) : null}
+          <InlineTextOverlay
+            request={inlineTextRequest}
+            busy={sourceEdit.busy || sourceReadPending}
+            onDraftChange={(value) => {
+              const req = sourceEdit.inlineEditRequest;
+              if (!req) return;
+              previewDraft({ styles: {}, attributes: {}, texts: { [req.textKey]: value } });
+            }}
+            onCommit={async (value) => {
+              const req = sourceEdit.inlineEditRequest;
+              if (!req) return;
+              const mapMatch = /^map-text:(\d+):(.+)$/.exec(req.textKey);
+              const op: SourceEditOperation = mapMatch
+                ? {
+                    kind: 'set-map-item-text',
+                    itemIndex: req.itemIndex ?? Number(mapMatch[1]),
+                    fieldKey: mapMatch[2] ?? '',
+                    value,
+                  }
+                : {
+                    kind: 'set-text',
+                    value,
+                    ...(req.textKey.startsWith('text:') && req.textKey !== 'text:only'
+                      ? { textId: req.textKey.slice('text:'.length) }
+                      : {}),
+                  };
+              await sourceEdit.applyQuickAction(op);
+            }}
+            onCancel={() => {
+              previewDraft({ styles: {}, attributes: {} });
+              sourceEdit.clearInlineEdit();
+            }}
+          />
+        </div>
         {showInspector && activePreviewSource ? (
           <InspectorRail
             mode={sourceEdit.active ? 'element' : 'page'}
@@ -2127,7 +2650,15 @@ export function WorkspaceFilePreview({
                     />
                   </Suspense>
                 ) : null}
-                <PageColorsSection palette={palette} />
+                <PageColorsSection
+                  palette={palette}
+                  onSyncToDesignMd={
+                    interactive && currentDesignId && window.codesign?.files?.write
+                      ? handleSyncToDesignMd
+                      : undefined
+                  }
+                  syncingDesignMd={syncingDesignMd}
+                />
               </>
             }
             element={
@@ -2137,11 +2668,25 @@ export function WorkspaceFilePreview({
                 target={sourceEdit.selection}
                 fieldStates={sourceEdit.fieldStates}
                 ancestors={sourceEdit.ancestors}
-                busy={sourceEdit.busy}
+                elementSnapshot={sourceEdit.elementSnapshot}
+                busy={sourceEdit.busy || sourceReadPending}
                 message={sourceEdit.message}
                 palette={palette}
+                canUndo={sourceEdit.canUndo}
+                canRedo={sourceEdit.canRedo}
+                onUndo={sourceEdit.undo}
+                onRedo={sourceEdit.redo}
                 onApply={sourceEdit.apply}
                 onPreview={previewDraft}
+                onHighlightBoxModel={(active) => {
+                  if (!sourceEdit.inspection) return;
+                  postSourceEditHudStateToPreviewWindow(
+                    iframeRef.current?.contentWindow,
+                    { highlightBoxModel: active },
+                    sourceEdit.inspection,
+                    pushIframeError,
+                  );
+                }}
                 onAskAi={askAi}
                 onSelectAncestor={(selector) => {
                   if (

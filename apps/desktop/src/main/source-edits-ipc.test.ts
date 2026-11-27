@@ -25,7 +25,11 @@ let db: ReturnType<typeof initInMemoryDb>;
 let designId: string;
 let busy: boolean;
 let unregister: () => void;
-function invoke(kind: 'inspect' | 'apply' | 'apply-batch', raw: unknown, event: unknown = null) {
+function invoke(
+  kind: 'inspect' | 'apply' | 'apply-batch' | 'undo' | 'redo',
+  raw: unknown,
+  event: unknown = null,
+) {
   const handler = handlers.get(`codesign:source-edits:v1:${kind}`);
   if (!handler) throw new Error('No handler');
   return handler(event, raw);
@@ -168,9 +172,9 @@ describe('deterministic source edits IPC', () => {
     }
     expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(original);
   });
-  it('rejects missing, hidden, escaping and non-JSX files instead of falling back', async () => {
-    await writeFile(path.join(root, 'index.html'), original);
-    for (const file of ['Missing.jsx', '.private.jsx', '../outside.jsx', 'index.html']) {
+  it('rejects missing, hidden, escaping and unsupported extensions instead of falling back', async () => {
+    await writeFile(path.join(root, 'notes.txt'), original);
+    for (const file of ['Missing.jsx', '.private.jsx', '../outside.jsx', 'notes.txt']) {
       expect(await inspect(designId, file)).toMatchObject({ status: 'rejected' });
     }
     const unbound = createDesign(db, 'Unbound');
@@ -377,5 +381,216 @@ describe('deterministic source edits IPC', () => {
       await invoke('apply-batch', batch, { sender: { isDestroyed: () => true } }),
     ).toMatchObject({ status: 'rejected', reason: 'cancelled' });
     expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(appliedResult.content);
+  });
+
+  it('supports undo/redo round-trips, broadcasts file changes, clears redo on new edit, and bounds history to 50 entries', async () => {
+    const send = vi.fn();
+    registerSourceEditsIpc(
+      db,
+      () =>
+        ({
+          isDestroyed: () => false,
+          webContents: { send },
+        }) as unknown as BrowserWindow,
+    );
+
+    const initialInspect = await inspect();
+    if (initialInspect.status !== 'ready') throw new Error(initialInspect.message);
+    expect(initialInspect.canUndo).toBe(false);
+    expect(initialInspect.canRedo).toBe(false);
+
+    const req1 = await request();
+    const res1 = SourceEditApplyResultV1.parse(await invoke('apply', req1));
+    if (res1.status !== 'applied') throw new Error(res1.message);
+    expect(res1.canUndo).toBe(true);
+    expect(res1.canRedo).toBe(false);
+    expect(send).toHaveBeenLastCalledWith('codesign:files:v1:changed', {
+      schemaVersion: 1,
+      designId,
+    });
+
+    const undone = SourceEditApplyResultV1.parse(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: res1.sourceHash,
+        previewRevision: 'preview-undo-1',
+      }),
+    );
+    expect(undone.status).toBe('applied');
+    if (undone.status !== 'applied') throw new Error(undone.message);
+    expect(undone.content).toBe(original);
+    expect(undone.canUndo).toBe(false);
+    expect(undone.canRedo).toBe(true);
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(original);
+
+    const afterUndoInspect = await inspect(designId, 'App.jsx', original);
+    if (afterUndoInspect.status !== 'ready') throw new Error(afterUndoInspect.message);
+    expect(afterUndoInspect.canUndo).toBe(false);
+    expect(afterUndoInspect.canRedo).toBe(true);
+
+    const redone = SourceEditApplyResultV1.parse(
+      await invoke('redo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: undone.sourceHash,
+        previewRevision: 'preview-redo-1',
+      }),
+    );
+    expect(redone.status).toBe('applied');
+    if (redone.status !== 'applied') throw new Error(redone.message);
+    expect(redone.content).toBe(res1.content);
+    expect(redone.canUndo).toBe(true);
+    expect(redone.canRedo).toBe(false);
+
+    // Undoing then applying a new edit clears the redo stack.
+    const undoneAgain = SourceEditApplyResultV1.parse(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: redone.sourceHash,
+        previewRevision: 'preview-undo-2',
+      }),
+    );
+    if (undoneAgain.status !== 'applied') throw new Error(undoneAgain.message);
+    const reqBranch = await request();
+    const branched = SourceEditApplyResultV1.parse(
+      await invoke('apply', {
+        ...reqBranch,
+        operation: { kind: 'set-text', value: 'Branched' },
+      }),
+    );
+    if (branched.status !== 'applied') throw new Error(branched.message);
+    expect(branched.canUndo).toBe(true);
+    expect(branched.canRedo).toBe(false);
+    expect(
+      await invoke('redo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: branched.sourceHash,
+        previewRevision: 'preview-redo-stale',
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'nothing-to-redo' });
+
+    // Bounded to 50 entries: apply 51 more edits (52 total) and verify 50 undos succeed, 51st fails.
+    let currentHash = branched.sourceHash;
+    let currentContent = branched.content;
+    for (let i = 0; i < 51; i += 1) {
+      const insp = await inspect(designId, 'App.jsx', currentContent);
+      if (insp.status !== 'ready') throw new Error(insp.message);
+      const h1 = insp.targets.find((t) => t.tagName === 'h1');
+      if (!h1) throw new Error('Missing h1');
+      const step = SourceEditApplyResultV1.parse(
+        await invoke('apply', {
+          schemaVersion: 1,
+          designId,
+          path: 'App.jsx',
+          expectedSourceHash: currentHash,
+          previewRevision: `rev-${i}`,
+          targetId: h1.id,
+          operation: { kind: 'set-text', value: `Step ${i}` },
+          scope: 'source-definition',
+        }),
+      );
+      if (step.status !== 'applied') throw new Error(step.message);
+      currentHash = step.sourceHash;
+      currentContent = step.content;
+    }
+
+    for (let i = 0; i < 50; i += 1) {
+      const stepUndo = SourceEditApplyResultV1.parse(
+        await invoke('undo', {
+          schemaVersion: 1,
+          designId,
+          path: 'App.jsx',
+          expectedSourceHash: currentHash,
+          previewRevision: `undo-${i}`,
+        }),
+      );
+      if (stepUndo.status !== 'applied') throw new Error(stepUndo.message);
+      currentHash = stepUndo.sourceHash;
+      expect(stepUndo.canUndo).toBe(i < 49);
+    }
+    expect(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: currentHash,
+        previewRevision: 'undo-overflow',
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'nothing-to-undo' });
+  });
+
+  it('invalidates undo/redo history on external file modifications and supports .html files', async () => {
+    const req = await request();
+    const appliedRes = SourceEditApplyResultV1.parse(await invoke('apply', req));
+    if (appliedRes.status !== 'applied') throw new Error(appliedRes.message);
+
+    // External modification invalidates the stack.
+    const externalContent = 'function App() { return <main><h1>External</h1></main>; }';
+    await writeFile(path.join(root, 'App.jsx'), externalContent);
+    const externalHash = createHash('sha256').update(externalContent, 'utf8').digest('hex');
+
+    expect(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: appliedRes.sourceHash,
+        previewRevision: 'preview-ext-1',
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'stale-source' });
+    expect(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'App.jsx',
+        expectedSourceHash: externalHash,
+        previewRevision: 'preview-ext-2',
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'nothing-to-undo' });
+
+    const externalInspect = await inspect(designId, 'App.jsx', externalContent);
+    if (externalInspect.status !== 'ready') throw new Error(externalInspect.message);
+    expect(externalInspect.canUndo).toBe(false);
+    expect(externalInspect.canRedo).toBe(false);
+
+    // HTML inspect, apply, and undo through IPC.
+    const htmlSource = '<!doctype html><html><body><h1>HTML Title</h1></body></html>';
+    await writeFile(path.join(root, 'index.html'), htmlSource);
+    const htmlInspected = await inspect(designId, 'index.html', htmlSource);
+    if (htmlInspected.status !== 'ready') throw new Error(htmlInspected.message);
+    const htmlTarget = htmlInspected.targets.find((t) => t.tagName === 'h1');
+    if (!htmlTarget) throw new Error('Missing html h1');
+    const htmlApplied = SourceEditApplyResultV1.parse(
+      await invoke('apply', {
+        schemaVersion: 1,
+        designId,
+        path: 'index.html',
+        expectedSourceHash: htmlInspected.sourceHash,
+        previewRevision: 'html-1',
+        targetId: htmlTarget.id,
+        operation: { kind: 'set-text', value: 'Updated HTML' },
+        scope: 'source-definition',
+      }),
+    );
+    expect(htmlApplied.status).toBe('applied');
+    if (htmlApplied.status !== 'applied') throw new Error(htmlApplied.message);
+    expect(htmlApplied.content).toContain('<h1>Updated HTML</h1>');
+    const htmlUndone = SourceEditApplyResultV1.parse(
+      await invoke('undo', {
+        schemaVersion: 1,
+        designId,
+        path: 'index.html',
+        expectedSourceHash: htmlApplied.sourceHash,
+        previewRevision: 'html-undo',
+      }),
+    );
+    expect(htmlUndone).toMatchObject({ status: 'applied', content: htmlSource });
   });
 });

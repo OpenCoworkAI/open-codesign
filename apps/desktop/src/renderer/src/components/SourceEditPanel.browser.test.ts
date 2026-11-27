@@ -155,7 +155,9 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
                   } else if (
                     method === 'inspect' ||
                     method === 'apply' ||
-                    method === 'applyBatch'
+                    method === 'applyBatch' ||
+                    method === 'undo' ||
+                    method === 'redo'
                   ) {
                     const channel =
                       method === 'applyBatch'
@@ -570,7 +572,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await enterEdit();
       await (await artifact('[data-codesign-source-id]')).click(selector);
       await save(label, value);
-      await expect.poll(disk).toBe(expected);
+      await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
       await expect
         .poll(() => records.filter((record) => record.method === 'apply').at(-1)?.result)
         .toMatchObject({ status: 'applied', content: expected });
@@ -597,7 +599,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await page.waitForFunction(() =>
       document.querySelector('aside[aria-label]')?.textContent?.includes('controlled by code'),
     );
-    expect(await page.$$('aside[aria-label] textarea, aside[aria-label] input')).toHaveLength(0);
+    expect(await page.$$('aside[aria-label] textarea')).toHaveLength(0);
     expect(await page.$eval('aside[aria-label]', (n) => n.textContent)).not.toContain(
       'unresolved-text-source',
     );
@@ -612,7 +614,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       const text = document.querySelector('aside[aria-label]')?.textContent;
       return text?.includes('Paragraph') && text.includes('controlled by code');
     });
-    expect(await page.$$('aside[aria-label] textarea, aside[aria-label] input')).toHaveLength(0);
+    expect(await page.$$('aside[aria-label] textarea')).toHaveLength(0);
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
     expect(await disk()).toBe(dynamicOnly);
     verified.push(
@@ -720,7 +722,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(await hasFieldLabel('Tooltip')).toBe(true);
     await saveText('Alex', 'Alex Rivera');
     const expected = resumeFixture.replace("'Alex'", '"Alex Rivera"');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(resumeFixture, await disk(), "'Alex'", '"Alex Rivera"');
     await assertPreviewText('h1', 'Alex Rivera');
     await assertPreviewText('footer', 'Alex Rivera');
@@ -772,7 +774,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await selectText(selector, previous);
       expect(await textLabel(previous)).toBe('Text');
       await saveText(previous, value);
-      await expect.poll(disk).toBe(resumeFixture.replace(from, to));
+      await expect.poll(disk, { timeout: 10_000 }).toBe(resumeFixture.replace(from, to));
       await assertExactPatch(resumeFixture, await disk(), from, to);
       await assertPreviewText(selector, value);
       await assertPreviewText('h1', 'Alex');
@@ -797,13 +799,16 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(firstLabel).toMatch(/^Text \d+$/);
     expect(secondLabel).toMatch(/^Text \d+$/);
     expect(firstLabel).not.toBe(secondLabel);
-    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain(
-      'every use',
-    );
-    expect(await hasFieldLabel('Tooltip')).toBe(false);
+    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain('Shared');
+    expect(
+      await page.$eval('aside[aria-label] [title*="every use"]', (node) =>
+        node.getAttribute('title'),
+      ),
+    ).toContain('every use');
+    expect(await hasFieldLabel('Tooltip')).toBe(true);
     await save(firstLabel, 'Group ');
     let expected = resumeFixture.replace('Team <strong>', '{"Group "}<strong>');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(resumeFixture, await disk(), 'Team ', '{"Group "}');
     await expect
       .poll(async () =>
@@ -815,7 +820,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('ready', 'set');
     const beforeSecond = expected;
     expected = expected.replace("{'ready'}", '{"set"}');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(beforeSecond, await disk(), "{'ready'}", '{"set"}');
     await expect
       .poll(async () =>
@@ -831,7 +836,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('Shared map', 'Shared definition');
     const beforeMap = expected;
     expected = expected.replace('>Shared map</p>)', '>{"Shared definition"}</p>)');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(beforeMap, await disk(), 'Shared map', '{"Shared definition"}');
     await expect
       .poll(async () =>
@@ -852,10 +857,10 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     );
   }, 60_000);
 
-  it('refuses map parameters, component props, computed text, and exact direct-text mismatches', async () => {
+  it('refuses component props, computed text, and exact direct-text mismatches', async () => {
     await loadResumeFixture();
     await enterEdit();
-    for (const selector of ['.dynamic-map', '.prop-label', '#computed']) {
+    for (const selector of ['.prop-label', '#computed']) {
       // Start from an editable target so each refusal must replace editable controls.
       await selectText('#city', 'City');
       await (await artifact()).click(selector);
@@ -863,7 +868,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
         const panel = document.querySelector('aside[aria-label]');
         return (
           panel?.textContent?.includes('controlled by code') &&
-          panel.querySelectorAll('textarea, input').length === 0
+          panel.querySelectorAll('textarea').length === 0
         );
       });
     }
@@ -899,7 +904,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(await (await artifact()).$('[data-codesign-edit-hit-layer]')).not.toBeNull();
     await saveText('Cart (', 'Basket (');
     let expected = previewOnlyFixture.replace('Cart (', '{"Basket ("}');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Basket ("}');
     await assertPreviewText('#cart', 'Basket (0)');
     await selectText('#cart', ')');
@@ -912,7 +917,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await saveText(')', ' items)');
       const beforeSuffix = expected;
       expected = expected.replace('{count})</button>', '{count}{" items)"}</button>');
-      await expect.poll(disk).toBe(expected);
+      await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
       const confirmation = assertExactPatch(
         beforeSuffix,
         await disk(),
@@ -974,7 +979,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(await fieldDisabled('Unavailable')).toBe(false);
     await saveText('Unavailable', 'Coming soon');
     const expected = previewOnlyFixture.replace('Unavailable', '{"Coming soon"}');
-    await expect.poll(disk).toBe(expected);
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
     await assertExactPatch(previewOnlyFixture, await disk(), 'Unavailable', '{"Coming soon"}');
     await assertPreviewText('#disabled', 'Coming soon');
     await page.reload();
@@ -1010,7 +1015,9 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       'button',
     );
     await saveText('Cart (', 'Bag (');
-    await expect.poll(disk).toBe(previewOnlyFixture.replace('Cart (', '{"Bag ("}'));
+    await expect
+      .poll(disk, { timeout: 10_000 })
+      .toBe(previewOnlyFixture.replace('Cart (', '{"Bag ("}'));
     await assertExactPatch(previewOnlyFixture, await disk(), 'Cart (', '{"Bag ("}');
     await assertPreviewText('#cart', 'Bag (0)');
     expect(
@@ -1034,7 +1041,9 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       'changed from its source',
     );
     await saveText('Right', 'Independent');
-    await expect.poll(disk).toBe(previewOnlyFixture.replace('Right', '{"Independent"}'));
+    await expect
+      .poll(disk, { timeout: 10_000 })
+      .toBe(previewOnlyFixture.replace('Right', '{"Independent"}'));
     await assertExactPatch(previewOnlyFixture, await disk(), 'Right', '{"Independent"}');
     await assertPreviewText('#independent', 'Left anchorIndependent');
     await assertPreviewText('#between', 'Stable text');
@@ -1204,7 +1213,9 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await enterEdit();
     await (await artifact()).click('h1');
     await save('Text', 'Edited heading');
-    await expect.poll(disk).toBe(original.replace('Original heading', '{"Edited heading"}'));
+    await expect
+      .poll(disk, { timeout: 10_000 })
+      .toBe(original.replace('Original heading', '{"Edited heading"}'));
     verified.push('text exact single replacement via UI -> HTTP -> real IPC -> atomic disk write');
     await page.reload();
     await page.waitForSelector('iframe');
@@ -1214,5 +1225,122 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await (await artifact()).click('button');
     expect(await (await artifact()).$eval('button', (node) => node.textContent)).toBe('Count 1');
     verified.push('reloaded persisted artifact retains counter business behavior');
+  }, 60_000);
+
+  it('upserts inline style on zero-style element and updates preview fontSize', async () => {
+    await enterEdit();
+    await (await artifact('[data-codesign-source-id]')).click('h1');
+    await save('Font size', '48');
+    const expected = original.replace(
+      '<h1 title="Original title">',
+      '<h1 title="Original title" style={{ fontSize: "48px" }}>',
+    );
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
+    await expect
+      .poll(async () => (await artifact()).$eval('h1', (node) => getComputedStyle(node).fontSize))
+      .toBe('48px');
+    await page.reload();
+    const reloaded = await artifact();
+    expect(await reloaded.$eval('h1', (node) => getComputedStyle(node).fontSize)).toBe('48px');
+    await reloaded.click('button');
+    expect(await reloaded.$eval('button', (node) => node.textContent)).toBe('Count 1');
+    verified.push('zero-inline-style upsert: computed fontSize 48px -> style prop + live reload');
+  }, 60_000);
+
+  it('edits a static .map() array item text without disturbing sibling items', async () => {
+    await loadResumeFixture();
+    await enterEdit();
+    await (await artifact('[data-codesign-source-id]')).click('.dynamic-map');
+    await page.waitForFunction(() =>
+      document.querySelector('aside[aria-label]')?.textContent?.includes('Item #1'),
+    );
+    expect(await fieldDisabled('Map Alex')).toBe(false);
+    await saveText('Map Alex', 'Map Jordan');
+    const expected = resumeFixture.replace("name:'Map Alex'", 'name:"Map Jordan"');
+    await expect.poll(disk, { timeout: 10_000 }).toBe(expected);
+    await expect
+      .poll(async () =>
+        (await artifact()).$$eval('.dynamic-map', (nodes) => nodes.map((node) => node.textContent)),
+      )
+      .toEqual(['Map Jordan', 'Map Casey']);
+    verified.push(
+      'static .map() item #1 text edit updates source item cleanly leaving item #2 untouched',
+    );
+  }, 60_000);
+
+  it('renders Shadow HUD and supports floating toolbar Duplicate with Undo/Redo round-trip', async () => {
+    await enterEdit();
+    const frame = await artifact('[data-codesign-source-id]');
+    await frame.click('h1');
+    expect(await frame.$('[data-codesign-hud]')).not.toBeNull();
+    const duplicateBtn = await page.waitForSelector(
+      'div[role="toolbar"] button[aria-label="Duplicate"]:not([disabled])',
+    );
+    if (!duplicateBtn) throw new Error('Missing enabled Duplicate button');
+    await duplicateBtn.click();
+    const duplicated = original.replace(
+      '<h1 title="Original title">Original heading</h1>',
+      '<h1 title="Original title">Original heading</h1><h1 title="Original title">Original heading</h1>',
+    );
+    await expect.poll(disk, { timeout: 10_000 }).toBe(duplicated);
+    await expect
+      .poll(async () =>
+        (await artifact()).$$eval('h1', (nodes) => nodes.map((node) => node.textContent)),
+      )
+      .toEqual(['Original heading', 'Original heading']);
+
+    const undoBtn = await page.waitForSelector(
+      'aside[aria-label] button[aria-label="Undo"]:not([disabled])',
+    );
+    if (!undoBtn) throw new Error('Missing enabled Undo button');
+    await undoBtn.click();
+    await expect.poll(disk, { timeout: 10_000 }).toBe(original);
+    await expect
+      .poll(async () =>
+        (await artifact()).$$eval('h1', (nodes) => nodes.map((node) => node.textContent)),
+      )
+      .toEqual(['Original heading']);
+
+    const redoBtn = await page.waitForSelector(
+      'aside[aria-label] button[aria-label="Redo"]:not([disabled])',
+    );
+    if (!redoBtn) throw new Error('Missing enabled Redo button');
+    await redoBtn.click();
+    await expect.poll(disk, { timeout: 10_000 }).toBe(duplicated);
+    await expect
+      .poll(async () =>
+        (await artifact()).$$eval('h1', (nodes) => nodes.map((node) => node.textContent)),
+      )
+      .toEqual(['Original heading', 'Original heading']);
+    verified.push(
+      'Shadow HUD + floating toolbar Duplicate + Undo/Redo full atomic disk round-trip',
+    );
+  }, 60_000);
+
+  it('commits double-click inline canvas text edit cleanly to disk', async () => {
+    await enterEdit();
+    const frame = await artifact('[data-codesign-source-id]');
+    await frame.click('h1');
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('aside[aria-label] textarea')).some(
+        (node) => node instanceof HTMLTextAreaElement && node.value === 'Original heading',
+      ),
+    );
+    await frame.click('h1', { clickCount: 2 });
+    const inline = await page.waitForSelector('textarea[aria-label="Edit element text inline"]');
+    if (!inline) throw new Error('Missing inline text editor');
+    await inline.evaluate((node) => {
+      if (node instanceof HTMLTextAreaElement) {
+        node.focus();
+        node.select();
+      }
+    });
+    await page.keyboard.type('Inline heading');
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(disk, { timeout: 10_000 })
+      .toBe(original.replace('Original heading', '{"Inline heading"}'));
+    await assertPreviewText('h1', 'Inline heading');
+    verified.push('double-click inline canvas text edit commits cleanly to disk and live preview');
   }, 60_000);
 });

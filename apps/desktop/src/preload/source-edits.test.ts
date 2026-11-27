@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   ipcRenderer: electron,
 }));
 import './index';
-it('exposes deterministic inspect/apply without invoking generation or file overwrite APIs', async () => {
+it('exposes deterministic inspect/apply/undo/redo without invoking generation or file overwrite APIs', async () => {
   const api = electron.exposeInMainWorld.mock.calls[0]?.[1];
   if (!api) throw new Error('Missing exposed preload API');
   const inspect = {
@@ -47,5 +47,18 @@ it('exposes deterministic inspect/apply without invoking generation or file over
   };
   await api.sourceEdits.applyBatch(batch);
   expect(electron.invoke).toHaveBeenLastCalledWith('codesign:source-edits:v1:apply-batch', batch);
-  expect(electron.invoke).toHaveBeenCalledTimes(3);
+  const history = {
+    schemaVersion: 1 as const,
+    designId: 'design',
+    path: 'App.jsx',
+    expectedSourceHash: 'a'.repeat(64),
+    previewRevision: 'preview-1',
+  };
+  expect(api.sourceEdits.undo).toBeDefined();
+  expect(api.sourceEdits.redo).toBeDefined();
+  await api.sourceEdits.undo?.(history);
+  expect(electron.invoke).toHaveBeenLastCalledWith('codesign:source-edits:v1:undo', history);
+  await api.sourceEdits.redo?.(history);
+  expect(electron.invoke).toHaveBeenLastCalledWith('codesign:source-edits:v1:redo', history);
+  expect(electron.invoke).toHaveBeenCalledTimes(5);
 });

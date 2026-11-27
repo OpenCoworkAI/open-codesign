@@ -5,6 +5,7 @@ import type {
   OnboardingState,
   ReasoningLevel,
   ResourceStateV1,
+  SourceEditAstHandoffContext,
   WireApi,
 } from '@open-codesign/shared';
 import {
@@ -25,6 +26,7 @@ import {
 import type { CodesignState } from '../../store.js';
 import { modelRef, newId, normalizeReferenceUrl, tr, uniqueFiles } from '../lib/locale.js';
 import { isReadyConfig } from '../lib/ready-config.js';
+import { commentAnchorAstKey } from './comments.js';
 import {
   buildGenerateDisplayMessage,
   buildGenerateErrorDescription,
@@ -319,6 +321,7 @@ export interface PendingEditEnrichment {
   text: string;
   scope?: CommentScope | undefined;
   parentOuterHTML?: string | null | undefined;
+  astContext?: SourceEditAstHandoffContext | undefined;
 }
 
 function escapeUntrustedXml(text: string): string {
@@ -338,6 +341,41 @@ function formatPendingEditTarget(
   ];
   if (typeof edit.parentOuterHTML === 'string' && edit.parentOuterHTML.length > 0) {
     lines.push(`Parent context:\n${truncate(edit.parentOuterHTML)}`);
+  }
+  const ast = edit.astContext;
+  if (ast) {
+    if (ast.startLine > 0) {
+      lines.push(
+        `Source location: lines ${ast.startLine}:${ast.startCol}-${ast.endLine}:${ast.endCol}`,
+      );
+    }
+    if (ast.enclosingComponent) {
+      lines.push(`Enclosing component: ${ast.enclosingComponent}`);
+    }
+    if (ast.mapContext) {
+      lines.push(`Map context: ${ast.mapContext}`);
+    }
+    if (ast.textProvenance && ast.textProvenance.length > 0) {
+      lines.push(`Text provenance: ${ast.textProvenance.join('; ')}`);
+    }
+    if (ast.unsupportedReasons && ast.unsupportedReasons.length > 0) {
+      lines.push(`Direct-edit constraints: ${ast.unsupportedReasons.join('; ')}`);
+    }
+    if (ast.computedStyles) {
+      const stylePairs = Object.entries(ast.computedStyles)
+        .filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0,
+        )
+        .map(([key, value]) => `${key}: ${value}`);
+      if (stylePairs.length > 0) {
+        lines.push(`Computed styles: ${stylePairs.join('; ')}`);
+      }
+    }
+    if (ast.sourceExcerpt.length > 0) {
+      const boundedExcerpt =
+        ast.sourceExcerpt.length > 500 ? `${ast.sourceExcerpt.slice(0, 499)}…` : ast.sourceExcerpt;
+      lines.push(`Source excerpt:\n${boundedExcerpt}`);
+    }
   }
   return [
     '<untrusted_scanned_content type="pending_edit_target">',
@@ -856,7 +894,13 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       );
       if (!request) return;
 
-      const allPendingEdits = [...pendingEdits, ...injectedPendingEdits];
+      const astContextByAnchorKey = get().astContextByAnchorKey;
+      const enrichedPendingEdits: PendingEditEnrichment[] = pendingEdits.map((comment) => {
+        const astContext =
+          astContextByAnchorKey[commentAnchorAstKey(comment.selector, comment.sourcePath)];
+        return astContext ? { ...comment, astContext } : comment;
+      });
+      const allPendingEdits = [...enrichedPendingEdits, ...injectedPendingEdits];
       const enrichedPrompt = buildEnrichedPrompt(request.prompt, allPendingEdits);
       const pendingEditIds = pendingEdits.map((c) => c.id);
       const submittedComments = Object.fromEntries(
@@ -994,12 +1038,37 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
                   return unchanged;
                 });
                 const appliedIds = new Set(updated.map((row) => row.id));
+                const nextComments = s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c);
+                let nextAst: typeof s.astContextByAnchorKey | undefined;
+                if (s.currentDesignId === designIdAtStart) {
+                  for (const row of updated) {
+                    const key = commentAnchorAstKey(row.selector, row.sourcePath);
+                    const source = nextAst ?? s.astContextByAnchorKey;
+                    if (!(key in source)) continue;
+                    const stillReferenced =
+                      nextComments.some(
+                        (c) =>
+                          commentAnchorAstKey(c.selector, c.sourcePath) === key &&
+                          c.status === 'pending',
+                      ) ||
+                      (s.commentBubble !== null &&
+                        commentAnchorAstKey(
+                          s.commentBubble.selector,
+                          s.commentBubble.sourcePath,
+                        ) === key);
+                    if (!stillReferenced) {
+                      nextAst ??= { ...s.astContextByAnchorKey };
+                      delete nextAst[key];
+                    }
+                  }
+                }
                 return {
                   ...(s.currentDesignId === designIdAtStart
                     ? {
-                        comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
+                        comments: nextComments,
                         currentSnapshotId: appliedIn,
                         queuedCommentIds: s.queuedCommentIds.filter((id) => !appliedIds.has(id)),
+                        ...(nextAst ? { astContextByAnchorKey: nextAst } : {}),
                       }
                     : {}),
                 };
@@ -1108,6 +1177,8 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         iframeErrors: [],
       });
 
+      const astContext =
+        get().astContextByAnchorKey[commentAnchorAstKey(selection.selector, selection.sourcePath)];
       await get().sendPrompt({
         prompt: userMessageText,
         ...(attachments.length > 0 ? { attachments } : {}),
@@ -1118,6 +1189,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
             tag: selection.tag,
             outerHTML: selection.outerHTML,
             ...(selection.sourcePath ? { sourcePath: selection.sourcePath } : {}),
+            ...(astContext ? { astContext } : {}),
             text: trimmed,
           },
         ],

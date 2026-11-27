@@ -56,6 +56,7 @@ function installTweaksBridge() {
     window: fakeWindow as typeof fakeWindow & {
       __codesign_tweaks__: {
         applyInitial: (source: string) => void;
+        resetForSwap: () => void;
         tokens: Record<string, string>;
         runModule: (run: () => void) => void;
       };
@@ -172,5 +173,30 @@ describe('tweaks bridge', () => {
     const notice = bridge.window.parent.postMessage.mock.calls[0]?.[0];
     expect(isTweakCompatibilityNotice(notice)).toBe(true);
     expect(isIframeErrorMessage(notice)).toBe(false);
+  });
+
+  it('resets replay state for hot swaps while keeping root and tokens intact', () => {
+    const bridge = installTweaksBridge();
+    const api = bridge.window.__codesign_tweaks__;
+    api.applyInitial('/*EDITMODE-BEGIN*/{"accent":"#111"}/*EDITMODE-END*/');
+    const root = bridge.window.ReactDOM.createRoot();
+    const firstComp = () => null;
+    api.runModule(() => {
+      bridge.window.React.useMemo(() => 1, []);
+      root.render({ type: firstComp, props: {} });
+    });
+
+    api.resetForSwap();
+    const secondComp = () => null;
+    const secondRun = vi.fn(() => root.render({ type: secondComp, props: {} }));
+    api.runModule(secondRun);
+
+    // Updating tokens after swap clones the swapped element without triggering compatibility replay.
+    bridge.listeners.get('message')?.({
+      data: { type: 'codesign:tweaks:update', tokens: { accent: '#222' } },
+    });
+    expect(secondRun).toHaveBeenCalledOnce();
+    expect(bridge.render.mock.calls.at(-1)?.[0]?.type).toBe(secondComp);
+    expect(bridge.window.parent.postMessage).not.toHaveBeenCalled();
   });
 });

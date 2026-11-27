@@ -2,6 +2,7 @@ import {
   type SourceEditApplyBatchRequestV1,
   type SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
+  type SourceEditHistoryRequestV1,
   type SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
 } from '@open-codesign/shared';
@@ -29,6 +30,20 @@ export async function persistWorkspaceSourceEditBatch(
   applyBatch: (request: SourceEditApplyBatchRequestV1) => Promise<SourceEditApplyResultV1>,
 ): Promise<SourceEditApplyResultV1> {
   return checkApplyAck(request, SourceEditApplyResultV1.parse(await applyBatch(request)));
+}
+
+export async function undoWorkspaceSourceEdit(
+  request: SourceEditHistoryRequestV1,
+  undo: (request: SourceEditHistoryRequestV1) => Promise<SourceEditApplyResultV1>,
+): Promise<SourceEditApplyResultV1> {
+  return checkApplyAck(request, SourceEditApplyResultV1.parse(await undo(request)));
+}
+
+export async function redoWorkspaceSourceEdit(
+  request: SourceEditHistoryRequestV1,
+  redo: (request: SourceEditHistoryRequestV1) => Promise<SourceEditApplyResultV1>,
+): Promise<SourceEditApplyResultV1> {
+  return checkApplyAck(request, SourceEditApplyResultV1.parse(await redo(request)));
 }
 
 function checkApplyAck(

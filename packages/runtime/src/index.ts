@@ -38,15 +38,37 @@ import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
 export type { IframeErrorMessage } from './iframe-errors';
 export { isIframeErrorMessage } from './iframe-errors';
-export type { ElementRectsMessage, OverlayMessage } from './overlay';
-export { isElementRectsMessage, isOverlayMessage, OVERLAY_SCRIPT } from './overlay';
+export type {
+  ElementRectsMessage,
+  OverlayMessage,
+  SourceEditElementSnapshot,
+  SourceEditHotSwappedMessage,
+  SourceEditInlineEditRequestMessage,
+} from './overlay';
+export {
+  buildOverlayScript,
+  isElementRectsMessage,
+  isOverlayMessage,
+  isSourceEditElementSnapshot,
+  isSourceEditHotSwappedMessage,
+  isSourceEditInlineEditRequestMessage,
+  OVERLAY_SCRIPT,
+  SOURCE_EDIT_HUD_ATTRIBUTE,
+  SOURCE_EDIT_PREVIEW_STYLE_ID,
+} from './overlay';
 export type { SourceEditFieldState } from './source-edit-binding';
 export type {
   SourceEditAncestor,
+  SourceEditOverlayContext,
   SourceEditPreviewOptions,
   SourceEditSelection,
 } from './source-edit-instrumentation';
-export { isSourceEditSelection } from './source-edit-instrumentation';
+export {
+  instrumentSourceForEditing,
+  isSourceEditSelection,
+  SOURCE_EDIT_ATTRIBUTE,
+  SOURCE_EDIT_ITEM_INDEX_ATTRIBUTE,
+} from './source-edit-instrumentation';
 export { isTweakCompatibilityNotice } from './tweaks-bridge';
 
 const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
@@ -358,6 +380,72 @@ function jsxRuntimeBaseScripts(): string {
   ].join('\n');
 }
 
+function hotSwapHelperScript(): string {
+  return `<script>
+(function() {
+  'use strict';
+  window.__codesign_hot_swap__ = function(instrumentedSrc, kind) {
+    if (typeof instrumentedSrc !== 'string') return false;
+    if (kind !== 'jsx' && kind !== 'tsx') return false;
+    if (!window.Babel || typeof window.Babel.transform !== 'function' || !window.React || !window.ReactDOM) return false;
+    var normalized = instrumentedSrc;
+    if (normalized.indexOf('ReactDOM.createRoot') === -1) {
+      var mountTarget = /(?:^|[^A-Za-z0-9_$])(?:function|const|let)\\s+App(?=$|[^A-Za-z0-9_$])/.test(normalized)
+        ? 'App'
+        : /(?:^|[^A-Za-z0-9_$])(?:function|const|let)\\s+_App(?=$|[^A-Za-z0-9_$])/.test(normalized)
+          ? '_App'
+          : null;
+      if (mountTarget) {
+        normalized = normalized.replace(/\\s+$/, '') + "\\n\\nReactDOM.createRoot(document.getElementById('root')).render(<" + mountTarget + ' />);';
+      }
+    }
+    var beginRe = /\\/\\*\\s*EDITMODE-BEGIN\\s*\\*\\//g;
+    var endRe = /\\/\\*\\s*EDITMODE-END\\s*\\*\\//g;
+    var chunks = [];
+    var cursor = 0;
+    while (cursor < normalized.length) {
+      beginRe.lastIndex = cursor;
+      var begin = beginRe.exec(normalized);
+      if (!begin) break;
+      endRe.lastIndex = beginRe.lastIndex;
+      var end = endRe.exec(normalized);
+      if (!end) break;
+      chunks.push(normalized.slice(cursor, begin.index), 'window.__codesign_tweaks__.tokens');
+      cursor = endRe.lastIndex;
+    }
+    var runtimeSrc = chunks.length ? (chunks.push(normalized.slice(cursor)), chunks.join('')) : normalized;
+    var babelOpts = kind === 'tsx'
+      ? { filename: 'artifact.tsx', presets: [['typescript', { allExtensions: true, isTSX: true }], 'react'] }
+      : { filename: 'artifact.jsx', presets: ['react'] };
+    var compiled = window.Babel.transform(runtimeSrc, babelOpts).code;
+    var execute = new Function('React', 'ReactDOM', compiled);
+    var runSwap = function() {
+      var tweaks = window.__codesign_tweaks__;
+      if (tweaks && typeof tweaks.runModule === 'function') {
+        if (typeof tweaks.resetForSwap === 'function') {
+          tweaks.resetForSwap();
+        }
+        if (/\\/\\*\\s*EDITMODE-BEGIN\\s*\\*\\//.test(instrumentedSrc) && typeof tweaks.applyInitial === 'function') {
+          tweaks.applyInitial(instrumentedSrc);
+        }
+        tweaks.runModule(function() {
+          execute(window.React, window.ReactDOM);
+        });
+      } else {
+        execute(window.React, window.ReactDOM);
+      }
+    };
+    if (typeof window.ReactDOM.flushSync === 'function') {
+      window.ReactDOM.flushSync(runSwap);
+    } else {
+      runSwap();
+    }
+    return true;
+  };
+})();
+</script>`;
+}
+
 function wrapJsxAsSrcdoc(
   jsx: string,
   opts: {
@@ -383,6 +471,7 @@ ${baseTag(opts.baseHref)}${runtimeFontLinks(jsx)}<style>*,*::before,*::after{box
 <script>${REACT_DOM_UMD}</script>
 <script>${BABEL_STANDALONE}</script>
 <script>${TWEAKS_BRIDGE_SETUP}</script>
+${hotSwapHelperScript()}
 ${jsxRuntimeComponentScripts()}
 ${applyInitialTweaksScript(normalized)}
 ${opts.sourceEdit ? `<script>${buildOverlayScript(opts.sourceEdit)}</script>` : ''}
@@ -419,8 +508,9 @@ ${compileAndRunScript(normalized, kind)}
 </html>`;
 }
 
-function overlayScriptTag(): string {
-  return `${OVERLAY_MARKER}<script>${OVERLAY_SCRIPT}</script>`;
+function overlayScriptTag(sourceEdit?: SourceEditOverlayContext): string {
+  const script = sourceEdit ? buildOverlayScript(sourceEdit) : OVERLAY_SCRIPT;
+  return `${OVERLAY_MARKER}<script>${script}</script>`;
 }
 
 // HTML payloads authored by the agent occasionally mix a `<!doctype html>`
@@ -536,11 +626,14 @@ function injectStandaloneJsxRuntimeIntoHtml(html: string): string {
   return `${stack}\n${cleaned}`;
 }
 
-function injectOverlayIntoHtmlDocument(html: string): string {
+function injectOverlayIntoHtmlDocument(
+  html: string,
+  sourceEdit?: SourceEditOverlayContext,
+): string {
   if (html.includes(OVERLAY_MARKER) || html.includes("type: 'ELEMENT_SELECTED'")) {
     return html;
   }
-  const script = overlayScriptTag();
+  const script = overlayScriptTag(sourceEdit);
   const withBody = insertBeforeHtmlEndTag(html, 'body', script);
   if (withBody !== html) return withBody;
   const withHtml = insertBeforeHtmlEndTag(html, 'html', script);
@@ -648,26 +741,57 @@ export function buildPreviewDocument(
 
 export const INTERACTIVE_PREVIEW_SANDBOX = 'allow-scripts allow-forms';
 
+export function prepareInteractivePreviewHotSwap(
+  source: string,
+  sourceEdit: SourceEditPreviewOptions,
+): {
+  instrumentedSource: string;
+  context: SourceEditOverlayContext;
+} {
+  if (looksLikeFullHtmlDocument(source) || source.includes(JSX_TEMPLATE_BEGIN)) {
+    throw new Error('Source edit preview supports only original JSX or TSX source.');
+  }
+  const instrumented = instrumentSourceForEditing(source, sourceEdit);
+  return {
+    instrumentedSource: instrumented.source,
+    context: instrumented.context,
+  };
+}
+
 export function buildInteractivePreviewDocument(
   userSource: string,
   opts: BuildInteractivePreviewDocumentOptions = {},
 ): string {
   let preview: string;
   if (opts.sourceEdit) {
-    const kind = extensionKind(opts.path);
-    if (
-      (kind !== 'jsx' && kind !== 'tsx') ||
-      looksLikeFullHtmlDocument(userSource) ||
-      userSource.includes(JSX_TEMPLATE_BEGIN)
-    ) {
+    if (userSource.includes(JSX_TEMPLATE_BEGIN)) {
       throw new Error('Source edit preview supports only original JSX or TSX source.');
     }
-    const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit);
-    preview = wrapJsxAsSrcdoc(instrumented.source, {
-      kind,
-      baseHref: opts.baseHref,
-      sourceEdit: instrumented.context,
-    });
+    const ext = extensionKind(opts.path);
+    const classified = classifyRenderableSource(userSource, opts.path);
+    if (ext === 'html' && classified === 'html') {
+      const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit, { html: true });
+      const stripped = removeCspMetaTags(instrumented.source);
+      const withRuntime = needsJsxRuntimeInHtml(stripped)
+        ? injectJsxRuntimeIntoHtml(stripped)
+        : stripped;
+      preview = injectOverlayIntoHtmlDocument(
+        injectPreviewViewportSupportIntoHtmlDocument(
+          injectBaseHrefIntoHtmlDocument(withRuntime, opts.baseHref),
+        ),
+        instrumented.context,
+      );
+    } else {
+      if ((ext !== 'jsx' && ext !== 'tsx') || looksLikeFullHtmlDocument(userSource)) {
+        throw new Error('Source edit preview supports only original JSX or TSX source.');
+      }
+      const instrumented = instrumentSourceForEditing(userSource, opts.sourceEdit);
+      preview = wrapJsxAsSrcdoc(instrumented.source, {
+        kind: ext,
+        baseHref: opts.baseHref,
+        sourceEdit: instrumented.context,
+      });
+    }
   } else {
     preview = buildPreviewDocument(userSource, opts);
   }

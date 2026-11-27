@@ -1,5 +1,10 @@
+import type { SourceEditAstHandoffContext } from '@open-codesign/shared';
 import type { CodesignState } from '../../store.js';
 import { tr } from '../lib/locale.js';
+
+export function commentAnchorAstKey(selector: string, sourcePath?: string): string {
+  return JSON.stringify([sourcePath ?? '', selector]);
+}
 
 type SetState = (
   updater: ((state: CodesignState) => Partial<CodesignState> | object) | Partial<CodesignState>,
@@ -21,14 +26,37 @@ interface CommentsSliceActions {
 }
 
 export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceActions {
+  let lastAstDesignId: string | null = null;
+
+  const mergeAstContext = (
+    current: Record<string, SourceEditAstHandoffContext>,
+    selector: string,
+    sourcePath: string | undefined,
+    astContext: SourceEditAstHandoffContext | undefined,
+  ): Record<string, SourceEditAstHandoffContext> | undefined => {
+    if (!astContext) return undefined;
+    return {
+      ...current,
+      [commentAnchorAstKey(selector, sourcePath)]: astContext,
+    };
+  };
+
   return {
     async loadCommentsForCurrentDesign() {
       if (!window.codesign) return;
       const designId = get().currentDesignId;
       if (!designId) {
-        set({ comments: [], commentsLoaded: true, currentSnapshotId: null });
+        lastAstDesignId = null;
+        set({
+          comments: [],
+          commentsLoaded: true,
+          currentSnapshotId: null,
+          astContextByAnchorKey: {},
+        });
         return;
       }
+      const switchedDesign = lastAstDesignId !== null && lastAstDesignId !== designId;
+      lastAstDesignId = designId;
       try {
         const [rows, snaps] = await Promise.all([
           window.codesign.comments.list(designId),
@@ -39,6 +67,7 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
           comments: rows,
           commentsLoaded: true,
           currentSnapshotId: snaps[0]?.id ?? null,
+          ...(switchedDesign ? { astContextByAnchorKey: {} } : {}),
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -51,7 +80,19 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       if (anchor.existingCommentId && anchor.sourcePath) {
         get().openCanvasFileTab(anchor.sourcePath);
       }
-      set({ commentBubble: anchor, interactionMode: 'comment' });
+      set((s) => {
+        const nextAst = mergeAstContext(
+          s.astContextByAnchorKey,
+          anchor.selector,
+          anchor.sourcePath,
+          anchor.astContext,
+        );
+        return {
+          commentBubble: anchor,
+          interactionMode: 'comment',
+          ...(nextAst ? { astContextByAnchorKey: nextAst } : {}),
+        };
+      });
     },
 
     closeCommentBubble() {
@@ -122,7 +163,18 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
           if (!row) {
             return null;
           }
-          set((s) => ({ comments: [...s.comments, row] }));
+          set((s) => {
+            const nextAst = mergeAstContext(
+              s.astContextByAnchorKey,
+              input.selector,
+              input.sourcePath,
+              input.astContext,
+            );
+            return {
+              comments: [...s.comments, row],
+              ...(nextAst ? { astContextByAnchorKey: nextAst } : {}),
+            };
+          });
         }
         return row;
       } catch (err) {
@@ -175,6 +227,15 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       // for the same snapshot + selector, then falls through to addComment
       // only when this is genuinely a new anchor. Both return the row on
       // success so the bubble can decide whether to close.
+      const astContext = input.astContext;
+      if (astContext) {
+        set((s) => ({
+          astContextByAnchorKey: {
+            ...s.astContextByAnchorKey,
+            [commentAnchorAstKey(input.selector, input.sourcePath)]: astContext,
+          },
+        }));
+      }
       if (input.existingCommentId) {
         return get().updateComment(input.existingCommentId, { text: input.text });
       }
@@ -210,6 +271,7 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       if (input.scope) payload.scope = input.scope;
       if (input.parentOuterHTML) payload.parentOuterHTML = input.parentOuterHTML;
       if (input.sourcePath) payload.sourcePath = input.sourcePath;
+      if (input.astContext) payload.astContext = input.astContext;
       return get().addComment(payload);
     },
 
@@ -219,13 +281,34 @@ export function makeCommentsSlice(set: SetState, get: GetState): CommentsSliceAc
       if (!designId) return;
       try {
         await window.codesign.comments.remove(designId, id);
-        set((s) => ({
-          comments: s.comments.filter((c) => c.id !== id),
-          queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id),
-          ...(s.commentBubble?.existingCommentId === id
-            ? { commentBubble: null, selectedElement: null }
-            : {}),
-        }));
+        set((s) => {
+          const removed = s.comments.find((c) => c.id === id);
+          const remaining = s.comments.filter((c) => c.id !== id);
+          const nextBubble = s.commentBubble?.existingCommentId === id ? null : s.commentBubble;
+          let nextAstMap: Record<string, SourceEditAstHandoffContext> | undefined;
+          if (removed) {
+            const key = commentAnchorAstKey(removed.selector, removed.sourcePath);
+            const stillReferenced =
+              remaining.some(
+                (c) =>
+                  commentAnchorAstKey(c.selector, c.sourcePath) === key && c.status === 'pending',
+              ) ||
+              (nextBubble !== null &&
+                commentAnchorAstKey(nextBubble.selector, nextBubble.sourcePath) === key);
+            if (!stillReferenced && key in s.astContextByAnchorKey) {
+              nextAstMap = { ...s.astContextByAnchorKey };
+              delete nextAstMap[key];
+            }
+          }
+          return {
+            comments: remaining,
+            queuedCommentIds: s.queuedCommentIds.filter((queuedId) => queuedId !== id),
+            ...(s.commentBubble?.existingCommentId === id
+              ? { commentBubble: null, selectedElement: null }
+              : {}),
+            ...(nextAstMap ? { astContextByAnchorKey: nextAstMap } : {}),
+          };
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
         get().pushToast({

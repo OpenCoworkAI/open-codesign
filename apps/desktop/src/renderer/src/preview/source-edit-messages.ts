@@ -44,6 +44,8 @@ export const sourceEditReasonKeys = {
   'unsafe-path': 'unsafePath',
   'invalid-input': 'invalidInput',
   'stage-changed': 'stageChanged',
+  'nothing-to-undo': 'nothingToUndo',
+  'nothing-to-redo': 'nothingToRedo',
 } as const;
 
 export function sourceEditReasonMessage(reason: string, t: Translate): string {

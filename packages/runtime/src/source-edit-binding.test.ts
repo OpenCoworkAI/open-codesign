@@ -170,4 +170,54 @@ describe('field-level source-definition DOM binding', () => {
     );
     expect(result.every((s) => s.status === 'unmapped')).toBe(true);
   });
+
+  it('preserves unitless CSS properties (opacity, fontWeight, lineHeight) and binds new operation kinds', () => {
+    const result = bindSourceEditFields(
+      host(
+        ['Body'],
+        { class: 'card p-4', href: '/home' },
+        {
+          opacity: '0.5',
+          'font-weight': '700',
+          'line-height': '1.5',
+          gap: '12px',
+          'border-width': '2px',
+        },
+      ),
+      {
+        textLayout: [text('Body')],
+        editableFields: [
+          { kind: 'set-style', property: 'opacity', value: '0.5' },
+          { kind: 'set-style', property: 'fontWeight', value: '700' },
+          { kind: 'set-style', property: 'lineHeight', value: '1.5' },
+          { kind: 'set-style', property: 'gap', value: '12' },
+          { kind: 'set-style', property: 'borderWidth', value: '2' },
+          { kind: 'set-class-name', value: 'card p-4' },
+          { kind: 'toggle-visibility', hidden: false },
+          { kind: 'remove-attribute', name: 'href' },
+          { kind: 'remove-style', property: 'opacity' },
+          { kind: 'set-map-item-text', itemIndex: 0, fieldKey: 'title', value: 'Body' },
+          { kind: 'reorder-sibling', direction: 'up', itemIndex: 0 },
+          { kind: 'duplicate-element', itemIndex: 0 },
+          { kind: 'delete-element', itemIndex: 0 },
+        ],
+      },
+      'rev',
+    );
+    expect(result).toEqual([
+      { key: 'style:opacity', status: 'ready' },
+      { key: 'style:fontWeight', status: 'ready' },
+      { key: 'style:lineHeight', status: 'ready' },
+      { key: 'style:gap', status: 'ready' },
+      { key: 'style:borderWidth', status: 'ready' },
+      { key: 'className', status: 'ready' },
+      { key: 'visibility', status: 'ready' },
+      { key: 'attribute:href', status: 'ready' },
+      { key: 'style:opacity', status: 'ready' },
+      { key: 'map-text:0:title', status: 'ready' },
+      { key: 'structure:reorder:0', status: 'ready' },
+      { key: 'structure:duplicate:0', status: 'ready' },
+      { key: 'structure:delete:0', status: 'ready' },
+    ]);
+  });
 });
