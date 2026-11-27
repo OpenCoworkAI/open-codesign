@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
+    id: 'straitly',
+    label: 'Straitly',
+    provider: 'openai',
+    baseUrl: 'https://api.straitly.ai/v1',
+    notes: 'Multi-model relay',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
