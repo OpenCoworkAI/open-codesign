@@ -1,6 +1,10 @@
 import type { SourceEditInspectResultV1 } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { inspectWorkspaceSourceEdit, persistWorkspaceSourceEdit } from './source-edit-persistence';
+import {
+  inspectWorkspaceSourceEdit,
+  persistWorkspaceSourceEdit,
+  persistWorkspaceSourceEditBatch,
+} from './source-edit-persistence';
 
 const inspectRequest = {
   schemaVersion: 1 as const,
@@ -72,5 +76,68 @@ describe('source edit IPC persistence boundary', () => {
       typeof persistWorkspaceSourceEdit
     >[1];
     await expect(persistWorkspaceSourceEdit(applyRequest, apply)).rejects.toThrow();
+  });
+  it('validates batch apply acknowledgements and preserves rejection results', async () => {
+    const batchRequest = {
+      schemaVersion: 1 as const,
+      designId: 'a',
+      path: 'App.jsx',
+      expectedSourceHash: 'a'.repeat(64),
+      previewRevision: 'revision',
+      targetId: '1:20',
+      scope: 'source-definition' as const,
+      operations: [
+        { kind: 'set-text' as const, value: 'New' },
+        { kind: 'set-attribute' as const, name: 'title' as const, value: 'Tip' },
+      ],
+    };
+    const applied = {
+      schemaVersion: 1 as const,
+      status: 'applied' as const,
+      path: 'App.jsx',
+      content: '<p title={"Tip"}>New</p>',
+      sourceHash: 'b'.repeat(64),
+      scope: 'source-definition' as const,
+      previewRevision: 'revision',
+      patch: { start: 0, end: 10, expectedText: 'Old', replacement: 'New' },
+    };
+    expect(
+      await persistWorkspaceSourceEditBatch(
+        batchRequest,
+        vi.fn(async () => applied),
+      ),
+    ).toEqual(applied);
+    const rejected = {
+      schemaVersion: 1 as const,
+      status: 'rejected' as const,
+      reason: 'stale-source',
+      message: 'Changed',
+    };
+    expect(
+      await persistWorkspaceSourceEditBatch(
+        batchRequest,
+        vi.fn(async () => rejected),
+      ),
+    ).toEqual(rejected);
+    await expect(
+      persistWorkspaceSourceEditBatch(
+        batchRequest,
+        vi.fn(async () => ({ ...applied, path: 'Other.jsx' })),
+      ),
+    ).rejects.toThrow('different source path');
+    await expect(
+      persistWorkspaceSourceEditBatch(
+        batchRequest,
+        vi.fn(async () => ({ ...applied, previewRevision: 'old' })),
+      ),
+    ).rejects.toThrow('preview revision');
+    await expect(
+      persistWorkspaceSourceEditBatch(
+        batchRequest,
+        vi.fn(async () => ({ status: 'ok' })) as unknown as Parameters<
+          typeof persistWorkspaceSourceEditBatch
+        >[1],
+      ),
+    ).rejects.toThrow();
   });
 });

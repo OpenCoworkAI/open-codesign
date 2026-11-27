@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { parse } from '@babel/parser';
 import {
+  SOURCE_EDIT_BATCH_MAX_OPERATIONS,
   SourceEditApplyResultV1,
   SourceEditInspectResultV1,
   type SourceEditOperation,
 } from '@open-codesign/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { analyzeSourceEdit, planSourceEdit } from './source-edit-engine';
+import { analyzeSourceEdit, planSourceEdit, planSourceEditBatch } from './source-edit-engine';
 
 vi.mock('@babel/parser', { spy: true });
 
@@ -593,5 +594,130 @@ describe('conservative rejection and independent revalidation', () => {
     });
     expect(result).toMatchObject({ status: 'rejected', reason: 'reparse-failed' });
     expect(result).not.toHaveProperty('content');
+  });
+});
+
+describe('batched single-target source edits', () => {
+  it('plans multiple fields on one target and computes an exact minimal patch', () => {
+    const source =
+      'function App(){return <main><h1 title="Old" style={{color:"#111111",gap:12}}>Heading</h1></main>}';
+    const inspected = inspect(source);
+    const target = inspected.targets.find((item) => item.tagName === 'h1');
+    if (!target) throw new Error('Missing h1 target');
+    const result = planSourceEditBatch({
+      path: 'App.jsx',
+      source,
+      expectedSourceHash: inspected.sourceHash,
+      targetId: target.id,
+      scope: 'source-definition',
+      operations: [
+        { kind: 'set-style', property: 'gap', value: '24' },
+        { kind: 'set-style', property: 'color', value: '#2255aa' },
+        { kind: 'set-attribute', name: 'title', value: 'New tip' },
+        { kind: 'set-text', value: 'Updated heading' },
+      ],
+    });
+    expect(SourceEditApplyResultV1.parse(result).status).toBe('applied');
+    if (result.status !== 'applied') throw new Error(result.message);
+    expect(result.content).toContain('gap:24');
+    expect(result.content).toContain('"#2255aa"');
+    expect(result.content).toContain('title={"New tip"}');
+    expect(result.content).toContain('>{"Updated heading"}<');
+    expect(
+      source.slice(0, result.patch.start) +
+        result.patch.replacement +
+        source.slice(result.patch.end),
+    ).toBe(result.content);
+  });
+
+  it('re-maps shifted text segments across earlier operations in the same batch', () => {
+    const source = 'function App(){return <p>Left <strong>mid</strong>Right</p>}';
+    const inspected = inspect(source);
+    const target = inspected.targets.find((item) => item.tagName === 'p');
+    const textOps = target?.editableFields.filter((op) => op.kind === 'set-text') ?? [];
+    expect(textOps).toHaveLength(2);
+    if (!target || !textOps[0] || !textOps[1]) throw new Error('Missing text ops');
+    const result = planSourceEditBatch({
+      path: 'App.jsx',
+      source,
+      expectedSourceHash: inspected.sourceHash,
+      targetId: target.id,
+      scope: 'source-definition',
+      operations: [
+        { ...textOps[0], value: 'Much longer left ' },
+        { ...textOps[1], value: 'End' },
+      ],
+    });
+    expect(result.status).toBe('applied');
+    if (result.status !== 'applied') throw new Error(result.message);
+    expect(result.content).toBe(
+      'function App(){return <p>{"Much longer left "}<strong>mid</strong>{"End"}</p>}',
+    );
+  });
+
+  it('rejects duplicate field keys, out-of-range counts, stale hashes, invalid scopes, and bad styles', () => {
+    const source = 'function App(){return <h1 title="Old" style={{gap:12}}>Heading</h1>}';
+    const inspected = inspect(source);
+    const target = inspected.targets.find((item) => item.tagName === 'h1');
+    if (!target) throw new Error('Missing h1 target');
+    const base = {
+      path: 'App.jsx',
+      source,
+      expectedSourceHash: inspected.sourceHash,
+      targetId: target.id,
+      scope: 'source-definition' as const,
+    };
+    expect(planSourceEditBatch({ ...base, operations: [] })).toMatchObject({
+      status: 'rejected',
+      reason: 'invalid-operation',
+    });
+    expect(
+      planSourceEditBatch({
+        ...base,
+        operations: Array.from({ length: SOURCE_EDIT_BATCH_MAX_OPERATIONS + 1 }, () => ({
+          kind: 'set-text' as const,
+          value: 'x',
+        })),
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-operation' });
+    expect(
+      planSourceEditBatch({
+        ...base,
+        operations: [
+          { kind: 'set-text', value: 'One' },
+          { kind: 'set-text', value: 'Two' },
+        ],
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-operation' });
+    expect(
+      planSourceEditBatch({
+        ...base,
+        scope: 'instance' as unknown as 'source-definition',
+        operations: [{ kind: 'set-text', value: 'One' }],
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-scope' });
+    expect(
+      planSourceEditBatch({
+        ...base,
+        expectedSourceHash: '0'.repeat(64),
+        operations: [{ kind: 'set-text', value: 'One' }],
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'stale-source' });
+    expect(
+      planSourceEditBatch({
+        ...base,
+        targetId: '999:1000',
+        operations: [{ kind: 'set-text', value: 'One' }],
+      }),
+    ).toMatchObject({ status: 'rejected', reason: 'invalid-target' });
+    const badStyle = planSourceEditBatch({
+      ...base,
+      operations: [
+        { kind: 'set-text', value: 'Valid text' },
+        { kind: 'set-style', property: 'gap', value: 'var(--evil)' },
+      ],
+    });
+    expect(badStyle).toMatchObject({ status: 'rejected', reason: 'invalid-style' });
+    expect(badStyle).not.toHaveProperty('content');
   });
 });

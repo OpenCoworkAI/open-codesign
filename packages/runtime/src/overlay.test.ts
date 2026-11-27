@@ -1205,3 +1205,204 @@ describe('unified preview edit selection and validation', () => {
       expect(isOverlayMessage(invalid)).toBe(false);
   });
 });
+
+describe('live source-edit preview and deferred selection restore', () => {
+  const sourceHash = 'c'.repeat(64);
+  const previewRevision = 'preview-live';
+
+  function createStyleStore(initial: Record<string, string> = {}) {
+    const map = new Map<string, { value: string; priority: string }>(
+      Object.entries(initial).map(([key, value]) => [key, { value, priority: '' }]),
+    );
+    return {
+      outline: '',
+      getPropertyValue: (name: string) => map.get(name)?.value ?? '',
+      getPropertyPriority: (name: string) => map.get(name)?.priority ?? '',
+      setProperty: (name: string, value: string, priority = '') => {
+        map.set(name, { value, priority });
+      },
+      removeProperty: (name: string) => {
+        const prev = map.get(name)?.value ?? '';
+        map.delete(name);
+        return prev;
+      },
+    };
+  }
+
+  function createStylableElement(h: ListenerHarness) {
+    const attrs = new Map<string, string>([
+      ['data-codesign-source-id', `${previewRevision}:10:50`],
+      ['title', 'Old title'],
+    ]);
+    const style = createStyleStore({ gap: '12px', color: '#111111' });
+    return {
+      nodeType: 1,
+      tagName: 'BUTTON',
+      id: 'cart',
+      parentElement: h.body,
+      style,
+      isConnected: true,
+      outerHTML: '<button id="cart" title="Old title">Save</button>',
+      childNodes: [{ nodeType: 3, textContent: 'Save' }],
+      ownerDocument: { createElement: () => ({ style: createStyleStore() }) },
+      getAttribute: (name: string) => attrs.get(name) ?? null,
+      setAttribute: (name: string, value: string) => {
+        attrs.set(name, String(value));
+      },
+      removeAttribute: (name: string) => {
+        attrs.delete(name);
+      },
+      getBoundingClientRect: () => ({ top: 1, left: 2, width: 80, height: 32 }),
+    };
+  }
+
+  function setup(attachImmediately = true) {
+    const h = runOverlayWithHarness(
+      buildOverlayScript({
+        sourceHash,
+        previewRevision,
+        targets: { '10:50': 'button' },
+        fieldPlans: {
+          '10:50': {
+            textLayout: [{ kind: 'text', value: 'Save' }],
+            editableFields: [
+              { kind: 'set-text', value: 'Save' },
+              { kind: 'set-style', property: 'gap', value: '12px' },
+              { kind: 'set-style', property: 'color', value: '#111111' },
+              { kind: 'set-attribute', name: 'title', value: 'Old title' },
+            ],
+          },
+        },
+      }),
+    );
+    const button = createStylableElement(h);
+    if (attachImmediately) {
+      h.selectorMatches.set('#cart', [button]);
+      h.setHitTarget(button);
+    }
+    function control(
+      type: string,
+      extra: Record<string, unknown> = {},
+      source: unknown = h.parent,
+    ) {
+      h.windowListeners.get('message')?.({
+        source,
+        data: { __codesign: true, type, sourceHash, previewRevision, ...extra },
+      });
+    }
+    function clickTarget() {
+      h.documentListeners.get('pointerdown')?.({
+        type: 'pointerdown',
+        clientX: 10,
+        clientY: 10,
+        preventDefault: () => {},
+        stopImmediatePropagation: () => {},
+        target: h.hitLayer,
+      });
+    }
+    control('SET_MODE', { mode: 'source-edit' });
+    return { h, button, control, clickTarget };
+  }
+
+  it('applies allowlisted preview styles/attributes without breaking validation or reattach, then reverts cleanly', () => {
+    const { h, button, control, clickTarget } = setup(true);
+    clickTarget();
+
+    // Wrong source, wrong mode or stale revision are ignored.
+    control('SOURCE_EDIT_PREVIEW', { styles: { gap: '40' }, attributes: {} }, {});
+    control('SOURCE_EDIT_PREVIEW', {
+      previewRevision: 'stale',
+      styles: { gap: '40' },
+      attributes: {},
+    });
+    expect(button.style.getPropertyValue('gap')).toBe('12px');
+
+    control('SOURCE_EDIT_PREVIEW', {
+      styles: { gap: '24', fontSize: '16px', color: '#ff0000', position: 'fixed' },
+      attributes: { title: 'Preview title', onclick: 'evil()' },
+    });
+    expect(button.style.getPropertyValue('gap')).toBe('24px');
+    expect(button.style.getPropertyValue('font-size')).toBe('16px');
+    expect(button.style.getPropertyValue('color')).toBe('#ff0000');
+    expect(button.style.getPropertyValue('position')).toBe('');
+    expect(button.getAttribute('title')).toBe('Preview title');
+    expect(button.getAttribute('onclick')).toBeNull();
+    expect(h.postedToParent.at(-1)).toMatchObject({ type: 'ELEMENT_RECTS' });
+
+    // Reattach tick and commit validation revert around provenance checks, so states stay ready.
+    const beforeTick = h.postedToParent.length;
+    h.runTick();
+    expect(h.postedToParent).toHaveLength(beforeTick);
+    expect(button.style.getPropertyValue('gap')).toBe('24px');
+
+    control('SOURCE_EDIT_VALIDATE', {
+      requestId: 'req-preview-1',
+      targetId: '10:50',
+      fieldKey: 'style:gap',
+    });
+    expect(h.postedToParent.at(-1)).toMatchObject({
+      type: 'SOURCE_EDIT_VALIDATED',
+      requestId: 'req-preview-1',
+      sourceEdit: {
+        fieldStates: [
+          { key: 'text:only', status: 'ready' },
+          { key: 'style:gap', status: 'ready' },
+          { key: 'style:color', status: 'ready' },
+          { key: 'attribute:title', status: 'ready' },
+        ],
+      },
+    });
+    expect(button.style.getPropertyValue('gap')).toBe('24px');
+
+    // Empty draft and CLEAR_PIN both restore the original authored style and attribute values.
+    control('SOURCE_EDIT_PREVIEW', { styles: {}, attributes: {} });
+    expect(button.style.getPropertyValue('gap')).toBe('12px');
+    expect(button.style.getPropertyValue('font-size')).toBe('');
+    expect(button.style.getPropertyValue('color')).toBe('#111111');
+    expect(button.getAttribute('title')).toBe('Old title');
+
+    control('SOURCE_EDIT_PREVIEW', { styles: { gap: '32' }, attributes: { title: 'Again' } });
+    expect(button.style.getPropertyValue('gap')).toBe('32px');
+    control('CLEAR_PIN');
+    expect(button.style.getPropertyValue('gap')).toBe('12px');
+    expect(button.getAttribute('title')).toBe('Old title');
+  });
+
+  it('restores selection immediately or waits across reattach ticks for async React mounts', () => {
+    // Immediate restore.
+    const immediate = setup(true);
+    immediate.control('SOURCE_EDIT_RESTORE', { selector: '#cart' });
+    expect(immediate.h.postedToParent.at(-1)).toMatchObject({
+      type: 'ELEMENT_SELECTED',
+      selector: '#cart',
+      sourceEdit: { targetId: '10:50' },
+    });
+
+    // Deferred restore until element appears on tick 2.
+    const deferredSetup = setup(false);
+    const countBefore = deferredSetup.h.postedToParent.length;
+    deferredSetup.control('SOURCE_EDIT_RESTORE', { selector: '#cart', previewRevision: 'stale' });
+    deferredSetup.control('SOURCE_EDIT_RESTORE', { selector: '#cart', sourceHash: '0'.repeat(64) });
+    deferredSetup.control('SOURCE_EDIT_RESTORE', { selector: '#cart' }, {});
+    deferredSetup.control('SOURCE_EDIT_RESTORE', { selector: '#cart' });
+    deferredSetup.h.runTick();
+    expect(deferredSetup.h.postedToParent).toHaveLength(countBefore);
+
+    deferredSetup.h.selectorMatches.set('#cart', [deferredSetup.button]);
+    deferredSetup.h.runTick();
+    expect(deferredSetup.h.postedToParent.at(-1)).toMatchObject({
+      type: 'ELEMENT_SELECTED',
+      selector: '#cart',
+      sourceEdit: { targetId: '10:50' },
+    });
+
+    // Stops polling after 15 unsuccessful ticks.
+    const expired = setup(false);
+    expired.control('SOURCE_EDIT_RESTORE', { selector: '#cart' });
+    for (let i = 0; i < 16; i += 1) expired.h.runTick();
+    expired.h.selectorMatches.set('#cart', [expired.button]);
+    const beforeLateMount = expired.h.postedToParent.length;
+    expired.h.runTick();
+    expect(expired.h.postedToParent).toHaveLength(beforeLateMount);
+  });
+});

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SOURCE_EDIT_BATCH_MAX_OPERATIONS,
+  SourceEditApplyBatchRequestV1,
   SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
@@ -175,6 +177,45 @@ describe('source edit wire contracts', () => {
     expect(SourceEditApplyResultV1.parse(ack)).toEqual(ack);
     expect(SourceEditApplyResultV1.safeParse({ ...ack, previewRevision: '' }).success).toBe(false);
     expect(SourceEditApplyResultV1.safeParse({ ...ack, warnings: [1] }).success).toBe(false);
+  });
+  it('validates batch apply contracts up to SOURCE_EDIT_BATCH_MAX_OPERATIONS', () => {
+    const batch = {
+      schemaVersion: 1 as const,
+      designId: 'design',
+      path: 'App.jsx',
+      expectedSourceHash: hash,
+      previewRevision: 'preview-1',
+      targetId: target.id,
+      operations: [
+        { kind: 'set-text' as const, value: 'New' },
+        { kind: 'set-style' as const, property: 'gap' as const, value: '16px' },
+      ],
+      scope: 'source-definition' as const,
+    };
+    expect(SourceEditApplyBatchRequestV1.parse(batch).operations).toHaveLength(2);
+    const maxOps = Array.from({ length: SOURCE_EDIT_BATCH_MAX_OPERATIONS }, (_, i) => ({
+      kind: 'set-text' as const,
+      value: `Item ${i}`,
+    }));
+    expect(
+      SourceEditApplyBatchRequestV1.parse({ ...batch, operations: maxOps }).operations,
+    ).toHaveLength(SOURCE_EDIT_BATCH_MAX_OPERATIONS);
+    expect(SourceEditApplyBatchRequestV1.safeParse({ ...batch, operations: [] }).success).toBe(
+      false,
+    );
+    expect(
+      SourceEditApplyBatchRequestV1.safeParse({
+        ...batch,
+        operations: [...maxOps, { kind: 'set-text' as const, value: 'Too many' }],
+      }).success,
+    ).toBe(false);
+    expect(SourceEditApplyBatchRequestV1.safeParse({ ...batch, scope: 'instance' }).success).toBe(
+      false,
+    );
+    expect(
+      SourceEditApplyBatchRequestV1.safeParse({ ...batch, expectedSourceHash: 'bad' }).success,
+    ).toBe(false);
+    expect(SourceEditApplyBatchRequestV1.safeParse({ ...batch, start: 0 }).success).toBe(false);
   });
   it('discriminates applied patches and failures', () => {
     const rejected = {

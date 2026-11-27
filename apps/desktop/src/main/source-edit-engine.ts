@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { parse } from '@babel/parser';
 import {
+  SOURCE_EDIT_BATCH_MAX_OPERATIONS,
   type SourceEditApplyResultV1,
   SourceEditAttributeName,
   type SourceEditInspectResultV1,
@@ -735,6 +736,125 @@ export function planSourceEdit(input: {
     content,
     sourceHash: hash(content),
     patch,
+    scope: 'source-definition',
+  };
+}
+
+function minimalPatch(before: string, after: string): SourceEditPatch {
+  let start = 0;
+  const limit = Math.min(before.length, after.length);
+  while (start < limit && before.charCodeAt(start) === after.charCodeAt(start)) start += 1;
+  let beforeEnd = before.length;
+  let afterEnd = after.length;
+  while (
+    beforeEnd > start &&
+    afterEnd > start &&
+    before.charCodeAt(beforeEnd - 1) === after.charCodeAt(afterEnd - 1)
+  ) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
+  }
+  return {
+    start,
+    end: beforeEnd,
+    expectedText: before.slice(start, beforeEnd),
+    replacement: after.slice(start, afterEnd),
+  };
+}
+
+/**
+ * Plans several fields of one selected definition as a single write. Literal
+ * replacements never change the parsed element order, so each step re-analyzes
+ * the intermediate source and re-locates the same host (and text segment) by
+ * position rather than trusting offsets that earlier steps have shifted.
+ */
+export function planSourceEditBatch(input: {
+  path: string;
+  source: string;
+  expectedSourceHash: string;
+  targetId: string;
+  operations: readonly SourceEditOperation[];
+  scope: SourceEditScope;
+  selectionMode?: SourceEditSelectionMode | undefined;
+}): SourceEditApplyResultV1 {
+  if (input.operations.length === 0 || input.operations.length > SOURCE_EDIT_BATCH_MAX_OPERATIONS)
+    return reject(
+      'invalid-operation',
+      `A batch must contain between 1 and ${SOURCE_EDIT_BATCH_MAX_OPERATIONS} field edits.`,
+    );
+  const keys = input.operations.map((operation) => {
+    const parsed = SourceEditOperation.safeParse(operation);
+    if (!parsed.success) return null;
+    const op = parsed.data;
+    if (op.kind === 'set-text') return `text:${op.textId ?? 'only'}`;
+    return op.kind === 'set-attribute' ? `attribute:${op.name}` : `style:${op.property}`;
+  });
+  if (keys.some((key) => key === null) || new Set(keys).size !== keys.length)
+    return reject('invalid-operation', 'Each field may appear at most once in a batch.');
+  if (input.scope !== 'source-definition')
+    return reject(
+      'invalid-scope',
+      'Only source-definition editing is supported, not an arbitrary selected instance.',
+    );
+  if (hash(input.source) !== input.expectedSourceHash)
+    return reject('stale-source', 'The source changed; inspect the current file before editing.');
+  const first = analyze(input.path, input.source, input.selectionMode);
+  if ('status' in first) return first;
+  const index = first.targets.findIndex(({ target }) => target.id === input.targetId);
+  const initial = first.targets[index];
+  if (!initial)
+    return reject(
+      'invalid-target',
+      'The target does not identify an original JSX host definition in the current source.',
+    );
+  const initialTextIds = initial.fields
+    .filter((field) => field.operation.kind === 'set-text')
+    .map((field) => (field.operation.kind === 'set-text' ? field.operation.textId : undefined));
+  const textOrdinals = input.operations.map((operation) =>
+    operation.kind === 'set-text' ? initialTextIds.indexOf(operation.textId) : -1,
+  );
+  if (
+    input.operations.some((operation, i) => operation.kind === 'set-text' && textOrdinals[i] === -1)
+  )
+    return reject('unsupported-field', 'This static field is not editable.');
+
+  let current = input.source;
+  for (let i = 0; i < input.operations.length; i += 1) {
+    const analysis = i === 0 ? first : analyze(input.path, current, input.selectionMode);
+    if ('status' in analysis) return analysis;
+    const located = analysis.targets[index];
+    if (!located || located.target.tagName !== initial.target.tagName)
+      return reject('stale-source', 'The selected definition moved while applying the batch.');
+    let operation = input.operations[i] as SourceEditOperation;
+    if (operation.kind === 'set-text') {
+      const textFields = located.fields.filter((field) => field.operation.kind === 'set-text');
+      const textField = textFields[textOrdinals[i] ?? -1]?.operation;
+      if (!textField || textField.kind !== 'set-text')
+        return reject('unsupported-field', 'This static field is not editable.');
+      operation =
+        textField.textId === undefined
+          ? { kind: 'set-text', value: operation.value }
+          : { kind: 'set-text', value: operation.value, textId: textField.textId };
+    }
+    const step = planSourceEdit({
+      path: input.path,
+      source: current,
+      expectedSourceHash: hash(current),
+      targetId: located.target.id,
+      operation,
+      scope: input.scope,
+      selectionMode: input.selectionMode,
+    });
+    if (step.status !== 'applied') return step;
+    current = step.content;
+  }
+  return {
+    schemaVersion: 1,
+    status: 'applied',
+    path: input.path,
+    content: current,
+    sourceHash: hash(current),
+    patch: minimalPatch(input.source, current),
     scope: 'source-definition',
   };
 }

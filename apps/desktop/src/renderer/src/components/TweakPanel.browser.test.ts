@@ -253,8 +253,11 @@ function App() {
     await frame.waitForSelector('#counter');
     await frame.click('#counter');
     await frame.type('#artifact-input', 'Retain through tweak');
-    await page.click('[aria-label="Open tweaks panel"]');
-    const heading = await replace('fieldset input[type="text"]', 'Convergence v2 verified');
+    await page.waitForSelector('aside fieldset');
+    const heading = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Convergence v2 verified',
+    );
     await expect.poll(async () => (await tokens())?.['heading']).toBe('Convergence v2 verified');
     await page.evaluate(() => window.tweakFixture.refreshWorkspace());
     await frame.waitForFunction(
@@ -371,8 +374,11 @@ function App() {
       const frame = await (await page.$('iframe'))?.contentFrame();
       if (!frame) throw new Error('Missing runtime iframe');
       await frame.waitForSelector('h1');
-      await page.click('[aria-label="Open tweaks panel"]');
-      await replace('fieldset input[type="text"]', 'Compatible updated heading');
+      await page.waitForSelector('aside fieldset');
+      await replace(
+        'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+        'Compatible updated heading',
+      );
       await expect
         .poll(async () => (await tokens())?.['heading'])
         .toBe('Compatible updated heading');
@@ -414,8 +420,11 @@ root.render(<App/>);`,
     await frame.waitForSelector('#switch');
     await frame.click('#switch');
     await frame.click('#counter');
-    await page.click('[aria-label="Open tweaks panel"]');
-    await replace('fieldset input[type="text"]', 'Manual root updated');
+    await page.waitForSelector('aside fieldset');
+    await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Manual root updated',
+    );
     await expect.poll(async () => (await tokens())?.['heading']).toBe('Manual root updated');
     await page.evaluate(() => window.tweakFixture.refreshWorkspace());
     await frame.waitForFunction(
@@ -427,13 +436,13 @@ root.render(<App/>);`,
   }, 30_000);
 
   it.each([
-    ['en', 'Open tweaks panel', 'Updating tweaks reinitializes artifact state.'],
-    ['zh-CN', '打开微调面板', '更新微调值会重置作品的交互状态。'],
-    ['es', 'Abrir panel de ajustes', 'Actualizar los ajustes reinicia su estado de interacción.'],
-    ['pt-BR', 'Abrir painel de ajustes', 'Atualizar os ajustes reinicia seu estado de interação.'],
+    ['en', 'Page', 'Updating tweaks reinitializes artifact state.'],
+    ['zh-CN', '页面', '更新微调值会重置作品的交互状态。'],
+    ['es', 'Página', 'Actualizar los ajustes reinicia su estado de interacción.'],
+    ['pt-BR', 'Página', 'Atualizar os ajustes reinicia seu estado de interação.'],
   ])(
     'localizes the nonfatal compatibility notice in %s',
-    async (locale, label, message) => {
+    async (locale, pageTabLabel, message) => {
       await writeFile(
         file('first', 'App.jsx'),
         `${source}
@@ -445,8 +454,19 @@ function App() { return <h1>{heading}</h1>; }`,
       const frame = await (await page.$('iframe'))?.contentFrame();
       if (!frame) throw new Error('Missing runtime iframe');
       await frame.waitForSelector('h1');
-      await page.click(`button[aria-label="${label}"]`);
-      await replace('fieldset input[type="text"]', 'Localized compatibility');
+      await page.waitForFunction(
+        (label) =>
+          Array.from(document.querySelectorAll('button[role="tab"]')).some(
+            (button) =>
+              button.textContent === label && button.getAttribute('aria-selected') === 'true',
+          ),
+        {},
+        pageTabLabel,
+      );
+      await replace(
+        'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+        'Localized compatibility',
+      );
       await expect.poll(async () => (await tokens())?.['heading']).toBe('Localized compatibility');
       await frame.waitForFunction(
         () => document.querySelector('h1')?.textContent === 'Localized compatibility',
@@ -462,7 +482,10 @@ function App() { return <h1>{heading}</h1>; }`,
   );
 
   it('retains the heading DOM node through full keyboard replacement and guarded disk save', async () => {
-    const input = await replace('fieldset input[type="text"]', 'Convergence v2 verified');
+    const input = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Convergence v2 verified',
+    );
     await expect.poll(async () => (await tokens())?.['heading']).toBe('Convergence v2 verified');
     expect(await input.evaluate((node) => document.activeElement === node)).toBe(true);
     expect(await input.evaluate((node) => getComputedStyle(node).fontSize)).toBe('12px');
@@ -477,7 +500,9 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('keeps focus and newer edits across the debounce and a slow save', async () => {
     saveDelay = 900;
-    const input = await page.$('fieldset input[type="text"]');
+    const input = await page.$(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+    );
     if (!input) throw new Error('Missing heading');
     await input.focus();
     await page.keyboard.press('End');
@@ -515,7 +540,10 @@ function App() { return <h1>{heading}</h1>; }`,
   });
 
   it('does not reclassify a text draft that becomes a valid color across its own ACK', async () => {
-    const input = await replace('fieldset input[type="text"]', 'red');
+    const input = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'red',
+    );
     await expect.poll(async () => (await tokens())?.['heading']).toBe('red');
     await page.waitForFunction(
       () => document.querySelector('fieldset')?.getAttribute('aria-busy') === 'false',
@@ -546,7 +574,10 @@ function App() { return <h1>{heading}</h1>; }`,
     await frame.$eval('input', (input) => {
       input.value = 'Independent artifact state';
     });
-    const input = await replace('fieldset input[type="text"]', 'red');
+    const input = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'red',
+    );
     await expect.poll(() => writes.length).toBe(1);
     const echo = writes[0]?.[2];
     if (!echo) throw new Error('Missing own write');
@@ -572,7 +603,10 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('retains the recoverable draft and conflict error without retrying queued edits', async () => {
     saveDelay = 900;
-    const input = await replace('fieldset input[type="text"]', 'Local draft');
+    const input = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Local draft',
+    );
     await expect.poll(() => started).toBe(1);
     await page.keyboard.type(' and newer text');
     const external = source.replace('Convergence v2', 'External edit');
@@ -626,7 +660,10 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('never publishes a late own ACK over a newer independent watcher update', async () => {
     ackDelay = 900;
-    await replace('fieldset input[type="text"]', 'Saved local heading');
+    await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Saved local heading',
+    );
     await expect.poll(() => writes.length).toBe(1);
     const external = source.replace('Convergence v2', 'rebeccapurple');
     await writeFile(file('first', 'App.jsx'), external);
@@ -646,7 +683,10 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('merges unrelated external token edits without replaying stale values from a queued draft', async () => {
     ackDelay = 900;
-    const input = await replace('fieldset input[type="text"]', 'Local first');
+    const input = await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Local first',
+    );
     await expect.poll(() => writes.length).toBe(1);
     const external = (writes[0]?.[2] ?? '').replace('"gap": 16', '"gap": 24');
     await writeFile(file('first', 'App.jsx'), external);
@@ -670,7 +710,10 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('stops a queued save when generation starts before its read completes', async () => {
     readDelay = 900;
-    await replace('fieldset input[type="text"]', 'Cancelled local heading');
+    await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Cancelled local heading',
+    );
     await page.waitForFunction(
       () => document.querySelector('fieldset')?.getAttribute('aria-busy') === 'true',
     );
@@ -688,7 +731,10 @@ function App() { return <h1>{heading}</h1>; }`,
     'design',
   ] as const)('resets controls on a %s switch and ignores an old ACK', async (kind) => {
     ackDelay = 900;
-    await replace('fieldset input[type="text"]', 'Original design draft');
+    await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Original design draft',
+    );
     await expect.poll(() => writes.length).toBe(1);
     const design = kind === 'design' ? 'second' : 'first';
     const path = kind === 'file' ? 'Other.jsx' : 'App.jsx';
@@ -710,7 +756,10 @@ function App() { return <h1>{heading}</h1>; }`,
 
   it('cancels a save still awaiting a read on file switch', async () => {
     readDelay = 900;
-    await replace('fieldset input[type="text"]', 'Never written');
+    await replace(
+      'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+      'Never written',
+    );
     await page.waitForFunction(
       () => document.querySelector('fieldset')?.getAttribute('aria-busy') === 'true',
     );
@@ -723,7 +772,10 @@ function App() { return <h1>{heading}</h1>; }`,
     expect(started).toBe(0);
     expect(await tokens()).toEqual(parseEditmodeBlock(source)?.tokens);
     expect(
-      await page.$eval('fieldset input[type="text"]', (node) => (node as HTMLInputElement).value),
+      await page.$eval(
+        'fieldset input[type="text"][spellcheck="false"]:not(label + input)',
+        (node) => (node as HTMLInputElement).value,
+      ),
     ).toBe('Convergence v2');
   });
 
@@ -739,7 +791,7 @@ const TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{"heading":{"kind":"string"},"accent"
       () =>
         document.querySelector<HTMLInputElement>('fieldset label + input')?.value === 'Brand text',
     );
-    await replace('fieldset input[type="text"]', 'green');
+    await replace('fieldset input[type="text"][spellcheck="false"]:not(label + input)', 'green');
     await expect.poll(async () => (await tokens())?.['heading']).toBe('green');
     await replace('input[inputmode="numeric"]', '24');
     await page.click('[role="switch"]');

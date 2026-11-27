@@ -250,6 +250,97 @@
       "status": "Status",
       "id": "ID da execução",
       "tokens": "Tokens"
+    },
+    "tabs": {
+      "page": "Página",
+      "element": "Elemento"
+    },
+    "collapse": "Recolher inspector",
+    "expand": "Expandir inspector",
+    "paletteLabel": "Paleta de cores",
+    "paletteMatch": "= {{name}}",
+    "paletteSource": {
+      "token": "Token de ajuste",
+      "design": "DESIGN.md",
+      "used": "Usado nesta página"
+    },
+    "groups": {
+      "content": "Conteúdo",
+      "color": "Cor",
+      "layout": "Tipografia e espaçamento",
+      "accessibility": "Acessibilidade"
+    },
+    "fields": {
+      "text": "Texto",
+      "textN": "Texto {{n}}",
+      "color": "Texto",
+      "backgroundColor": "Preenchimento",
+      "fontSize": "Tamanho da fonte",
+      "gap": "Espaço",
+      "padding": "Espaçamento interno",
+      "borderRadius": "Raio",
+      "maxWidth": "Largura máxima",
+      "title": "Dica",
+      "placeholder": "Texto reservado",
+      "alt": "Texto alternativo"
+    },
+    "box": {
+      "all": "Todos os lados",
+      "vertical": "Superior e inferior",
+      "horizontal": "Esquerda e direita",
+      "top": "Superior",
+      "right": "Direita",
+      "bottom": "Inferior",
+      "left": "Esquerda"
+    },
+    "element": {
+      "pickHint": "Clique em um elemento na pré-visualização para editá-lo.",
+      "parent": "Acima: {{name}}",
+      "selectParent": "Selecionar o elemento pai",
+      "ancestors": "Elementos superiores",
+      "shared": "Definição compartilhada — cada uso muda junto.",
+      "locked_one": "{{count}} propriedade é controlada pelo código",
+      "locked_other": "{{count}} propriedades são controladas pelo código",
+      "noDirectEdits": "Este elemento não tem propriedades editáveis diretamente.",
+      "askAi": "Pedir à IA para alterar",
+      "pending_one": "{{count}} alteração · exibida na pré-visualização",
+      "pending_other": "{{count}} alterações · exibidas na pré-visualização",
+      "noPending": "Edite um valor e aplique ao código-fonte.",
+      "applying": "Gravando no código-fonte…",
+      "discard": "Descartar",
+      "apply": "Aplicar"
+    },
+    "page": {
+      "colorTokens": "Tokens de cor",
+      "colorTokensHint": "Alterar um token atualiza todos os lugares que o leem.",
+      "otherControls": "Outros controles",
+      "designColors": "Paleta DESIGN.md",
+      "usedColors": "Cores nesta página",
+      "usedCount_one": "{{count}} uso",
+      "usedCount_other": "{{count}} usos"
+    },
+    "kinds": {
+      "heading": "Título",
+      "paragraph": "Parágrafo",
+      "text": "Texto",
+      "link": "Link",
+      "button": "Botão",
+      "image": "Imagem",
+      "input": "Campo",
+      "label": "Rótulo",
+      "list": "Lista",
+      "listItem": "Item de lista",
+      "header": "Cabeçalho",
+      "footer": "Rodapé",
+      "navigation": "Navegação",
+      "main": "Conteúdo principal",
+      "section": "Seção",
+      "form": "Formulário",
+      "graphic": "Gráfico",
+      "media": "Mídia",
+      "table": "Tabela",
+      "container": "Contêiner",
+      "element": "Elemento"
     }
   },
   "chat": {

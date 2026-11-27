@@ -125,7 +125,68 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   function flushTextMutations() {
     if (textObserver) processTextMutations(textObserver.takeRecords());
   }
+  // Live inspector drafts are temporary inline overrides on the pinned host.
+  // They are reverted before every provenance check, so validation always sees
+  // the bytes the source produced rather than the unsaved draft.
+  var PREVIEW_STYLE_KEYS = ['color', 'backgroundColor', 'fontSize', 'gap', 'padding', 'borderRadius', 'maxWidth'];
+  var PREVIEW_ATTRIBUTE_KEYS = ['title', 'placeholder', 'alt'];
+  var previewState = null;
+  var pendingRestoreSelector = null;
+  var pendingRestoreAttempts = 0;
+  function cssPropertyName(key) {
+    return key.replace(/[A-Z]/g, function(letter) { return '-' + letter.toLowerCase(); });
+  }
+  function revertPreview() {
+    if (!previewState) return;
+    var state = previewState;
+    previewState = null;
+    var el = state.el;
+    try {
+      for (var name in state.styles) {
+        if (!Object.prototype.hasOwnProperty.call(state.styles, name)) continue;
+        var original = state.styles[name];
+        if (original.value) el.style.setProperty(name, original.value, original.priority);
+        else el.style.removeProperty(name);
+      }
+      for (var attr in state.attrs) {
+        if (!Object.prototype.hasOwnProperty.call(state.attrs, attr)) continue;
+        if (state.attrs[attr] === null) el.removeAttribute(attr);
+        else el.setAttribute(attr, state.attrs[attr]);
+      }
+      if (el.getAttribute && el.getAttribute('style') === '') el.removeAttribute('style');
+    } catch (err) { warnOnce('revert source edit preview failed', err); }
+  }
+  function applyPreview(el, request) {
+    revertPreview();
+    if (!el || !el.style || typeof el.style.setProperty !== 'function') return;
+    var state = { el: el, request: request, styles: {}, attrs: {} };
+    try {
+      for (var i = 0; i < PREVIEW_STYLE_KEYS.length; i++) {
+        var key = PREVIEW_STYLE_KEYS[i];
+        var value = request.styles[key];
+        if (typeof value !== 'string' || value.length > 1000) continue;
+        var name = cssPropertyName(key);
+        state.styles[name] = { value: el.style.getPropertyValue(name), priority: el.style.getPropertyPriority(name) };
+        if (key !== 'color' && key !== 'backgroundColor' && /^(?:\\d+(?:\\.\\d+)?|\\.\\d+)$/.test(value)) value += 'px';
+        el.style.setProperty(name, value);
+      }
+      for (var j = 0; j < PREVIEW_ATTRIBUTE_KEYS.length; j++) {
+        var attrName = PREVIEW_ATTRIBUTE_KEYS[j];
+        var attrValue = request.attributes[attrName];
+        if (typeof attrValue !== 'string' || attrValue.length > 100000) continue;
+        state.attrs[attrName] = el.getAttribute(attrName);
+        el.setAttribute(attrName, attrValue);
+      }
+    } catch (err) { warnOnce('apply source edit preview failed', err); }
+    previewState = state;
+  }
   function sourceEditSelection(el) {
+    var held = previewState && previewState.el === el ? previewState.request : null;
+    if (held) revertPreview();
+    try { return sourceEditSelectionNow(el); }
+    finally { if (held) applyPreview(el, held); }
+  }
+  function sourceEditSelectionNow(el) {
     flushTextMutations();
     if (!sourceEditContext || !el || typeof el.getAttribute !== 'function') return null;
     var marker = el.getAttribute('${SOURCE_EDIT_ATTRIBUTE}');
@@ -288,6 +349,9 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   }
 
   function clearPinned() {
+    pendingRestoreSelector = null;
+    pendingRestoreAttempts = 0;
+    revertPreview();
     if (pinned) {
       try { restoreOutline(pinned); } catch (_) {}
     }
@@ -353,6 +417,9 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   }
   function emitSourceSelection(el) {
     if (!el || !el.getBoundingClientRect) return;
+    pendingRestoreSelector = null;
+    pendingRestoreAttempts = 0;
+    if (previewState && previewState.el !== el) revertPreview();
     var rect = el.getBoundingClientRect();
     var selector = getXPath(el);
     clearHover();
@@ -523,6 +590,29 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
       syncEditHitLayer();
       return;
     }
+    if (data.type === 'SOURCE_EDIT_PREVIEW' || data.type === 'SOURCE_EDIT_RESTORE') {
+      if (currentMode !== 'source-edit' || !sourceEditContext || data.sourceHash !== sourceEditContext.sourceHash || data.previewRevision !== sourceEditContext.previewRevision) return;
+      if (data.type === 'SOURCE_EDIT_RESTORE') {
+        if (typeof data.selector !== 'string' || data.selector.length > 4000) return;
+        var restored = resolveSelector(data.selector);
+        if (restored) {
+          pendingRestoreSelector = null;
+          pendingRestoreAttempts = 0;
+          emitSourceSelection(restored);
+        } else {
+          pendingRestoreSelector = data.selector;
+          pendingRestoreAttempts = 15;
+        }
+        return;
+      }
+      var styles = data.styles && typeof data.styles === 'object' ? data.styles : {};
+      var attributes = data.attributes && typeof data.attributes === 'object' ? data.attributes : {};
+      var hasDraft = Object.keys(styles).length > 0 || Object.keys(attributes).length > 0;
+      if (!pinned || !pinned.isConnected || !hasDraft) { revertPreview(); return; }
+      applyPreview(pinned, { styles: styles, attributes: attributes });
+      scheduleRectsBroadcast();
+      return;
+    }
     if (data.type === 'SOURCE_EDIT_SELECT' || data.type === 'SOURCE_EDIT_VALIDATE') {
       if (currentMode !== 'source-edit' || !sourceEditContext || data.sourceHash !== sourceEditContext.sourceHash || data.previewRevision !== sourceEditContext.previewRevision) return;
       if (data.type === 'SOURCE_EDIT_SELECT') {
@@ -663,6 +753,16 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   function reattach() {
     if (currentMode === 'source-edit') {
       syncEditHitLayer();
+      if (pendingRestoreSelector) {
+        var restoredNow = resolveSelector(pendingRestoreSelector);
+        if (restoredNow) {
+          pendingRestoreSelector = null;
+          pendingRestoreAttempts = 0;
+          emitSourceSelection(restoredNow);
+        } else if (--pendingRestoreAttempts <= 0) {
+          pendingRestoreSelector = null;
+        }
+      }
       if (pinned && pinned.isConnected) {
         var signature = JSON.stringify(sourceEditSelection(pinned));
         if (signature !== pinnedSourceEditSignature) emitSourceSelection(pinned);

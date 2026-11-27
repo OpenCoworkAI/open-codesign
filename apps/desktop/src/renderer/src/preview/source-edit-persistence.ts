@@ -1,4 +1,5 @@
 import {
+  type SourceEditApplyBatchRequestV1,
   type SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
   type SourceEditInspectRequestV1,
@@ -20,7 +21,20 @@ export async function persistWorkspaceSourceEdit(
   request: SourceEditApplyRequestV1,
   apply: (request: SourceEditApplyRequestV1) => Promise<SourceEditApplyResultV1>,
 ): Promise<SourceEditApplyResultV1> {
-  const result = SourceEditApplyResultV1.parse(await apply(request));
+  return checkApplyAck(request, SourceEditApplyResultV1.parse(await apply(request)));
+}
+
+export async function persistWorkspaceSourceEditBatch(
+  request: SourceEditApplyBatchRequestV1,
+  applyBatch: (request: SourceEditApplyBatchRequestV1) => Promise<SourceEditApplyResultV1>,
+): Promise<SourceEditApplyResultV1> {
+  return checkApplyAck(request, SourceEditApplyResultV1.parse(await applyBatch(request)));
+}
+
+function checkApplyAck(
+  request: { path: string; previewRevision: string },
+  result: SourceEditApplyResultV1,
+): SourceEditApplyResultV1 {
   if (result.status === 'applied' && result.path !== request.path) {
     throw new Error('Source edit save returned a different source path.');
   }

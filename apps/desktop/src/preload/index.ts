@@ -34,6 +34,7 @@ import type {
   SaveWebSearchSettingsResult,
   SelectedElement,
   SnapshotCreateInput,
+  SourceEditApplyBatchRequestV1,
   SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
   SourceEditInspectRequestV1,
@@ -759,6 +760,11 @@ const api = {
     apply: (input: SourceEditApplyRequestV1) =>
       ipcRenderer.invoke(
         'codesign:source-edits:v1:apply',
+        input,
+      ) as Promise<SourceEditApplyResultV1>,
+    applyBatch: (input: SourceEditApplyBatchRequestV1) =>
+      ipcRenderer.invoke(
+        'codesign:source-edits:v1:apply-batch',
         input,
       ) as Promise<SourceEditApplyResultV1>,
   },

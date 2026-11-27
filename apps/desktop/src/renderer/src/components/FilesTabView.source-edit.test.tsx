@@ -5,7 +5,10 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignFileEntry } from '../hooks/useDesignFiles';
-import { requestSourceEditValidation } from '../preview/helpers';
+import {
+  postSourceEditRestoreToPreviewWindow,
+  requestSourceEditValidation,
+} from '../preview/helpers';
 import type { WorkspacePreviewReadResult } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 import { createWorkspaceFilePreviewMessageHandlers, WorkspaceFilePreview } from './FilesTabView';
@@ -27,10 +30,14 @@ vi.mock('@open-codesign/runtime', async (original) => ({
       `<html><body>${source}${options.sourceEdit?.previewRevision ?? ''}</body></html>`,
   ),
 }));
-vi.mock('../preview/helpers', async (original) => ({
-  ...(await original<typeof import('../preview/helpers')>()),
-  requestSourceEditValidation: vi.fn(),
-}));
+vi.mock('../preview/helpers', async (original) => {
+  const actual = await original<typeof import('../preview/helpers')>();
+  return {
+    ...actual,
+    requestSourceEditValidation: vi.fn(),
+    postSourceEditRestoreToPreviewWindow: vi.fn(actual.postSourceEditRestoreToPreviewWindow),
+  };
+});
 const initial = useCodesignStore.getState();
 const hash = 'a'.repeat(64);
 const target: SourceEditTarget = {
@@ -98,9 +105,44 @@ async function emit(meta?: Parameters<typeof selection>[0]) {
 async function mount(path = 'App.jsx', files: DesignFileEntry[] = []) {
   await act(async () => root.render(<WorkspaceFilePreview path={path} files={files} />));
 }
+function tab(name: 'page' | 'element') {
+  return (
+    Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="tab"]')).find(
+      (button) => button.textContent === `inspector.tabs.${name}`,
+    ) ?? null
+  );
+}
+function elementTab() {
+  const button = tab('element');
+  if (!button) throw new Error('No element tab');
+  return button;
+}
+function elementModeOn() {
+  return tab('element')?.getAttribute('aria-selected') === 'true';
+}
+/** Switches the inspector rail between Page and Element (source edit) mode. */
 async function toggle() {
-  const button = container.querySelector<HTMLButtonElement>('button[aria-pressed]');
+  const button = elementModeOn() ? tab('page') : elementTab();
   if (!button) throw new Error('No toggle');
+  await act(async () => button.click());
+}
+function buttonByText(text: string) {
+  return (
+    Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === text,
+    ) ?? null
+  );
+}
+async function typeInto(field: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  await act(async () => {
+    setter?.call(field, value);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+async function clickApply() {
+  const button = buttonByText('inspector.element.apply');
+  if (!button) throw new Error('No apply button');
   await act(async () => button.click());
 }
 beforeEach(() => {
@@ -130,6 +172,7 @@ beforeEach(() => {
   openCommentBubble.mockReset();
   selectCanvasElement.mockReset();
   vi.mocked(buildInteractivePreviewDocument).mockClear();
+  vi.mocked(postSourceEditRestoreToPreviewWindow).mockClear();
   vi.mocked(requestSourceEditValidation)
     .mockReset()
     .mockImplementation(async (_win, request) => ({
@@ -313,7 +356,7 @@ describe('FilesTab source edit integration', () => {
     await changeFiles('a');
     expect(read).toHaveBeenCalledTimes(readsBeforeChange + 2);
     expect(container.querySelector('textarea')).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>('button[aria-pressed]')?.disabled).toBe(true);
+    expect(tab('element')?.disabled).toBe(true);
     await emit({
       targetId: target.id,
       sourceHash: hash,
@@ -404,7 +447,7 @@ describe('FilesTab source edit integration', () => {
       window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data })),
     );
     const crumb = container.querySelector<HTMLButtonElement>(
-      'nav[aria-label="canvas.sourceEdit.ancestors"] button',
+      'button[title="inspector.element.selectParent"]',
     );
     expect(crumb).not.toBeNull();
     expect(container.querySelector('textarea')).toBeNull();
@@ -432,12 +475,11 @@ describe('FilesTab source edit integration', () => {
       sourceHash: hash,
       previewRevision: revision.previewRevision,
     });
+    const field = container.querySelector('textarea');
+    if (!field) throw new Error('Missing text field');
+    await typeInto(field, 'New');
     vi.mocked(requestSourceEditValidation).mockResolvedValue(null);
-    await act(async () =>
-      container
-        .querySelector('form')
-        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-    );
+    await clickApply();
     expect(requestSourceEditValidation).toHaveBeenCalledOnce();
     expect(apply).not.toHaveBeenCalled();
     expect(container.textContent).toContain('canvas.sourceEdit.validationFailed');
@@ -473,27 +515,48 @@ describe('FilesTab source edit integration', () => {
       sourceHash: hash,
       previewRevision: revision.previewRevision,
     });
-    const form = container.querySelector('form');
-    const field = form?.querySelector('textarea');
-    if (!form || !field) throw new Error('Missing edit form');
-    field.value = 'New';
-    await act(async () =>
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-    );
+    const field = container.querySelector('textarea');
+    if (!field) throw new Error('Missing text field');
+    await typeInto(field, 'New');
+    expect(container.textContent).toContain('inspector.element.pending');
+    await clickApply();
     expect(apply).toHaveBeenCalledOnce();
+    expect(apply.mock.calls[0]?.[0]).toMatchObject({
+      operation: { kind: 'set-text', value: 'New' },
+    });
     expect(container.querySelector('iframe')?.srcdoc).toContain('New');
-    expect(lastRevision().previewRevision).not.toBe(revision.previewRevision);
+    const nextRevision = lastRevision();
+    expect(nextRevision.previewRevision).not.toBe(revision.previewRevision);
     expect(container.querySelector('textarea')).toBeNull();
+    expect(elementModeOn()).toBe(true);
     expect(
       useCodesignStore.getState().toasts.some((item) => item.title === 'canvas.sourceEdit.saved'),
     ).toBe(true);
+    // The refreshed preview asks the overlay to reselect the element that was just saved.
+    const frame = container.querySelector('iframe');
+    if (!frame?.contentWindow) throw new Error('no frame');
+    if (vi.mocked(postSourceEditRestoreToPreviewWindow).mock.calls.length === 0) {
+      await act(async () => frame.dispatchEvent(new Event('load')));
+    }
+    expect(postSourceEditRestoreToPreviewWindow).toHaveBeenCalledTimes(1);
+    expect(postSourceEditRestoreToPreviewWindow).toHaveBeenCalledWith(
+      frame.contentWindow,
+      'p',
+      expect.objectContaining({
+        sourceHash: nextRevision.sourceHash,
+        previewRevision: nextRevision.previewRevision,
+      }),
+    );
+    vi.mocked(postSourceEditRestoreToPreviewWindow).mockClear();
+    await act(async () => frame.dispatchEvent(new Event('load')));
+    expect(postSourceEditRestoreToPreviewWindow).not.toHaveBeenCalled();
   });
   it('exits edit mode on iframe Escape without changing the stored comment interaction mode', async () => {
     await mount();
     await toggle();
     const frame = container.querySelector('iframe');
     if (!frame) throw new Error('no frame');
-    expect(container.querySelector('aside')).not.toBeNull();
+    expect(elementModeOn()).toBe(true);
     await act(async () =>
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -502,18 +565,15 @@ describe('FilesTab source edit integration', () => {
         }),
       ),
     );
-    expect(container.querySelector('aside')).toBeNull();
-    expect(container.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed')).toBe(
-      'false',
-    );
+    expect(elementModeOn()).toBe(false);
+    expect(tab('page')?.getAttribute('aria-selected')).toBe('true');
     expect(useCodesignStore.getState().interactionMode).toBe('comment');
     expect(apply).not.toHaveBeenCalled();
     expect(openCommentBubble).not.toHaveBeenCalled();
   });
   it('exits on toolbar-focused Escape after preview selection while ignoring IME and unrelated focus', async () => {
     await mount();
-    const toolbar = container.querySelector<HTMLButtonElement>('button[aria-pressed]');
-    if (!toolbar) throw new Error('No edit toolbar');
+    const toolbar = elementTab();
     toolbar.focus();
     await act(async () => toolbar.click());
     const revision = lastRevision();
@@ -531,7 +591,7 @@ describe('FilesTab source edit integration', () => {
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
       ),
     );
-    expect(toolbar.getAttribute('aria-pressed')).toBe('true');
+    expect(toolbar.getAttribute('aria-selected')).toBe('true');
     unrelated.remove();
     await act(async () =>
       toolbar.dispatchEvent(
@@ -543,7 +603,7 @@ describe('FilesTab source edit integration', () => {
         }),
       ),
     );
-    expect(toolbar.getAttribute('aria-pressed')).toBe('true');
+    expect(toolbar.getAttribute('aria-selected')).toBe('true');
     const escapeEvent = new KeyboardEvent('keydown', {
       key: 'Escape',
       bubbles: true,
@@ -551,8 +611,10 @@ describe('FilesTab source edit integration', () => {
     });
     await act(async () => toolbar.dispatchEvent(escapeEvent));
     expect(escapeEvent.defaultPrevented).toBe(true);
-    expect(toolbar.getAttribute('aria-pressed')).toBe('false');
-    expect(container.querySelector('aside')).toBeNull();
+    expect(toolbar.getAttribute('aria-selected')).toBe('false');
+    expect(elementModeOn()).toBe(false);
+    expect(tab('page')?.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('textarea')).toBeNull();
     expect(useCodesignStore.getState().interactionMode).toBe('comment');
     expect(apply).not.toHaveBeenCalled();
     const ordinaryEscape = new KeyboardEvent('keydown', {
@@ -569,8 +631,9 @@ describe('FilesTab source edit integration', () => {
     await act(async () =>
       useCodesignStore.setState({ isGenerating: true, generatingDesignId: 'a' }),
     );
-    expect(container.querySelector<HTMLButtonElement>('button[aria-pressed]')?.disabled).toBe(true);
-    expect(container.querySelector('aside')).toBeNull();
+    expect(tab('element')?.disabled).toBe(true);
+    expect(elementModeOn()).toBe(false);
+    expect(container.querySelector('textarea')).toBeNull();
   });
   it('routes unsupported selections to source editing without comment side effects', () => {
     const onSourceEditSelected = vi.fn();
@@ -583,7 +646,12 @@ describe('FilesTab source edit integration', () => {
       pushIframeError: vi.fn(),
     });
     handlers.onElementSelected(selection());
-    expect(onSourceEditSelected).toHaveBeenCalledWith(undefined, []);
+    expect(onSourceEditSelected).toHaveBeenCalledWith(undefined, [], {
+      selector: 'p',
+      tag: 'p',
+      outerHTML: '<p>Old</p>',
+      rect: { top: 0, left: 0, width: 20, height: 20 },
+    });
     expect(openCommentBubble).not.toHaveBeenCalled();
     expect(selectCanvasElement).not.toHaveBeenCalled();
   });

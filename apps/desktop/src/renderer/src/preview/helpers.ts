@@ -127,6 +127,60 @@ export function postSourceEditAncestorToPreviewWindow(
   }
 }
 
+export interface SourceEditPreviewDraft {
+  styles: Partial<Record<string, string>>;
+  attributes: Partial<Record<string, string>>;
+}
+
+/** Shows unsaved inspector values on the pinned element; an empty draft reverts them. */
+export function postSourceEditPreviewToPreviewWindow(
+  win: Window | null | undefined,
+  draft: SourceEditPreviewDraft,
+  revision: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage(
+      {
+        __codesign: true,
+        type: 'SOURCE_EDIT_PREVIEW',
+        styles: draft.styles,
+        attributes: draft.attributes,
+        sourceHash: revision.sourceHash,
+        previewRevision: revision.previewRevision,
+      },
+      '*',
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Re-pins the element that was selected before a save reloaded the preview. */
+export function postSourceEditRestoreToPreviewWindow(
+  win: Window | null | undefined,
+  selector: string,
+  revision: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage(
+      {
+        __codesign: true,
+        type: 'SOURCE_EDIT_RESTORE',
+        selector,
+        sourceHash: revision.sourceHash,
+        previewRevision: revision.previewRevision,
+      },
+      '*',
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatIframeError(
   kind: string,
   message: string,

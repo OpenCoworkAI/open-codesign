@@ -152,15 +152,23 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
                       ReturnType<CodesignApi['files']['read']>
                     >;
                     result = method === 'read' ? file : [entry];
-                  } else if (method === 'inspect' || method === 'apply') {
-                    const handler = handlers.get(`codesign:source-edits:v1:${method}`);
+                  } else if (
+                    method === 'inspect' ||
+                    method === 'apply' ||
+                    method === 'applyBatch'
+                  ) {
+                    const channel =
+                      method === 'applyBatch'
+                        ? 'codesign:source-edits:v1:apply-batch'
+                        : `codesign:source-edits:v1:${method}`;
+                    const handler = handlers.get(channel);
                     if (!handler) throw new Error('Missing production handler');
                     const raw = await handler(null, args[0]);
                     result =
                       method === 'inspect'
                         ? SourceEditInspectResultV1.parse(raw)
                         : SourceEditApplyResultV1.parse(raw);
-                    if (method === 'apply') await beforeApplyRecord?.();
+                    if (method === 'apply' || method === 'applyBatch') await beforeApplyRecord?.();
                     records.push({ method, result });
                   } else throw new Error(`Unknown fixture bridge method: ${method}`);
                   res.setHeader('Content-Type', 'application/json');
@@ -242,10 +250,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       records: [...records],
       errors: [...errors],
       disk: await disk(),
-      applyRequests: records.filter((record) => record.method === 'apply').length,
+      applyRequests: records.filter(
+        (record) => record.method === 'apply' || record.method === 'applyBatch',
+      ).length,
       commits: records.filter(
         (record) =>
-          record.method === 'apply' &&
+          (record.method === 'apply' || record.method === 'applyBatch') &&
           SourceEditApplyResultV1.parse(record.result).status === 'applied',
       ).length,
     });
@@ -301,10 +311,15 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   }
   async function assertPanelLayout() {
     const issues = await page.evaluate(() => {
-      const panel = document.querySelector('aside[aria-busy]');
-      if (!panel) return ['Source edit panel missing'];
+      const panel = document.querySelector('aside[aria-label]');
+      if (!panel) return ['Inspector rail missing'];
       const issues: string[] = [];
-      for (const node of [panel, ...panel.querySelectorAll('textarea, button')]) {
+      for (const node of [
+        panel,
+        ...panel.querySelectorAll('textarea, input:not([type="color"]), button'),
+      ]) {
+        const closedDetails = node.closest('details:not([open])');
+        if (closedDetails && !node.closest('summary')) continue;
         const rect = node.getBoundingClientRect();
         const style = getComputedStyle(node);
         if (
@@ -314,26 +329,32 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
           style.display === 'none'
         )
           issues.push(`Invisible ${node.tagName}`);
-        // The panel may scroll to reveal later per-field controls; its shell must fit.
         if (
           node === panel &&
           (rect.left < 0 || rect.top < 0 || rect.right > innerWidth || rect.bottom > innerHeight)
         )
           issues.push(`Outside viewport: ${node.tagName}`);
       }
-      for (const input of panel.querySelectorAll('textarea')) {
-        if (!input.labels?.length || !input.labels[0]?.textContent?.trim())
-          issues.push('Unlabelled textarea');
-        if (input.disabled && !input.getAttribute('aria-describedby'))
-          issues.push('Disabled textarea without an explanation');
+      for (const input of panel.querySelectorAll<HTMLTextAreaElement | HTMLInputElement>(
+        'textarea, input[type="text"]',
+      )) {
+        if (
+          !(input.labels?.length && input.labels[0]?.textContent?.trim()) &&
+          !input.getAttribute('aria-label')
+        )
+          issues.push(`Unlabelled ${input.tagName}`);
+        if (
+          input.disabled &&
+          !input.getAttribute('aria-describedby') &&
+          !input.parentElement?.querySelector('p')?.textContent?.trim()
+        )
+          issues.push(`Disabled ${input.tagName} without an explanation`);
       }
       for (const button of panel.querySelectorAll('button')) {
-        if (!button.getAttribute('aria-label')) issues.push('Unlabelled button');
-        if (
-          button.disabled &&
-          !button.closest('form')?.querySelector('textarea[disabled][aria-describedby]')
-        )
-          issues.push('Disabled button without a refused-field explanation');
+        const closedDetails = button.closest('details:not([open])');
+        if (closedDetails && !button.closest('summary')) continue;
+        if (!button.getAttribute('aria-label') && !button.textContent?.trim())
+          issues.push('Unlabelled button');
       }
       return issues;
     });
@@ -343,24 +364,26 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await page.goto(`${endpoint}?locale=zh-CN`);
     await page.waitForSelector('iframe');
     await (await artifact()).waitForSelector('h1');
-    await page.click('button::-p-text(编辑源码)');
-    await page.waitForSelector('aside[aria-busy="false"]');
+    await page.click('button[role="tab"]::-p-text(元素)');
+    await page.waitForSelector('aside[aria-label]');
     await (await artifact('[data-codesign-source-id]')).click('button');
     await page.waitForFunction(() =>
-      document.querySelector('aside[aria-busy]')?.textContent?.includes('循环／组件参数'),
+      document.querySelector('aside[aria-label]')?.textContent?.includes('按钮'),
     );
-    const primary = await page.$eval('aside[aria-busy]', (node) => {
+    const primary = await page.$eval('aside[aria-label]', (node) => {
       const clone = node.cloneNode(true) as HTMLElement;
       clone.querySelectorAll('details').forEach((detail) => detail.remove());
       return clone.textContent ?? '';
     });
-    expect(primary).toContain('暂时无法确定要修改的源码位置');
-    expect(primary).toContain('没有可修改的静态属性');
-    expect(primary).toContain('此元素没有直接声明的内联样式');
-    expect(primary).toContain('文字来源');
+    expect(primary).toContain('按钮');
+    expect(primary).toContain('文案');
     expect(primary).not.toContain('This text');
     expect(primary).not.toContain('string literal');
     expect(primary).not.toContain('unresolved-text-source');
+    const fullText = await page.$eval('aside[aria-label]', (node) => node.textContent ?? '');
+    expect(fullText).toContain('项由代码控制');
+    expect(fullText).toContain('循环／组件参数');
+    expect(fullText).not.toContain('unresolved-text-source');
     expect(
       await page.$$eval('aside details', (nodes) =>
         nodes.every((node) => !node.hasAttribute('open')),
@@ -374,30 +397,54 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   }, 60_000);
 
   async function enterEdit() {
-    await page.click('button::-p-text(Edit source)');
-    await page.waitForFunction(() => document.body.innerText.includes('Local source edit'));
+    await page.click('button[role="tab"]::-p-text(Element)');
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('button[role="tab"]')).some(
+        (button) =>
+          button.textContent === 'Element' && button.getAttribute('aria-selected') === 'true',
+      ),
+    );
     await artifact('[data-codesign-source-id]');
-    await page.waitForSelector('aside[aria-busy="false"]');
+    await page.waitForSelector('aside[aria-label]');
     expect(await page.$('button[aria-label="Choose a static source field"]')).toBeNull();
     expect(await page.$('aside select')).toBeNull();
     await assertPanelLayout();
   }
+  async function waitForFieldLabel(label: string) {
+    await page.waitForFunction(
+      (expected) =>
+        Array.from(document.querySelectorAll('aside[aria-label] label[for]')).some(
+          (node) => node.textContent?.trim() === expected,
+        ),
+      {},
+      label,
+    );
+  }
+  async function hasFieldLabel(label: string) {
+    return page.$$eval(
+      'aside[aria-label] label[for]',
+      (labels, expected) => labels.some((node) => node.textContent?.trim() === expected),
+      label,
+    );
+  }
   async function save(label: string, value: string, clickDelay = 0) {
-    const selector = `[aria-label="Save source definition: ${label}"]`;
-    const button = await page.waitForSelector(selector);
-    if (!button) throw new Error('Missing save control');
+    await waitForFieldLabel(label);
     await assertPanelLayout();
     await page.screenshot({
       path: join(evidence, `edit-${label.replace(/[^a-z0-9]+/gi, '-')}.png`),
       fullPage: true,
     });
-    const input = await button.evaluateHandle((node) =>
-      node.closest('form')?.querySelector('textarea'),
-    );
-    const element = input.asElement();
-    if (!element) throw new Error('Missing edit textarea');
+    const field = await page.evaluateHandle((expected) => {
+      const match = Array.from(document.querySelectorAll('aside[aria-label] label[for]')).find(
+        (node) => node.textContent?.trim() === expected,
+      );
+      const id = match?.getAttribute('for');
+      return id ? document.getElementById(id) : null;
+    }, label);
+    const element = field.asElement();
+    if (!element) throw new Error(`Missing edit field for ${label}`);
     await element.evaluate((node) => {
-      if (node instanceof HTMLTextAreaElement) node.focus();
+      if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) node.focus();
     });
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
     await page.keyboard.down(modifier);
@@ -405,7 +452,11 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await page.keyboard.press('A', { commands: ['selectAll'] });
     await page.keyboard.up(modifier);
     await page.keyboard.type(value);
-    await page.click(selector, { delay: clickDelay });
+    const applyButton = await page.waitForSelector(
+      'aside[aria-label] footer button:not([disabled])::-p-text(Apply)',
+    );
+    if (!applyButton) throw new Error('Missing Apply button');
+    await applyButton.click({ delay: clickDelay });
   }
   async function loadPreviewOnlyFixture() {
     await writeFile(join(workspace, 'App.jsx'), previewOnlyFixture);
@@ -418,8 +469,19 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   async function fieldDisabled(value: string) {
     const label = await textLabel(value);
     return page.$eval(
-      `[aria-label="Save source definition: ${label}"]`,
-      (node) => node instanceof HTMLButtonElement && node.disabled,
+      'aside[aria-label]',
+      (panel, expectedLabel) => {
+        const match = Array.from(panel.querySelectorAll('label[for]')).find(
+          (node) => node.textContent?.trim() === expectedLabel,
+        );
+        const id = match?.getAttribute('for');
+        const control = id ? document.getElementById(id) : null;
+        return (
+          (control instanceof HTMLTextAreaElement || control instanceof HTMLInputElement) &&
+          control.disabled
+        );
+      },
+      label,
     );
   }
   async function loadResumeFixture() {
@@ -433,7 +495,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await (await artifact('[data-codesign-source-id]')).click(selector);
     await page.waitForFunction(
       (expected) =>
-        Array.from(document.querySelectorAll('aside[aria-busy] textarea')).some(
+        Array.from(document.querySelectorAll('aside[aria-label] textarea')).some(
           (node) => node instanceof HTMLTextAreaElement && node.value === expected,
         ),
       {},
@@ -442,12 +504,15 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   }
   async function textLabel(value: string) {
     const labels = await page.$$eval(
-      'aside[aria-busy] form',
-      (forms, expected) =>
-        forms.flatMap((form) => {
-          const input = form.querySelector('textarea');
-          const label = form.querySelector('label')?.textContent;
-          return input?.value === expected && label ? [label] : [];
+      'aside[aria-label] label[for]',
+      (nodes, expected) =>
+        nodes.flatMap((label) => {
+          const id = label.getAttribute('for');
+          const input = id ? document.getElementById(id) : null;
+          const text = label.textContent?.trim();
+          return input instanceof HTMLTextAreaElement && input.value === expected && text
+            ? [text]
+            : [];
         }),
       value,
     );
@@ -493,12 +558,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   }
   it.each([
     [
-      'title',
+      'Tooltip',
       'h1',
       'Updated title',
       original.replace('title="Original title"', 'title={"Updated title"}'),
     ],
-    ['gap', 'section', '24', original.replace('gap:12', 'gap:24')],
+    ['Gap', 'section', '24', original.replace('gap:12', 'gap:24')],
   ])(
     'persists existing %s with an exact single diff and working reloaded counter',
     async (label, selector, value, expected) => {
@@ -506,19 +571,17 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await (await artifact('[data-codesign-source-id]')).click(selector);
       await save(label, value);
       await expect.poll(disk).toBe(expected);
-      await page.waitForFunction(() =>
-        document.body.innerText.toLowerCase().includes('reset its state'),
-      );
+      await expect
+        .poll(() => records.filter((record) => record.method === 'apply').at(-1)?.result)
+        .toMatchObject({ status: 'applied', content: expected });
       await page.reload();
       const frame = await artifact();
-      if (label === 'title')
+      if (label === 'Tooltip')
         expect(await frame.$eval('h1', (node) => node.getAttribute('title'))).toBe(value);
       else expect(await frame.$eval('section', (node) => getComputedStyle(node).gap)).toBe('24px');
       await frame.click('button');
       expect(await frame.$eval('button', (node) => node.textContent)).toBe('Count 1');
-      verified.push(
-        `${label}: exact single disk replacement, visible reset-state warning, DOM reload and working counter`,
-      );
+      verified.push(`${label}: exact single disk replacement, DOM reload and working counter`);
     },
     60_000,
   );
@@ -532,9 +595,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const frame = await artifact('[data-codesign-source-id]');
     await frame.click('button');
     await page.waitForFunction(() =>
-      document.querySelector('aside[aria-busy]')?.textContent?.includes('unresolved-text-source'),
+      document.querySelector('aside[aria-label]')?.textContent?.includes('controlled by code'),
     );
-    expect(await page.$$('aside[aria-busy] form')).toHaveLength(0);
+    expect(await page.$$('aside[aria-label] textarea, aside[aria-label] input')).toHaveLength(0);
+    expect(await page.$eval('aside[aria-label]', (n) => n.textContent)).not.toContain(
+      'unresolved-text-source',
+    );
     const repeatedMarkers = await frame.$$eval('p', (nodes) =>
       nodes.map((node) => node.getAttribute('data-codesign-source-id')),
     );
@@ -543,10 +609,10 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(repeatedMarkers[0]).toBe(repeatedMarkers[1]);
     await frame.click('p');
     await page.waitForFunction(() => {
-      const text = document.querySelector('aside[aria-busy]')?.textContent;
-      return text?.includes('<p>') && text.includes('unresolved-text-source');
+      const text = document.querySelector('aside[aria-label]')?.textContent;
+      return text?.includes('Paragraph') && text.includes('controlled by code');
     });
-    expect(await page.$$('aside[aria-busy] form')).toHaveLength(0);
+    expect(await page.$$('aside[aria-label] textarea, aside[aria-label] input')).toHaveLength(0);
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
     expect(await disk()).toBe(dynamicOnly);
     verified.push(
@@ -557,13 +623,13 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
   it('rejects stale disk changes without overwriting external content', async () => {
     await enterEdit();
     await (await artifact('[data-codesign-source-id]')).click('h1');
-    await page.waitForSelector('[aria-label="Save source definition: Text 1"]');
+    await waitForFieldLabel('Text');
     const external = original.replace('Original heading', 'External edit wins');
     await writeFile(join(workspace, 'App.jsx'), external);
-    await save('Text 1', 'Must not overwrite');
+    await save('Text', 'Must not overwrite');
     await page.waitForFunction(() =>
       document
-        .querySelector('aside[aria-busy]')
+        .querySelector('aside[aria-label]')
         ?.textContent?.includes('The source changed; no edit was written.'),
     );
     expect(await disk()).toBe(external);
@@ -586,8 +652,13 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const inspected = records.find((record) => record.method === 'inspect');
     const result = SourceEditInspectResultV1.parse(inspected?.result);
     if (result.status !== 'ready') throw new Error('Expected ready inspection');
-    await page.click('button::-p-text(Edit source)');
-    await page.waitForFunction(() => !document.body.innerText.includes('Local source edit'));
+    await page.click('button[role="tab"]::-p-text(Page)');
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('button[role="tab"]')).some(
+        (button) =>
+          button.textContent === 'Page' && button.getAttribute('aria-selected') === 'true',
+      ),
+    );
     await enterEdit();
     const frame = await artifact('[data-codesign-source-id]');
     const marker = await frame.$eval('section', (node) =>
@@ -595,7 +666,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     );
     expect(marker).not.toBe(oldMarker);
     await frame.click('h1');
-    await page.waitForSelector('[aria-label="Save source definition: title"]');
+    await waitForFieldLabel('Tooltip');
     await page.evaluate((revision) => {
       Reflect.set(window, 'observedOldSourceRevision', false);
       window.addEventListener('message', (event: MessageEvent) => {
@@ -629,8 +700,8 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       },
     );
     await page.waitForFunction(() => Reflect.get(window, 'observedOldSourceRevision') === true);
-    expect(await page.$('[aria-label="Save source definition: title"]')).not.toBeNull();
-    expect(await page.$('[aria-label="Save source definition: gap"]')).toBeNull();
+    expect(await hasFieldLabel('Tooltip')).toBe(true);
+    expect(await hasFieldLabel('Gap')).toBe(false);
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
     expect(await disk()).toBe(original);
     verified.push(
@@ -641,12 +712,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await loadResumeFixture();
     await enterEdit();
     await selectText('h1', 'Alex');
-    expect(await textLabel('Alex')).toMatch(/^Text \d+$/);
-    const panel = await page.$eval('aside[aria-busy]', (node) => node.textContent);
-    expect(panel).toContain('resume.name');
-    expect(panel).toContain("'Alex'");
-    expect(panel).toContain('App.jsx:1');
-    expect(await page.$('[aria-label="Save source definition: title"]')).not.toBeNull();
+    expect(await textLabel('Alex')).toBe('Text');
+    const panel = await page.$eval('aside[aria-label]', (node) => node.textContent);
+    expect(panel).toContain('Shared definition');
+    expect(panel).not.toContain('resume.name');
+    expect(panel).not.toContain('App.jsx:1');
+    expect(await hasFieldLabel('Tooltip')).toBe(true);
     await saveText('Alex', 'Alex Rivera');
     const expected = resumeFixture.replace("'Alex'", '"Alex Rivera"');
     await expect.poll(disk).toBe(expected);
@@ -668,7 +739,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await saveText('Alex Rivera', 'Must not overwrite');
     await page.waitForFunction(() =>
       document
-        .querySelector('aside[aria-busy]')
+        .querySelector('aside[aria-label]')
         ?.textContent?.includes('The source changed; no edit was written.'),
     );
     expect(await disk()).toBe(external);
@@ -699,7 +770,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await loadResumeFixture();
       await enterEdit();
       await selectText(selector, previous);
-      expect(await textLabel(previous)).toMatch(/^Text \d+$/);
+      expect(await textLabel(previous)).toBe('Text');
       await saveText(previous, value);
       await expect.poll(disk).toBe(resumeFixture.replace(from, to));
       await assertExactPatch(resumeFixture, await disk(), from, to);
@@ -726,8 +797,10 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(firstLabel).toMatch(/^Text \d+$/);
     expect(secondLabel).toMatch(/^Text \d+$/);
     expect(firstLabel).not.toBe(secondLabel);
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain('every use');
-    expect(await page.$('[aria-label="Save source definition: title"]')).toBeNull();
+    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain(
+      'every use',
+    );
+    expect(await hasFieldLabel('Tooltip')).toBe(false);
     await save(firstLabel, 'Group ');
     let expected = resumeFixture.replace('Team <strong>', '{"Group "}<strong>');
     await expect.poll(disk).toBe(expected);
@@ -783,13 +856,16 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await loadResumeFixture();
     await enterEdit();
     for (const selector of ['.dynamic-map', '.prop-label', '#computed']) {
-      // Start from an editable target so each refusal must replace a real form.
+      // Start from an editable target so each refusal must replace editable controls.
       await selectText('#city', 'City');
       await (await artifact()).click(selector);
-      await page.waitForFunction(() =>
-        document.querySelector('aside[aria-busy]')?.textContent?.includes('unresolved-text-source'),
-      );
-      expect(await page.$$('aside[aria-busy] form')).toHaveLength(0);
+      await page.waitForFunction(() => {
+        const panel = document.querySelector('aside[aria-label]');
+        return (
+          panel?.textContent?.includes('controlled by code') &&
+          panel.querySelectorAll('textarea, input').length === 0
+        );
+      });
     }
     await selectText('#city', 'City');
     const frame = await artifact();
@@ -799,7 +875,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     });
     await frame.click('#city');
     await page.waitForFunction(() =>
-      document.querySelector('aside[aria-busy]')?.textContent?.includes('changed from its source'),
+      document.querySelector('aside[aria-label]')?.textContent?.includes('changed from its source'),
     );
     expect(await fieldDisabled('City')).toBe(true);
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
@@ -852,8 +928,13 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     }
     await assertPreviewText('#cart', 'Basket (0 items)');
     expect((await validationReplies()).length).toBeGreaterThanOrEqual(2);
-    await page.click('button::-p-text(Edit source)');
-    await page.waitForFunction(() => !document.querySelector('aside[aria-busy]'));
+    await page.click('button[role="tab"]::-p-text(Page)');
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('button[role="tab"]')).some(
+        (button) =>
+          button.textContent === 'Element' && button.getAttribute('aria-selected') === 'false',
+      ),
+    );
     const frame = await artifact('#cart');
     expect(await frame.$('[data-codesign-edit-hit-layer]')).toBeNull();
     await frame.click('#cart');
@@ -865,7 +946,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await enterEdit();
     await selectText('#cart', 'Basket (');
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('aside[aria-busy]'));
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('button[role="tab"]')).some(
+        (button) =>
+          button.textContent === 'Element' && button.getAttribute('aria-selected') === 'false',
+      ),
+    );
     const afterEscape = await artifact('#cart');
     expect(await afterEscape.$('[data-codesign-edit-hit-layer]')).toBeNull();
     await afterEscape.click('#cart');
@@ -906,20 +992,22 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await loadPreviewOnlyFixture();
     await enterEdit();
     await (await artifact()).click('#cart-icon');
-    await page.waitForSelector('button[aria-label="Select containing element: button"]');
-    expect(await page.$$('aside form')).toHaveLength(0);
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).not.toContain(
-      '· <button>',
+    await page.waitForSelector('summary[aria-label="Parent elements"]');
+    expect(await page.$$('aside textarea, aside input')).toHaveLength(0);
+    expect(await page.$eval('aside[aria-label] h3', (node) => node.textContent)).not.toContain(
+      'button',
     );
     await assertPreviewText('#cart', 'Cart (0)');
-    await page.click('button[aria-label="Select containing element: button"]');
+    await page.click('summary[aria-label="Parent elements"]');
+    await page.waitForSelector('nav[aria-label="Parent elements"] button::-p-text(Button)');
+    await page.click('nav[aria-label="Parent elements"] button::-p-text(Button)');
     await page.waitForFunction(() =>
       Array.from(document.querySelectorAll('aside textarea')).some(
         (node) => node instanceof HTMLTextAreaElement && node.value === 'Cart (',
       ),
     );
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain(
-      '· <button>',
+    expect(await page.$eval('aside[aria-label] h3', (node) => node.textContent)).toContain(
+      'button',
     );
     await saveText('Cart (', 'Bag (');
     await expect.poll(disk).toBe(previewOnlyFixture.replace('Cart (', '{"Bag ("}'));
@@ -929,7 +1017,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       await (await artifact()).$eval('#cart-icon rect', (node) => node.getAttribute('width')),
     ).toBe('16');
     verified.push(
-      'icon selection never silently promotes to parent; explicit visible breadcrumb reselects button through real runtime, icon markup unchanged and click handler never invoked',
+      'icon selection never silently promotes to parent; explicit visible ancestor menu reselects button through real runtime, icon markup unchanged and click handler never invoked',
     );
   }, 60_000);
 
@@ -942,7 +1030,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await selectText('#independent', 'Right');
     expect(await fieldDisabled('Left ')).toBe(true);
     expect(await fieldDisabled('Right')).toBe(false);
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain(
+    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain(
       'changed from its source',
     );
     await saveText('Right', 'Independent');
@@ -960,7 +1048,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     await enterEdit();
     await selectText('#ambiguous', 'same');
     expect(await fieldDisabled('same')).toBe(true);
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain(
+    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain(
       'more than one possible',
     );
     expect(await page.$('aside select')).toBeNull();
@@ -993,10 +1081,12 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
         {},
         expectedFields,
       );
-      const saves = await page.$$eval('aside form button', (buttons) =>
-        buttons.map((button) => button instanceof HTMLButtonElement && button.disabled),
-      );
-      expect(saves).toEqual(Array.from({ length: expectedFields }, () => true));
+      expect(
+        await page.$eval(
+          'aside footer button::-p-text(Apply)',
+          (button) => button instanceof HTMLButtonElement && button.disabled,
+        ),
+      ).toBe(true);
     }
     await assertPreviewText('#removed-duplicate', 'same');
     await assertPreviewText('#remaining-substring', 'prefix same');
@@ -1066,15 +1156,14 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     const iframe = await frame.frameElement();
     if (!iframe) throw new Error('Missing selected preview iframe');
     await iframe.evaluate((node) => {
-      const form = document
-        .querySelector('[aria-label="Save source definition: Text 1"]')
-        ?.closest('form');
-      if (!form) throw new Error('Missing source edit form');
-      // The submit capture and React handler share one event turn. A pointerdown
-      // hook lets the overlay disable Save before submit. Same-window FIFO still
-      // delivers the mutation before validation, without replacing either message.
-      form.addEventListener(
-        'submit',
+      const applyButton = Array.from(document.querySelectorAll('aside footer button')).find(
+        (button) => button.textContent?.trim() === 'Apply',
+      );
+      if (!applyButton) throw new Error('Missing Apply button');
+      // Capture click runs before React applies the draft, so the iframe receives
+      // the mutation before validation over the same-window FIFO channel.
+      applyButton.addEventListener(
+        'click',
         () => {
           (node as HTMLIFrameElement).contentWindow?.postMessage(
             { type: 'TEST_MUTATE_BEFORE_SAVE' },
@@ -1094,11 +1183,11 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
       }),
     );
     await page.waitForFunction(() =>
-      document
-        .querySelector('[aria-label="Save source definition: Text 1"]')
-        ?.hasAttribute('disabled'),
+      Array.from(document.querySelectorAll('aside textarea')).some(
+        (node) => node instanceof HTMLTextAreaElement && node.disabled,
+      ),
     );
-    expect(await page.$eval('aside[aria-busy]', (node) => node.textContent)).toContain(
+    expect(await page.$eval('aside[aria-label]', (node) => node.textContent)).toContain(
       'changed from its source',
     );
     expect(records.filter((record) => record.method === 'apply')).toHaveLength(0);
@@ -1114,7 +1203,7 @@ describe('full FilesTab source edit browser + real IPC handlers over HTTP', () =
     expect(await (await artifact()).$eval('button', (node) => node.textContent)).toBe('Count 1');
     await enterEdit();
     await (await artifact()).click('h1');
-    await save('Text 1', 'Edited heading');
+    await save('Text', 'Edited heading');
     await expect.poll(disk).toBe(original.replace('Original heading', '{"Edited heading"}'));
     verified.push('text exact single replacement via UI -> HTTP -> real IPC -> atomic disk write');
     await page.reload();

@@ -166,6 +166,24 @@ export const SourceEditApplyRequestV1 = z
   .strict();
 export type SourceEditApplyRequestV1 = z.infer<typeof SourceEditApplyRequestV1>;
 
+/** Upper bound for fields committed together; one inspector selection stays well below it. */
+export const SOURCE_EDIT_BATCH_MAX_OPERATIONS = 16;
+
+// Several fields of one selected definition, planned in order and committed as one write.
+export const SourceEditApplyBatchRequestV1 = z
+  .object({
+    schemaVersion: z.literal(1),
+    designId: z.string().min(1),
+    path: z.string().min(1),
+    expectedSourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    previewRevision: z.string().min(1),
+    targetId: z.string().regex(/^\d+:\d+$/),
+    operations: z.array(SourceEditOperation).min(1).max(SOURCE_EDIT_BATCH_MAX_OPERATIONS),
+    scope: SourceEditScope,
+  })
+  .strict();
+export type SourceEditApplyBatchRequestV1 = z.infer<typeof SourceEditApplyBatchRequestV1>;
+
 export const SourceEditPatch = z
   .object({
     start: z.number().int().nonnegative(),

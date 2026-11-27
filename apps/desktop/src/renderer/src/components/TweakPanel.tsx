@@ -12,6 +12,7 @@ import {
 } from '../preview/tweak-persistence';
 import type { WorkspacePreviewReadResult } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
+import { InspectorSection } from './inspector/controls';
 import {
   ColorSwatch,
   humanize,
@@ -367,14 +368,98 @@ function TweakPanelEditor({
         : t('tweaks.emptyHint');
   const countBadge = hasTokens ? String(entries.length) : '—';
 
+  if (presentation === 'inspector') {
+    const isColorEntry = ([key, value]: [string, EditmodeTokenValue]) =>
+      schema?.[key]?.kind === 'color' ||
+      (schema?.[key] === undefined &&
+        typeof value === 'string' &&
+        (inference.colors[key] ?? false));
+    const colorEntries = entries.filter(isColorEntry);
+    const otherEntries = entries.filter((entry) => !isColorEntry(entry));
+    const resetButton = (
+      <button
+        type="button"
+        onClick={reset}
+        disabled={!isDirty || saving || isGenerating}
+        title={resetText}
+        aria-label={resetText}
+        className="inline-flex items-center gap-[3px] rounded-[var(--radius-sm)] px-[var(--space-1_5)] py-[1px] text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:pointer-events-none disabled:opacity-30"
+      >
+        <RotateCcw className="h-[11px] w-[11px]" aria-hidden="true" />
+        {resetText}
+      </button>
+    );
+    const rows = (list: Array<[string, EditmodeTokenValue]>) =>
+      list.map(([key, value]) => (
+        <TokenRow
+          key={`${inference.revision}:${key}`}
+          tokenKey={key}
+          value={value}
+          onChange={(next) => applyChange(key, next)}
+          pickColorLabel={pickColorLabel}
+          schemaEntry={schema?.[key]}
+          inferredColor={inference.colors[key] ?? false}
+        />
+      ));
+    return (
+      <div aria-label={titleText} aria-busy={saving} className="flex min-w-0 flex-col">
+        {hasTokens ? (
+          <fieldset
+            disabled={isGenerating}
+            aria-busy={saving}
+            className="m-0 min-w-0 border-0 p-0 disabled:opacity-50"
+          >
+            {colorEntries.length > 0 ? (
+              <InspectorSection title={t('inspector.page.colorTokens')} action={resetButton}>
+                {rows(colorEntries)}
+                <p className="m-0 text-[11px] text-[var(--color-text-muted)]">
+                  {t('inspector.page.colorTokensHint')}
+                </p>
+              </InspectorSection>
+            ) : null}
+            {otherEntries.length > 0 ? (
+              <InspectorSection
+                title={t('inspector.page.otherControls')}
+                action={colorEntries.length > 0 ? undefined : resetButton}
+              >
+                {rows(otherEntries)}
+              </InspectorSection>
+            ) : null}
+          </fieldset>
+        ) : (
+          <InspectorSection title={titleText}>
+            <div role={tweakSource.status === 'invalid' ? 'alert' : 'status'}>
+              <div className="text-[12px] font-medium text-[var(--color-text-primary)]">
+                {emptyTitle}
+              </div>
+              <div className="mt-[var(--space-1)] text-[11px] leading-[var(--leading-snug)] text-[var(--color-text-muted)]">
+                {emptyHint}
+              </div>
+              {tweakSource.status === 'invalid' ? (
+                <p className="m-0 mt-[var(--space-1)] break-words text-[var(--text-xs)] text-[var(--color-error)]">
+                  {tweakSource.error}
+                </p>
+              ) : null}
+            </div>
+          </InspectorSection>
+        )}
+        <p
+          className="m-0 truncate px-[var(--space-4)] pb-[var(--space-2)] text-[10px] text-[var(--color-text-muted)]"
+          title={source?.path}
+        >
+          {t('tweaks.sourceLabel')}:{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>
+            {source?.path ?? t('tweaks.currentPreview')}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
   const panelBody = (
     <div
       aria-label={titleText}
-      className={
-        presentation === 'inspector'
-          ? 'flex min-h-0 flex-col overflow-hidden'
-          : 'flex w-[280px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] backdrop-blur'
-      }
+      className="flex w-[280px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] backdrop-blur"
     >
       <div className="flex items-center justify-between gap-[var(--space-2)] border-b border-[var(--color-border-subtle)] px-[var(--space-3)] py-[var(--space-2)]">
         <div className="flex min-w-0 flex-1 select-none items-center gap-[var(--space-2)]">
@@ -406,17 +491,15 @@ function TweakPanelEditor({
           >
             <RotateCcw className="h-[12px] w-[12px]" aria-hidden="true" />
           </button>
-          {presentation === 'floating' ? (
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              title={closeText}
-              aria-label={closeText}
-              className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] transition-colors duration-[var(--duration-faster)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
-            >
-              <X className="h-[14px] w-[14px]" aria-hidden="true" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            title={closeText}
+            aria-label={closeText}
+            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] transition-colors duration-[var(--duration-faster)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+          >
+            <X className="h-[14px] w-[14px]" aria-hidden="true" />
+          </button>
         </div>
       </div>
 
@@ -464,8 +547,6 @@ function TweakPanelEditor({
       )}
     </div>
   );
-
-  if (presentation === 'inspector') return panelBody;
 
   return (
     <div ref={panelRef} className="absolute right-[var(--space-4)] bottom-[var(--space-4)] z-20">

@@ -35,5 +35,17 @@ it('exposes deterministic inspect/apply without invoking generation or file over
   };
   await api.sourceEdits.apply(apply);
   expect(electron.invoke).toHaveBeenLastCalledWith('codesign:source-edits:v1:apply', apply);
-  expect(electron.invoke).toHaveBeenCalledTimes(2);
+  const batch = {
+    schemaVersion: 1 as const,
+    designId: 'design',
+    path: 'App.jsx',
+    expectedSourceHash: 'a'.repeat(64),
+    previewRevision: 'preview-1',
+    targetId: '0:10',
+    operations: [{ kind: 'set-text' as const, value: 'Next' }],
+    scope: 'source-definition' as const,
+  };
+  await api.sourceEdits.applyBatch(batch);
+  expect(electron.invoke).toHaveBeenLastCalledWith('codesign:source-edits:v1:apply-batch', batch);
+  expect(electron.invoke).toHaveBeenCalledTimes(3);
 });

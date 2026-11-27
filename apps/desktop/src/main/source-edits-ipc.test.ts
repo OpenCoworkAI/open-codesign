@@ -25,7 +25,7 @@ let db: ReturnType<typeof initInMemoryDb>;
 let designId: string;
 let busy: boolean;
 let unregister: () => void;
-function invoke(kind: 'inspect' | 'apply', raw: unknown, event: unknown = null) {
+function invoke(kind: 'inspect' | 'apply' | 'apply-batch', raw: unknown, event: unknown = null) {
   const handler = handlers.get(`codesign:source-edits:v1:${kind}`);
   if (!handler) throw new Error('No handler');
   return handler(event, raw);
@@ -332,5 +332,50 @@ describe('deterministic source edits IPC', () => {
       warnings: [expect.stringContaining('source was saved')],
     });
     expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toContain('Edited');
+  });
+  it('applies a multi-field batch atomically without creating snapshots and rejects stale/busy writes', async () => {
+    const base = await request();
+    const batch = {
+      schemaVersion: 1 as const,
+      designId,
+      path: 'App.jsx',
+      expectedSourceHash: base.expectedSourceHash,
+      previewRevision: 'preview-batch-1',
+      targetId: base.targetId,
+      scope: 'source-definition' as const,
+      operations: [
+        { kind: 'set-text' as const, value: 'Batch heading' },
+        { kind: 'set-attribute' as const, name: 'title' as const, value: 'Batch title' },
+      ],
+    };
+    const appliedResult = SourceEditApplyResultV1.parse(await invoke('apply-batch', batch));
+    expect(appliedResult.status).toBe('applied');
+    if (appliedResult.status !== 'applied') throw new Error(appliedResult.message);
+    expect(appliedResult.previewRevision).toBe('preview-batch-1');
+    expect(appliedResult.content).toContain('{"Batch heading"}');
+    expect(appliedResult.content).toContain('title={"Batch title"}');
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(appliedResult.content);
+    expect(listSnapshots(db, designId)).toEqual([]);
+    expect(await readdir(root)).toEqual(['App.jsx']);
+
+    // Reusing the old hash rejects as stale without altering disk.
+    expect(await invoke('apply-batch', batch)).toMatchObject({
+      status: 'rejected',
+      reason: 'stale-source',
+    });
+    expect(await invoke('apply-batch', { ...batch, operations: [] })).toMatchObject({
+      status: 'rejected',
+      reason: 'invalid-input',
+    });
+    busy = true;
+    expect(await invoke('apply-batch', batch)).toMatchObject({
+      status: 'rejected',
+      reason: 'busy',
+    });
+    busy = false;
+    expect(
+      await invoke('apply-batch', batch, { sender: { isDestroyed: () => true } }),
+    ).toMatchObject({ status: 'rejected', reason: 'cancelled' });
+    expect(await readFile(path.join(root, 'App.jsx'), 'utf8')).toBe(appliedResult.content);
   });
 });
