@@ -1,5 +1,52 @@
 # @open-codesign/desktop
 
+## 0.4.0
+
+### Minor Changes
+
+- Add deterministic element-level visual editing across JSX/TSX and HTML previews: style/attribute/class/structure and static `.map()` item edits, Shadow DOM selection & box-model HUD, canvas floating toolbar, double-click inline text editing, zero-flicker hot-swap refresh, per-file Undo/Redo history, `DESIGN.md` palette sync, and structured AST context for Ask AI.
+- 363e630: Add an optional per-provider `thinkingLevelMap` to the v3 config so custom OpenAI-compatible
+  endpoints can declare the exact reasoning-effort vocabulary they accept:
+
+  ```toml
+  [providers.ninfer.thinkingLevelMap]
+  off = "none"
+  low = "low"
+  medium = "medium"
+  xhigh = "xhigh"
+  ```
+
+  The map is a whitelist: listed levels are offered in Settings and forwarded verbatim as
+  `reasoning_effort`; unlisted levels are marked unsupported so pi-ai clamps them instead of
+  sending an effort the endpoint rejects. When a stored or in-flight level is not in the
+  whitelist, the app clamps it onto the closest supported level (deepest first, then
+  shallowest) before the request is built; `off` is never escalated, and a configured
+  `off` value such as `none` is sent to endpoints that need it. Presence also implies
+  `reasoning: true`, which the model-id heuristic cannot infer for local runtimes. Listing
+  `xhigh` also unlocks the "xhigh" entry, which pi-ai otherwise hides unless the model maps
+  it.
+
+### Patch Changes
+
+- cc4ae6f: Migrate the pi agent, model, and coding-agent packages together to the maintained 0.79.x releases (at least 0.79.0), which fix extension loading, credential-file, and HTML-export security issues. Align the application's HTTP runtime with pi's fixed Undici 8.12.4 release and require Node.js 22.19.0 or newer.
+- ceb2274: Make connection tests validate the real generate invoke contract (shared provider resolution, auth, baseUrl, and wire) instead of treating GET /models as a stand-in for runtime.
+
+  Use a bounded saved-model inference with no automatic retries. Return explicit unverified results for adapters that cannot honor the small token budget, and reject unsupported query parameters instead of ignoring them. Bind ChatGPT OAuth to its official secure endpoint before accessing credentials and redact diagnostic URLs.
+
+- b22102e: Use Homebrew's symbolic macOS minimum requirement in the release cask to avoid deprecated string comparison warnings.
+- e3235d4: Add an explicit saved-settings image generation test with provider credential parity, bounded requests and duplicate-request suppression. Report image generation success only after an image response, rather than a text-model listing.
+- 325d2b9: Unify deterministic source editing and page tweaks into a collapsible fixed right Inspector rail with live preview drafts, shared palette linkage, and atomic batch apply.
+- 3f2c5d3: Allow Linux users to persist a secure Electron password-store selection in the app config directory before startup. Explain how to select an already installed Secret Service or KWallet on desktops Electron does not recognize, while retaining fail-closed secret storage and command-line precedence.
+- 014d409: Add LLMTR as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- Focus macOS release installers and Homebrew Cask on Apple Silicon (`arm64`) only; Intel Mac users should remain on `v0.3.0`. Remove unused `winget` and `scoop` CI auto-submission jobs from the release workflow.
+- 900b023: Classify provider failures by recovery action and show localized next steps. Keep unsupported message roles distinct from unsupported gateways, preserve nested network error codes, and distinguish exhausted quota from rate limits.
+
+  Keep status and recovery identity through wrapped errors and durable generation events, including Electron's message-only rejections. Preserve scrubbed final diagnostic context without duplicate records; stop retrying exhausted account quota and give precise provider eligibility guidance.
+
+- 246616f: Reject OpenAI Responses streams that end before a valid terminal event instead of accepting partial output as a completed design. Preserve explicit incomplete/length, failed, cancelled and tool-only outcomes, including Codex event normalization. No request replay or non-streaming fallback is added.
+- 12c7eb5: Avoid reloading and rewriting complete chat session histories for every run event. Reuse bounded pi session caches with incremental projection indexes, refresh externally changed files, preserve interrupted records, and yield between recovery batches so large histories do not block launch and live updates.
+- 1779bb5: Reject new Windows drive-root storage locations and recover existing root settings with an explicit startup notice, preserving original settings and files. Resolve a bare XDG drive letter before appending the application folder.
+
 ## 0.3.0
 
 ### Minor Changes

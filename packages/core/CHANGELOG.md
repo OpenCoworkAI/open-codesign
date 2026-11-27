@@ -1,5 +1,47 @@
 # @open-codesign/core
 
+## 0.4.0
+
+### Minor Changes
+
+- 363e630: Add an optional per-provider `thinkingLevelMap` to the v3 config so custom OpenAI-compatible
+  endpoints can declare the exact reasoning-effort vocabulary they accept:
+
+  ```toml
+  [providers.ninfer.thinkingLevelMap]
+  off = "none"
+  low = "low"
+  medium = "medium"
+  xhigh = "xhigh"
+  ```
+
+  The map is a whitelist: listed levels are offered in Settings and forwarded verbatim as
+  `reasoning_effort`; unlisted levels are marked unsupported so pi-ai clamps them instead of
+  sending an effort the endpoint rejects. When a stored or in-flight level is not in the
+  whitelist, the app clamps it onto the closest supported level (deepest first, then
+  shallowest) before the request is built; `off` is never escalated, and a configured
+  `off` value such as `none` is sent to endpoints that need it. Presence also implies
+  `reasoning: true`, which the model-id heuristic cannot infer for local runtimes. Listing
+  `xhigh` also unlocks the "xhigh" entry, which pi-ai otherwise hides unless the model maps
+  it.
+
+### Patch Changes
+
+- cc4ae6f: Migrate the pi agent, model, and coding-agent packages together to the maintained 0.79.x releases (at least 0.79.0), which fix extension loading, credential-file, and HTML-export security issues. Align the application's HTTP runtime with pi's fixed Undici 8.12.4 release and require Node.js 22.19.0 or newer.
+- 014d409: Add LLMTR as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- 246616f: Reject OpenAI Responses streams that end before a valid terminal event instead of accepting partial output as a completed design. Preserve explicit incomplete/length, failed, cancelled and tool-only outcomes, including Codex event normalization. No request replay or non-streaming fallback is added.
+- Updated dependencies [cc4ae6f]
+- Updated dependencies [ceb2274]
+- Updated dependencies
+- Updated dependencies [325d2b9]
+- Updated dependencies [014d409]
+- Updated dependencies [c5a2063]
+- Updated dependencies [900b023]
+- Updated dependencies [246616f]
+- Updated dependencies [363e630]
+  - @open-codesign/providers@0.4.0
+  - @open-codesign/shared@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

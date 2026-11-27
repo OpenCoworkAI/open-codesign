@@ -1,5 +1,44 @@
 # @open-codesign/shared
 
+## 0.4.0
+
+### Minor Changes
+
+- Add deterministic element-level visual editing across JSX/TSX and HTML previews: style/attribute/class/structure and static `.map()` item edits, Shadow DOM selection & box-model HUD, canvas floating toolbar, double-click inline text editing, zero-flicker hot-swap refresh, per-file Undo/Redo history, `DESIGN.md` palette sync, and structured AST context for Ask AI.
+- 363e630: Add an optional per-provider `thinkingLevelMap` to the v3 config so custom OpenAI-compatible
+  endpoints can declare the exact reasoning-effort vocabulary they accept:
+
+  ```toml
+  [providers.ninfer.thinkingLevelMap]
+  off = "none"
+  low = "low"
+  medium = "medium"
+  xhigh = "xhigh"
+  ```
+
+  The map is a whitelist: listed levels are offered in Settings and forwarded verbatim as
+  `reasoning_effort`; unlisted levels are marked unsupported so pi-ai clamps them instead of
+  sending an effort the endpoint rejects. When a stored or in-flight level is not in the
+  whitelist, the app clamps it onto the closest supported level (deepest first, then
+  shallowest) before the request is built; `off` is never escalated, and a configured
+  `off` value such as `none` is sent to endpoints that need it. Presence also implies
+  `reasoning: true`, which the model-id heuristic cannot infer for local runtimes. Listing
+  `xhigh` also unlocks the "xhigh" entry, which pi-ai otherwise hides unless the model maps
+  it.
+
+### Patch Changes
+
+- ceb2274: Make connection tests validate the real generate invoke contract (shared provider resolution, auth, baseUrl, and wire) instead of treating GET /models as a stand-in for runtime.
+
+  Use a bounded saved-model inference with no automatic retries. Return explicit unverified results for adapters that cannot honor the small token budget, and reject unsupported query parameters instead of ignoring them. Bind ChatGPT OAuth to its official secure endpoint before accessing credentials and redact diagnostic URLs.
+
+- 325d2b9: Unify deterministic source editing and page tweaks into a collapsible fixed right Inspector rail with live preview drafts, shared palette linkage, and atomic batch apply.
+- 014d409: Add LLMTR as a built-in OpenAI-compatible provider for onboarding, validation, model discovery, and provider selection.
+- c5a2063: Add Opper as an OpenAI-compatible proxy preset in provider settings.
+- 900b023: Classify provider failures by recovery action and show localized next steps. Keep unsupported message roles distinct from unsupported gateways, preserve nested network error codes, and distinguish exhausted quota from rate limits.
+
+  Keep status and recovery identity through wrapped errors and durable generation events, including Electron's message-only rejections. Preserve scrubbed final diagnostic context without duplicate records; stop retrying exhausted account quota and give precise provider eligibility guidance.
+
 ## 0.3.0
 
 ### Minor Changes
