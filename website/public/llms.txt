@@ -31,7 +31,7 @@ The project emphasizes local-first storage, model choice, exportable files, and 
 - Package manager status for v0.2.0: Homebrew Cask and Scoop are live; winget PR is submitted and waiting for Microsoft review
 - Stack: Electron, React, Vite, TypeScript, Tailwind CSS, Zustand, VitePress, pnpm workspaces, Turborepo
 - Model routes: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, OpenRouter, SiliconFlow, local Ollama, OpenAI-compatible endpoints, keyless IP-allowlisted proxies, ChatGPT Plus / Codex subscription login
-- Platforms: macOS Apple Silicon, macOS Intel, Windows x64, Windows ARM64, Linux AppImage, Linux deb, Linux rpm
+- Platforms: macOS Apple Silicon (arm64), Windows x64, Windows ARM64, Linux AppImage, Linux deb, Linux rpm
 
 ## Distribution Notes
 

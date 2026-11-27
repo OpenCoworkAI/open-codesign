@@ -22,7 +22,6 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
-      - '.github/workflows/release-macos-x64-native-check.yml'
   pull_request:
     branches: [main, dev/v0.2]
     paths:
@@ -32,7 +31,6 @@ on:
       - 'apps/desktop/scripts/**'
       - '.github/workflows/packaging-smoke.yml'
       - '.github/workflows/release.yml'
-      - '.github/workflows/release-macos-x64-native-check.yml'
 
 permissions:
   contents: read

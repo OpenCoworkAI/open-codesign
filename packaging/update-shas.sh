@@ -55,7 +55,6 @@ WIN_EXE_NAME="${PRODUCT_NAME}.exe"
 
 # Actual artifact filenames (from electron-builder.yml `artifactName` fields).
 MAC_ARM64_DMG="open-codesign-${VERSION}-arm64.dmg"
-MAC_X64_DMG="open-codesign-${VERSION}-x64.dmg"
 WIN_X64_EXE="open-codesign-${VERSION}-x64-setup.exe"
 WIN_ARM64_EXE="open-codesign-${VERSION}-arm64-setup.exe"
 WIN_X64_ZIP="open-codesign-${VERSION}-x64.zip"
@@ -87,7 +86,7 @@ else
     : > "$sums_file"
     required_artifacts=("$WIN_X64_EXE" "$WIN_ARM64_EXE")
     if [[ "$PACKAGING_CHANNEL" == "all" ]]; then
-      required_artifacts=("$MAC_ARM64_DMG" "$MAC_X64_DMG" "${required_artifacts[@]}" "$LINUX_APPIMAGE")
+      required_artifacts=("$MAC_ARM64_DMG" "${required_artifacts[@]}" "$LINUX_APPIMAGE")
     fi
     for f in "${required_artifacts[@]}"; do
       out="$tmpdir/$f"
@@ -131,7 +130,6 @@ lookup_optional_sha() {
 }
 
 mac_arm_sha=""
-mac_x64_sha=""
 win_x64_sha="$(lookup_sha "$WIN_X64_EXE")"
 win_arm_sha="$(lookup_sha "$WIN_ARM64_EXE")"
 win_x64_zip_sha="$(lookup_optional_sha "$WIN_X64_ZIP")"
@@ -140,7 +138,6 @@ linux_sha=""
 
 if [[ "$PACKAGING_CHANNEL" == "all" ]]; then
   mac_arm_sha="$(lookup_sha "$MAC_ARM64_DMG")"
-  mac_x64_sha="$(lookup_sha "$MAC_X64_DMG")"
   linux_sha="$(lookup_sha "$LINUX_APPIMAGE")"
 fi
 
@@ -156,7 +153,6 @@ fi
 
 if [[ "$PACKAGING_CHANNEL" == "all" ]]; then
   echo "  mac arm64      : $mac_arm_sha"
-  echo "  mac x64        : $mac_x64_sha"
 fi
 echo "  win x64        : $win_x64_sha"
 echo "  win arm64      : $win_arm_sha"
@@ -179,10 +175,8 @@ cask="packaging/homebrew/Casks/open-codesign.rb"
 if [[ "$PACKAGING_CHANNEL" == "all" ]]; then
   echo "Homebrew cask…"
   perl -pi -e "s/^(\\s*version\\s+)\"[^\"]+\"/\${1}\"${VERSION}\"/" "$cask"
-  # The cask has two sha256 lines, one inside on_arm, one inside on_intel.
-  # Rewriting both by matching the line after the arch-specific `url`.
+  # macOS builds target Apple Silicon (arm64) only; rewrite the sha256 inside on_arm.
   perl -0777 -pi -e "s/(on_arm do[\\s\\S]*?sha256\\s+)\"[^\"]+\"/\${1}\"${mac_arm_sha}\"/s" "$cask"
-  perl -0777 -pi -e "s/(on_intel do[\\s\\S]*?sha256\\s+)\"[^\"]+\"/\${1}\"${mac_x64_sha}\"/s" "$cask"
   # Keep the installed .app bundle aligned with productName.
   perl -pi -e "s{^(\\s*app\\s+)\"[^\"]+\\.app\"}{\${1}\"${APP_BUNDLE}\"}" "$cask"
   # And the xattr caveat path.
