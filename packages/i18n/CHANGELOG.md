@@ -1,5 +1,25 @@
 # @open-codesign/i18n
 
+## 0.3.0
+
+### Minor Changes
+
+- Add deterministic element-level visual editing across JSX/TSX and HTML previews: style/attribute/class/structure and static `.map()` item edits, Shadow DOM selection & box-model HUD, canvas floating toolbar, double-click inline text editing, zero-flicker hot-swap refresh, per-file Undo/Redo history, `DESIGN.md` palette sync, and structured AST context for Ask AI.
+
+### Patch Changes
+
+- ceb2274: Make connection tests validate the real generate invoke contract (shared provider resolution, auth, baseUrl, and wire) instead of treating GET /models as a stand-in for runtime.
+
+  Use a bounded saved-model inference with no automatic retries. Return explicit unverified results for adapters that cannot honor the small token budget, and reject unsupported query parameters instead of ignoring them. Bind ChatGPT OAuth to its official secure endpoint before accessing credentials and redact diagnostic URLs.
+
+- e3235d4: Add an explicit saved-settings image generation test with provider credential parity, bounded requests and duplicate-request suppression. Report image generation success only after an image response, rather than a text-model listing.
+- 325d2b9: Unify deterministic source editing and page tweaks into a collapsible fixed right Inspector rail with live preview drafts, shared palette linkage, and atomic batch apply.
+- 900b023: Classify provider failures by recovery action and show localized next steps. Keep unsupported message roles distinct from unsupported gateways, preserve nested network error codes, and distinguish exhausted quota from rate limits.
+
+  Keep status and recovery identity through wrapped errors and durable generation events, including Electron's message-only rejections. Preserve scrubbed final diagnostic context without duplicate records; stop retrying exhausted account quota and give precise provider eligibility guidance.
+
+- 54e6ace: Complete Spanish and Brazilian Portuguese design system library translations, including creation, import, validation, editor actions and status messages.
+
 ## 0.2.3
 
 ### Patch Changes

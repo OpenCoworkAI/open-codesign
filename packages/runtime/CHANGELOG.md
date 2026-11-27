@@ -1,5 +1,23 @@
 # @open-codesign/runtime
 
+## 0.3.0
+
+### Minor Changes
+
+- Add deterministic element-level visual editing across JSX/TSX and HTML previews: style/attribute/class/structure and static `.map()` item edits, Shadow DOM selection & box-model HUD, canvas floating toolbar, double-click inline text editing, zero-flicker hot-swap refresh, per-file Undo/Redo history, `DESIGN.md` palette sync, and structured AST context for Ask AI.
+
+### Patch Changes
+
+- 325d2b9: Unify deterministic source editing and page tweaks into a collapsible fixed right Inspector rail with live preview drafts, shared palette linkage, and atomic batch apply.
+- Updated dependencies [ceb2274]
+- Updated dependencies
+- Updated dependencies [325d2b9]
+- Updated dependencies [014d409]
+- Updated dependencies [c5a2063]
+- Updated dependencies [900b023]
+- Updated dependencies [363e630]
+  - @open-codesign/shared@0.4.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,18 @@
 # @open-codesign/artifacts
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [ceb2274]
+- Updated dependencies
+- Updated dependencies [325d2b9]
+- Updated dependencies [014d409]
+- Updated dependencies [c5a2063]
+- Updated dependencies [900b023]
+- Updated dependencies [363e630]
+  - @open-codesign/shared@0.4.0
+
 ## 0.1.8
 
 ### Patch Changes
