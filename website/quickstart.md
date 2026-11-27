@@ -29,7 +29,6 @@ Pick the matching installer from [GitHub Releases](https://github.com/OpenCowork
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `open-codesign-*-arm64.dmg` |
-| macOS (Intel) | `open-codesign-*-x64.dmg` |
 | Windows (x64) | `open-codesign-*-x64-setup.exe` |
 | Windows (ARM64) | `open-codesign-*-arm64-setup.exe` |
 | Linux (AppImage) | `open-codesign-*-x64.AppImage` |

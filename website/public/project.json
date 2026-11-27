@@ -50,8 +50,7 @@
     "ChatGPT Plus / Codex subscription login"
   ],
   "supported_platforms": [
-    "macOS Apple Silicon",
-    "macOS Intel",
+    "macOS Apple Silicon (arm64)",
     "Windows x64",
     "Windows ARM64",
     "Linux AppImage",

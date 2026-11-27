@@ -30,12 +30,6 @@ const macArm: Asset = {
   size: '135 MB',
   url: `${releasesBase}/open-codesign-${latestVersion}-arm64.dmg`,
 };
-const macIntel: Asset = {
-  label: 'macOS · Intel',
-  file: `open-codesign-${latestVersion}-x64.dmg`,
-  size: '140 MB',
-  url: `${releasesBase}/open-codesign-${latestVersion}-x64.dmg`,
-};
 const winX64: Asset = {
   label: 'Windows · x64',
   file: `open-codesign-${latestVersion}-x64-setup.exe`,
@@ -61,7 +55,7 @@ const linuxSnap: Asset = {
   url: `${releasesBase}/open-codesign-${latestVersion}-x64.snap`,
 };
 
-const allAssets: Asset[] = [macArm, macIntel, winX64, winArm, linuxAppImage, linuxSnap];
+const allAssets: Asset[] = [macArm, winX64, winArm, linuxAppImage, linuxSnap];
 const primary = ref<Asset | null>(null);
 const detectedLabel = ref<string>('');
 const isMac = ref(false);
@@ -94,14 +88,7 @@ function detectPrimaryAsset(): { asset: Asset | null; label: string; mac: boolea
   const isLinux = /linux/i.test(platformHint) || (!isMacUA && !isWin && /Linux/.test(ua));
 
   if (isMacUA) {
-    // Intel Macs report "Intel" in navigator.cpuClass or UA; Apple Silicon
-    // ships a UA string that no longer distinguishes — safer default on new
-    // Macs is arm64 since Apple Silicon shipped in 2020 and Intel Macs are
-    // dwindling. But when we CAN tell (old UA with "Intel Mac"), honor it.
-    const looksIntel = /Intel Mac OS X/.test(ua) && !/AppleWebKit\/6(0[6-9]|[1-9][0-9])/.test(ua);
-    return looksIntel
-      ? { asset: macIntel, label: 'macOS · Intel detected', mac: true }
-      : { asset: macArm, label: 'macOS · Apple Silicon detected', mac: true };
+    return { asset: macArm, label: 'macOS · Apple Silicon detected', mac: true };
   }
   if (isWin) {
     const isArm = /ARM64|aarch64/i.test(ua) || /arm/i.test(platformHint);

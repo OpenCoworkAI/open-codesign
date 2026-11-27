@@ -42,7 +42,7 @@ mac:
   artifactName: open-codesign-${version}-${arch}.${ext}
   target:
     - target: dmg
-      arch: [arm64, x64]
+      arch: [arm64]
 dmg:
   # Custom window layout guides users to drag the app into /Applications.
   # Running Open CoDesign from a mounted DMG instead of /Applications

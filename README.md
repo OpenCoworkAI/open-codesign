@@ -167,7 +167,7 @@ Open source, desktop-native, and built for people who do not want their design w
 
 **Requires:** one API key, ChatGPT subscription sign-in, or local Ollama
 
-**Runs on:** macOS 12+ (Monterey or later), Windows 10+, Linux (glibc ≥ 2.31)
+**Runs on:** macOS 12+ (Monterey or later, Apple Silicon), Windows 10+, Linux (glibc ≥ 2.31)
 
 ### 1. Install
 
@@ -187,7 +187,6 @@ scoop install opencoworkai/open-codesign
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `open-codesign-*-arm64.dmg` |
-| macOS (Intel) | `open-codesign-*-x64.dmg` |
 | Windows (x64) | `open-codesign-*-x64-setup.exe` |
 | Windows (ARM64) | `open-codesign-*-arm64-setup.exe` |
 | Linux (x64, AppImage) | `open-codesign-*-x64.AppImage` |
@@ -207,7 +206,7 @@ Each release ships with `SHA256SUMS.txt` and a CycloneDX SBOM (`*-sbom.cdx.json`
 | Flathub (Linux) | `flatpak install flathub ai.opencowork.codesign` | ⏸ Deferred; needs signed build + AppStream metadata |
 | Snap (Linux) | `snap install --dangerous open-codesign-*.snap` | 🟡 Attached to releases best-effort; Snap Store publish not yet wired |
 
-After each stable tag push, CI syncs SHAs back into `packaging/` and publishes downstream Homebrew/Scoop updates when the repo secrets are configured. The first winget submission is in review; once Microsoft accepts the package, future winget bumps can be automated from the release workflow. Every `packaging/*/README.md` documents its own channel.
+After each stable tag push, CI syncs SHAs back into `packaging/` and publishes downstream Homebrew updates when `HOMEBREW_TAP_TOKEN` is configured. Automated `winget` and `scoop` CI submission jobs were removed from `release.yml`; their manifests in `packaging/` are still synced by `packaging/update-shas.sh` for manual submission. Every `packaging/*/README.md` documents its own channel.
 </details>
 
 > **Unsigned installer note:** installers are not notarized or Authenticode-signed yet. On **macOS Sequoia 15+** right-click → Open no longer bypasses Gatekeeper, and "Open Anyway" in System Settings often fails. Reliable one-liner:

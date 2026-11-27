@@ -79,16 +79,6 @@ jobs:
       - name: Test
         run: pnpm test
 
-  # Reuse the same native check exercised on packaging PRs. Publishing must
-  # wait for it; build artifacts can still be produced in parallel.
-  native-intel:
-    name: Validate native Intel release
-    needs: [gate]
-    uses: ./.github/workflows/release-macos-x64-native-check.yml
-    with:
-      ref: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag) }}
-      upload-artifact: false
-
   changelog:
     name: Build changelog
     runs-on: ubuntu-latest
@@ -151,8 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS artifacts are both produced on the Apple Silicon runner. The
-        # native-intel reusable workflow gates publishing on a native smoke test.
+        # macOS ships Apple Silicon (arm64) only, built natively on macos-latest.
         include:
           - os: macos-latest # arm64 Apple Silicon runner
             label: macos
@@ -223,9 +212,8 @@ jobs:
       # Package the Electron app.
       # CSC_IDENTITY_AUTO_DISCOVERY=false: skip ad-hoc Mac signing prompt.
       # WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD: intentionally unset (no cert in v0.1).
-      # On macOS we build both arm64 and x64 DMGs on macos-latest, then verify
-      # the packaged Mach-O architecture before upload. This keeps Intel Mac
-      # support automated without depending on the scarce macos-13 queue.
+      # On macOS we build only the Apple Silicon (arm64) DMG on macos-latest,
+      # then verify the packaged Mach-O architecture before upload.
       - name: Package desktop (non-mac)
         if: runner.os != 'macOS'
         env:
@@ -233,7 +221,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm --filter @open-codesign/desktop release
 
-      - name: Package desktop (mac, per-arch)
+      - name: Package desktop (mac, arm64)
         if: runner.os == 'macOS'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -241,37 +229,10 @@ jobs:
         run: |
           pnpm --filter @open-codesign/desktop exec electron-vite build
           pnpm --filter @open-codesign/desktop exec bash scripts/package-macos-dmg.sh --mac dmg:arm64 --publish never
-          pnpm --filter @open-codesign/desktop exec bash scripts/package-macos-dmg.sh --mac dmg:x64 --publish never
 
-      - name: Verify macOS app architectures
+      - name: Verify macOS app architecture
         if: runner.os == 'macOS'
-        run: |
-          bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release arm64
-          bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64
-
-      - name: Smoke x64 app under Rosetta (diagnostic)
-        if: runner.os == 'macOS'
-        env:
-          CODESIGN_SMOKE_TEST: '1'
-          CODESIGN_SMOKE_USER_DATA_DIR: ${{ runner.temp }}/codesign-smoke-x64
-        run: |
-          softwareupdate --install-rosetta --agree-to-license || true
-          rm -rf "$CODESIGN_SMOKE_USER_DATA_DIR"
-          mkdir -p "$CODESIGN_SMOKE_USER_DATA_DIR"
-          x64_binary="$(CODESIGN_VERIFY_PRINT_BINARY=1 bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release x64)"
-          arch -x86_64 "$x64_binary" --smoke-test &
-          smoke_pid=$!
-          for _ in {1..60}; do
-            if ! kill -0 "$smoke_pid" 2>/dev/null; then
-              wait "$smoke_pid"
-              exit $?
-            fi
-            sleep 1
-          done
-          echo "::warning::x64 smoke test did not exit within 60 seconds under Rosetta"
-          kill "$smoke_pid" 2>/dev/null || true
-          wait "$smoke_pid" 2>/dev/null || true
-          exit 0
+        run: bash apps/desktop/scripts/verify-macos-app.sh apps/desktop/release arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -433,7 +394,7 @@ jobs:
   # ------------------------------------------------------------------
   publish:
     name: Publish GitHub Release
-    needs: [build, changelog, provenance, native-intel]
+    needs: [build, changelog, provenance]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -529,72 +490,6 @@ jobs:
           RELEASE_TAG: ${{ steps.ver.outputs.release_ref }}
 
   # ------------------------------------------------------------------
-  # Scoop bucket bump — publishes the generated manifest to the actual
-  # OpenCoworkAI/scoop-bucket repo users install from. Scoop consumes the
-  # Windows zip artifacts for new releases, with a legacy NSIS fallback for
-  # releases published before the zip target existed.
-  # ------------------------------------------------------------------
-  scoop:
-    name: Bump Scoop bucket
-    needs: [publish]
-    runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && !contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && inputs.draft == false && !contains(inputs.tag, '-'))
-    steps:
-      - name: Guard on secret
-        id: guard
-        env:
-          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
-        run: |
-          if [ -z "$SCOOP_BUCKET_TOKEN" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::SCOOP_BUCKET_TOKEN not set — skipping Scoop bucket bump. See packaging/README.md."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: steps.guard.outputs.skip == 'false'
-
-      - name: Derive version from tag
-        if: steps.guard.outputs.skip == 'false'
-        id: ver
-        run: |
-          release_ref="${{ github.event_name == 'push' && github.ref_name || inputs.tag }}"
-          version="${release_ref#v}"
-          echo "release_ref=${release_ref}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate Scoop manifest
-        if: steps.guard.outputs.skip == 'false'
-        env:
-          PACKAGING_CHANNEL: scoop
-        run: ./packaging/update-shas.sh "${{ steps.ver.outputs.version }}"
-
-      - name: Checkout Scoop bucket
-        if: steps.guard.outputs.skip == 'false'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: OpenCoworkAI/scoop-bucket
-          path: scoop-bucket
-          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
-
-      - name: Commit + push
-        if: steps.guard.outputs.skip == 'false'
-        run: |
-          mkdir -p scoop-bucket/bucket
-          cp packaging/scoop/bucket/open-codesign.json scoop-bucket/bucket/open-codesign.json
-          cd scoop-bucket
-          if git diff --quiet bucket/open-codesign.json; then
-            echo "::notice::Scoop bucket already up to date — no commit"
-            exit 0
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bucket/open-codesign.json
-          git commit -m "chore: bump open-codesign to ${{ steps.ver.outputs.release_ref }}"
-          git push
-
-  # ------------------------------------------------------------------
   # Homebrew Cask bump — opens a PR against OpenCoworkAI/homebrew-tap
   # with the new version + sha256 of the mac DMGs.
   # Skipped until HOMEBREW_TAP_TOKEN is set (see packaging/homebrew/README.md).
@@ -652,99 +547,3 @@ jobs:
           git add Casks/open-codesign.rb
           git commit -m "open-codesign ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}"
           git push
-
-  # ------------------------------------------------------------------
-  # Winget manifest PR — submits to microsoft/winget-pkgs.
-  # Skipped until WINGET_PAT is set (see packaging/winget/).
-  # Requires initial manual submission of the manifest first.
-  #
-  # This uses a copyleft GitHub Action only as workflow tooling; it is not
-  # bundled, vendored, linked, or distributed with Open CoDesign.
-  # ------------------------------------------------------------------
-  winget:
-    name: Submit winget manifest
-    needs: [publish]
-    runs-on: windows-latest
-    if: (github.event_name == 'push' && !contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && inputs.draft == false && !contains(inputs.tag, '-'))
-    steps:
-      - name: Guard on secret
-        id: guard
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.WINGET_PAT }}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::WINGET_PAT not set — skipping winget submission. See packaging/winget/."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check existing winget package
-        if: steps.guard.outputs.skip == 'false'
-        id: winget-package
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'SilentlyContinue'
-          Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/o/OpenCoworkAI/OpenCoDesign' -Method Get | Out-Null
-          if ($?) {
-            "exists=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            "exists=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Output "::notice::OpenCoworkAI.OpenCoDesign is not in microsoft/winget-pkgs yet; skipping automated winget update until the initial manifest is accepted."
-          }
-
-      - name: Derive winget version
-        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true'
-        id: winget-version
-        shell: bash
-        run: |
-          release_ref="${{ github.event_name == 'push' && github.ref_name || inputs.tag }}"
-          version="${release_ref#v}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Check existing winget version
-        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true'
-        id: winget-existing-version
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.WINGET_PAT }}
-        run: |
-          if gh api "repos/microsoft/winget-pkgs/contents/manifests/o/OpenCoworkAI/OpenCoDesign/${{ steps.winget-version.outputs.version }}" >/dev/null 2>&1; then
-            echo "submit=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::OpenCoworkAI.OpenCoDesign ${{ steps.winget-version.outputs.version }} already exists in microsoft/winget-pkgs. Same-version repacks need a manual manifest update PR, so automated winget submission is skipped."
-          else
-            echo "submit=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check winget fork
-        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true' && steps.winget-existing-version.outputs.submit == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.WINGET_PAT }}
-        run: |
-          gh api repos/OpenCoworkAI/winget-pkgs >/dev/null
-          gh api repos/OpenCoworkAI/winget-pkgs/contents/manifests/o/OpenCoworkAI/OpenCoDesign >/dev/null
-
-      - name: Check winget token upstream access
-        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true' && steps.winget-existing-version.outputs.submit == 'true'
-        id: winget-token
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.WINGET_PAT }}
-        run: |
-          if gh api graphql \
-            -f query='query { repository(owner: "microsoft", name: "winget-pkgs") { name } }' \
-            --jq '.data.repository.name' >/dev/null; then
-            echo "submit=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "submit=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::WINGET_PAT cannot query microsoft/winget-pkgs through GraphQL. Komac requires a classic GitHub PAT with public_repo scope that can read microsoft/winget-pkgs and push to OpenCoworkAI/winget-pkgs. Skipping winget submission so the release is not marked failed."
-
-      - name: Release winget package
-        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true' && steps.winget-existing-version.outputs.submit == 'true' && steps.winget-token.outputs.submit == 'true'
-        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
-        with:
-          identifier: OpenCoworkAI.OpenCoDesign
-          installers-regex: '-x64-setup\.exe$|-arm64-setup\.exe$'
-          token: ${{ secrets.WINGET_PAT }}
-          fork-user: OpenCoworkAI

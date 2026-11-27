@@ -83,7 +83,7 @@ Keyless (IP-allowlisted) corporate proxies are also supported, as are ChatGPT Pl
 
 ## Which platforms are supported?
 
-- **macOS** — Apple Silicon (M1 / M2 / M3 / M4) and Intel
+- **macOS** — Apple Silicon (`arm64`, M1 / M2 / M3 / M4)
 - **Windows** — x64 and ARM64
 - **Linux** — AppImage, `.deb` (Debian / Ubuntu), `.rpm` (Fedora / RHEL)
 

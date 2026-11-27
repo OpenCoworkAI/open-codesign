@@ -129,7 +129,7 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 
 **你需要准备：** 一个 API Key、ChatGPT 订阅登录，或者本地 Ollama
 
-**支持平台：** macOS、Windows、Linux
+**支持平台：** macOS（Apple Silicon）、Windows、Linux
 
 ### 1. 安装
 
@@ -149,7 +149,6 @@ scoop install opencoworkai/open-codesign
 | 平台 | 文件 |
 |---|---|
 | macOS（Apple Silicon） | `open-codesign-*-arm64.dmg` |
-| macOS（Intel） | `open-codesign-*-x64.dmg` |
 | Windows（x64） | `open-codesign-*-x64-setup.exe` |
 | Windows（ARM64） | `open-codesign-*-arm64-setup.exe` |
 | Linux（x64，AppImage） | `open-codesign-*-x64.AppImage` |
@@ -169,7 +168,7 @@ scoop install opencoworkai/open-codesign
 | Flathub（Linux） | `flatpak install flathub ai.opencowork.codesign` | ⏸ 延后处理，需要签名构建 + AppStream 元数据 |
 | Snap（Linux） | `snap install --dangerous open-codesign-*.snap` | 🟡 随 release 尽量附带，尚未接入 Snap Store |
 
-每次 stable tag push 后，CI 会把 SHA 自动写回 `packaging/`，并在仓库 secret 配好时同步 Homebrew / Scoop 下游仓库。winget 的首次提交还在 Microsoft review；等包名被接受后，后续版本可以由 release workflow 自动提 bump。下游镜像流程见各个 `packaging/*/README.md`。
+每次 stable tag push 后，CI 会把 SHA 自动写回 `packaging/`，并在 `HOMEBREW_TAP_TOKEN` 配好时同步 Homebrew 下游仓库。`winget` 和 `scoop` 的 CI 自动提交 job 已从 `release.yml` 移除；仓库内的 `packaging/` 清单仍会由 `packaging/update-shas.sh` 同步，供手动提交。下游镜像流程见各个 `packaging/*/README.md`。
 </details>
 
 > **未签名安装包提示：** 当前安装包还没有 Apple notarization 和 Windows Authenticode 签名。**macOS Sequoia 15+** 起，右键 → 打开 已不能绕过 Gatekeeper，即使在「系统设置 → 隐私与安全性」里点"仍要打开"也经常失败。最可靠的一行命令：

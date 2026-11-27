@@ -33,7 +33,7 @@
       "id": "platforms",
       "language": "en-US",
       "question": "Which platforms are supported?",
-      "answer": "Open CoDesign supports macOS Apple Silicon, macOS Intel, Windows x64, Windows ARM64, and Linux packages including AppImage, deb, and rpm."
+      "answer": "Open CoDesign supports macOS Apple Silicon (arm64), Windows x64, Windows ARM64, and Linux packages including AppImage, deb, and rpm."
     },
     {
       "id": "what-is-open-codesign-zh",
@@ -63,7 +63,7 @@
       "id": "platforms-zh",
       "language": "zh-CN",
       "question": "Open CoDesign 支持哪些平台？",
-      "answer": "Open CoDesign 支持 macOS Apple Silicon、macOS Intel、Windows x64、Windows ARM64，以及 Linux AppImage、deb、rpm 安装包。"
+      "answer": "Open CoDesign 支持 macOS Apple Silicon（arm64）、Windows x64、Windows ARM64，以及 Linux AppImage、deb、rpm 安装包。"
     },
     {
       "id": "install-status",

@@ -83,7 +83,7 @@ Bolt.new 是基于浏览器的全栈应用构建器，跑在 StackBlitz 的 WebC
 
 ## 支持哪些操作系统？
 
-- **macOS**——Apple Silicon（M1 / M2 / M3 / M4）和 Intel
+- **macOS**——Apple Silicon（`arm64`，M1 / M2 / M3 / M4）
 - **Windows**——x64 和 ARM64
 - **Linux**——AppImage、`.deb`（Debian / Ubuntu）、`.rpm`（Fedora / RHEL）
 

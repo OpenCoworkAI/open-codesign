@@ -6,11 +6,6 @@ cask "open-codesign" do
         verified: "github.com/OpenCoworkAI/open-codesign/"
     sha256 "56385717cd719d361734d65c75caf0b84ad73791cf04500d499ca0cfd2ca22bb"
   end
-  on_intel do
-    url "https://github.com/OpenCoworkAI/open-codesign/releases/download/v#{version}/open-codesign-#{version}-x64.dmg",
-        verified: "github.com/OpenCoworkAI/open-codesign/"
-    sha256 "894aa01c31c4947fe6a857ff40e1744dd604827e23291642b172b36035718d4e"
-  end
 
   name "Open CoDesign"
   desc "Open-source desktop AI design tool — prompt to prototype, BYOK, local-first"
@@ -22,6 +17,7 @@ cask "open-codesign" do
   end
 
   auto_updates false
+  depends_on arch: :arm64
   depends_on macos: :big_sur
 
   app "Open CoDesign.app"

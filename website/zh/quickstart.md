@@ -29,7 +29,6 @@ Homebrew 和 Scoop 已经更新到 v0.2.0。winget manifest 已提交到 microso
 | 平台 | 文件 |
 |---|---|
 | macOS（Apple Silicon）| `open-codesign-*-arm64.dmg` |
-| macOS（Intel）| `open-codesign-*-x64.dmg` |
 | Windows（x64）| `open-codesign-*-x64-setup.exe` |
 | Windows（ARM64）| `open-codesign-*-arm64-setup.exe` |
 | Linux（AppImage） | `open-codesign-*-x64.AppImage` |

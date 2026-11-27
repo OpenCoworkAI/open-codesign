@@ -26,13 +26,12 @@ packaging/
 
 ## Release flow
 
-1. Push a `vX.Y.Z` tag. `release.yml` builds + publishes the installers.
+1. Push a `vX.Y.Z` tag. `release.yml` builds + publishes the installers (macOS Apple Silicon `arm64` only, Windows `x64`/`arm64`, and Linux).
 2. After `publish` succeeds, the **`bump-manifests`** job runs `update-shas.sh`: it pulls `SHA256SUMS.txt` from the release, rewrites versions / URLs / checksums across all four channels, and opens or updates `release/vX.Y.Z-manifests` as a PR to `main`. Auto-merge waits for required checks. It never pushes directly to `main` or adds `[skip ci]`.
-3. The **`scoop`** job copies the generated Scoop manifest into `OpenCoworkAI/scoop-bucket` when `SCOOP_BUCKET_TOKEN` is configured.
-4. The **`homebrew`** job copies the generated cask into `OpenCoworkAI/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
-5. The **`winget`** job submits future bumps after Microsoft accepts the initial package. The v0.2.0 winget PR is microsoft/winget-pkgs#372310.
+3. The **`homebrew`** job copies the generated cask into `OpenCoworkAI/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
+4. Automated **`winget`** and **`scoop`** CI submission jobs have been removed from `release.yml`. `packaging/update-shas.sh` (both in `bump-manifests` and when run manually) still syncs the local `packaging/winget/` and `packaging/scoop/` manifests in this repository for manual submission.
 
-### Manifest PR credentials and native release gate
+### Manifest PR credentials and macOS target scope
 
 Configure the repository Actions secret `RELEASE_BOT_TOKEN` with a fine-grained
 PAT restricted to this repository, with **Contents: read/write** and
@@ -42,17 +41,14 @@ the built-in `GITHUB_TOKEN` is deliberately not a fallback, because its events d
 not start those checks. Do not grant branch-protection bypass or weaken required CI.
 Repository auto-merge must be enabled. Missing credentials, failed PR creation,
 and failed auto-merge setup fail the sync job visibly, after release publication.
-This does not change the separate Homebrew, Scoop, or winget credentials.
+This does not change the separate Homebrew tap credential (`HOMEBREW_TAP_TOKEN`).
 
 Existing manifest PRs whose commits contain `[skip ci]` need a new commit without
 that marker (or regeneration through this workflow); enabling token permissions
 alone does not repair their missing CI checks.
 
-Release publication now waits for the reusable Intel check on `macos-15-intel`,
-including architecture validation and native application smoke testing. Related
-workflow and macOS packaging changes also run it on PRs. The check only builds
-and tests; it does not publish. A release invocation suppresses its extra DMG
-artifact so the release's installer downloads stay unambiguous.
+macOS releases target Apple Silicon (`arm64`) only; Intel Mac (`x64`) DMG builds
+and the `macos-15-intel` native check workflow have been retired.
 
 Test the manifest PR logic without credentials or network writes:
 
@@ -110,7 +106,7 @@ brew install --cask open-codesign
 
 ### winget — `microsoft/winget-pkgs`
 
-Microsoft's monorepo. The initial v0.2.0 package PR is microsoft/winget-pkgs#372310 and is waiting for review. Until Microsoft accepts the package, `winget install OpenCoworkAI.OpenCoDesign` may not resolve. For a first submission, fork `microsoft/winget-pkgs`, copy `packaging/winget/manifests/o/OpenCoworkAI/OpenCoDesign/<version>/` into the same path in the fork, open a PR, and run `wingetcreate validate` first:
+Microsoft's monorepo. The initial v0.2.0 package PR is microsoft/winget-pkgs#372310 and is waiting for review. Until Microsoft accepts the package, `winget install OpenCoworkAI.OpenCoDesign` may not resolve. Automated `winget` CI submission was removed from `release.yml`; `packaging/update-shas.sh` still keeps `packaging/winget/manifests/o/OpenCoworkAI/OpenCoDesign/<version>/` synced in this repo for manual PR submission (fork `microsoft/winget-pkgs`, copy the version directory into the same path in the fork, open a PR, and run `wingetcreate validate` first):
 
 ```sh
 wingetcreate validate packaging/winget/manifests/o/OpenCoworkAI/OpenCoDesign/0.2.0
@@ -124,7 +120,7 @@ winget install OpenCoworkAI.OpenCoDesign
 
 ### Scoop — `OpenCoworkAI/scoop-bucket`
 
-Separate public bucket repo. For v0.2.0 it is live at `OpenCoworkAI/scoop-bucket`. Once `SCOOP_BUCKET_TOKEN` is configured with `contents:write` access to that repo, `release.yml` copies `packaging/scoop/bucket/open-codesign.json` into its `bucket/` directory after each stable tag publish. Manual backfill is still just a copy:
+Separate public bucket repo. For v0.2.0 it is live at `OpenCoworkAI/scoop-bucket`. Automated Scoop CI submission was removed from `release.yml`; `packaging/update-shas.sh` still updates `packaging/scoop/bucket/open-codesign.json` in this repo (both via `bump-manifests` and manual runs), and bucket updates are pushed manually:
 
 ```sh
 gh repo create OpenCoworkAI/scoop-bucket --public \
