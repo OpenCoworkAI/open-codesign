@@ -4,15 +4,30 @@ import {
   isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
+  isSourceEditHotSwappedMessage,
+  isSourceEditInlineEditRequestMessage,
   isSourceEditSelection,
   type OverlayMessage,
+  type SourceEditHotSwappedMessage,
+  type SourceEditInlineEditRequestMessage,
+  type SourceEditOverlayContext,
   type SourceEditSelection,
 } from '@open-codesign/runtime';
 import {
   type SourceEditOperation,
+  type SourceEditPreviewDraft,
   type SourceEditTarget,
   sourceEditFieldKey,
 } from '@open-codesign/shared';
+
+export type SourceEditInlineEditRequest = SourceEditInlineEditRequestMessage;
+
+export type {
+  SourceEditHotSwappedMessage,
+  SourceEditInlineEditRequestMessage,
+  SourceEditOverlayContext,
+  SourceEditPreviewDraft,
+};
 
 export interface SourceEditAncestor {
   selector: string;
@@ -23,6 +38,13 @@ export interface SourceEditValidationRequest {
   sourceHash: string;
   previewRevision: string;
   fieldKey: string;
+}
+
+export interface SourceEditHotSwapPayload {
+  instrumentedSource: string;
+  sourceEditContext: SourceEditOverlayContext;
+  kind: 'jsx' | 'tsx';
+  restoreSelector?: string;
 }
 
 export function sourceEditFieldState(
@@ -127,11 +149,6 @@ export function postSourceEditAncestorToPreviewWindow(
   }
 }
 
-export interface SourceEditPreviewDraft {
-  styles: Partial<Record<string, string>>;
-  attributes: Partial<Record<string, string>>;
-}
-
 /** Shows unsaved inspector values on the pinned element; an empty draft reverts them. */
 export function postSourceEditPreviewToPreviewWindow(
   win: Window | null | undefined,
@@ -145,7 +162,11 @@ export function postSourceEditPreviewToPreviewWindow(
         __codesign: true,
         type: 'SOURCE_EDIT_PREVIEW',
         styles: draft.styles,
+        ...(draft.removedStyles !== undefined ? { removedStyles: draft.removedStyles } : {}),
         attributes: draft.attributes,
+        ...(draft.texts !== undefined ? { texts: draft.texts } : {}),
+        ...(draft.className !== undefined ? { className: draft.className } : {}),
+        ...(draft.hidden !== undefined ? { hidden: draft.hidden } : {}),
         sourceHash: revision.sourceHash,
         previewRevision: revision.previewRevision,
       },
@@ -155,6 +176,84 @@ export function postSourceEditPreviewToPreviewWindow(
   } catch {
     return false;
   }
+}
+
+export function postSourceEditHudStateToPreviewWindow(
+  win: Window | null | undefined,
+  state: { highlightBoxModel?: boolean },
+  revision: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
+  onError: (message: string) => void,
+): boolean {
+  if (!win) return false;
+  try {
+    win.postMessage(
+      {
+        __codesign: true,
+        type: 'SOURCE_EDIT_HUD_STATE',
+        ...(state.highlightBoxModel !== undefined
+          ? { highlightBoxModel: state.highlightBoxModel }
+          : {}),
+        sourceHash: revision.sourceHash,
+        previewRevision: revision.previewRevision,
+      },
+      '*',
+    );
+    return true;
+  } catch (error) {
+    onError(
+      `SOURCE_EDIT_HUD_STATE postMessage failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  }
+}
+
+/** Requests a Babel/React in-place re-render of updated source without reloading the iframe. */
+export function requestSourceEditHotSwap(
+  win: Window | null | undefined,
+  payload: SourceEditHotSwapPayload,
+  options: { signal: AbortSignal; timeoutMs?: number },
+): Promise<boolean> {
+  if (!win || options.signal.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const requestId = crypto.randomUUID();
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+      options.signal.removeEventListener('abort', onAbort);
+      resolve(ok);
+    };
+    const onAbort = () => finish(false);
+    const onMessage = (event: MessageEvent) => {
+      if (!isTrustedPreviewMessageSource(event.source, win)) return;
+      if (!isSourceEditHotSwappedMessage(event.data)) return;
+      if (event.data.requestId !== requestId) return;
+      finish(event.data.ok);
+    };
+    const timer = setTimeout(() => finish(false), options.timeoutMs ?? 1500);
+    window.addEventListener('message', onMessage);
+    options.signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      win.postMessage(
+        {
+          __codesign: true,
+          type: 'SOURCE_EDIT_HOT_SWAP',
+          requestId,
+          instrumentedSource: payload.instrumentedSource,
+          sourceEditContext: payload.sourceEditContext,
+          kind: payload.kind,
+          ...(payload.restoreSelector !== undefined
+            ? { restoreSelector: payload.restoreSelector }
+            : {}),
+        },
+        '*',
+      );
+    } catch {
+      finish(false);
+    }
+  });
 }
 
 /** Re-pins the element that was selected before a save reloaded the preview. */
@@ -280,7 +379,9 @@ export type AllowedPreviewMessageType =
   | 'IFRAME_ERROR'
   | 'ELEMENT_RECTS'
   | 'PREVIEW_ESCAPE'
-  | 'SOURCE_EDIT_VALIDATED';
+  | 'SOURCE_EDIT_VALIDATED'
+  | 'SOURCE_EDIT_INLINE_EDIT_REQUEST'
+  | 'SOURCE_EDIT_HOT_SWAPPED';
 
 export interface PreviewMessageHandlers {
   onPreviewEscape?: () => void;
@@ -288,6 +389,7 @@ export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
   onElementRects: (msg: ElementRectsMessage) => void;
+  onInlineEditRequest?: (msg: SourceEditInlineEditRequest) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -298,10 +400,33 @@ export type PreviewMessageOutcome =
       type?: string;
     };
 
+export type ExpectedSourceEditRevision =
+  | Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>
+  | readonly Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>[];
+
+function matchesExpectedSourceEditRevision(
+  revision: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
+  expected: ExpectedSourceEditRevision | undefined,
+): boolean {
+  if (!expected) return true;
+  if (Array.isArray(expected)) {
+    if (expected.length === 0) return true;
+    return expected.some(
+      (candidate) =>
+        candidate.sourceHash === revision.sourceHash &&
+        candidate.previewRevision === revision.previewRevision,
+    );
+  }
+  const single = expected as Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>;
+  return (
+    single.sourceHash === revision.sourceHash && single.previewRevision === revision.previewRevision
+  );
+}
+
 export function handlePreviewMessage(
   data: unknown,
   handlers: PreviewMessageHandlers,
-  expectedSourceEditRevision?: Pick<SourceEditSelection, 'sourceHash' | 'previewRevision'>,
+  expectedSourceEditRevision?: ExpectedSourceEditRevision,
 ): PreviewMessageOutcome {
   if (typeof data !== 'object' || data === null) {
     return { status: 'rejected', reason: 'envelope' };
@@ -315,6 +440,25 @@ export function handlePreviewMessage(
     case 'SOURCE_EDIT_VALIDATED':
       // A request-scoped listener validates these; never turn them into comments/errors.
       return { status: 'handled', type: envelope.type };
+    case 'SOURCE_EDIT_HOT_SWAPPED':
+      if (isSourceEditHotSwappedMessage(data)) {
+        return { status: 'handled', type: envelope.type };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'SOURCE_EDIT_INLINE_EDIT_REQUEST':
+      if (!isSourceEditInlineEditRequestMessage(data)) {
+        return { status: 'rejected', reason: 'shape', type: envelope.type };
+      }
+      if (
+        !matchesExpectedSourceEditRevision(
+          { sourceHash: data.sourceHash, previewRevision: data.previewRevision },
+          expectedSourceEditRevision,
+        )
+      ) {
+        return { status: 'rejected', reason: 'stale-source-edit', type: envelope.type };
+      }
+      handlers.onInlineEditRequest?.(data);
+      return { status: 'handled', type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST' };
     case 'PREVIEW_ESCAPE':
       handlers.onPreviewEscape?.();
       return { status: 'handled', type: envelope.type };
@@ -329,12 +473,12 @@ export function handlePreviewMessage(
           expectedSourceEditRevision &&
           ((data.sourceEditAncestors !== undefined && !data.sourceEditRevision) ||
             (data.sourceEditRevision &&
-              (data.sourceEditRevision.sourceHash !== expectedSourceEditRevision.sourceHash ||
-                data.sourceEditRevision.previewRevision !==
-                  expectedSourceEditRevision.previewRevision)) ||
+              !matchesExpectedSourceEditRevision(
+                data.sourceEditRevision,
+                expectedSourceEditRevision,
+              )) ||
             (data.sourceEdit &&
-              (data.sourceEdit.sourceHash !== expectedSourceEditRevision.sourceHash ||
-                data.sourceEdit.previewRevision !== expectedSourceEditRevision.previewRevision)))
+              !matchesExpectedSourceEditRevision(data.sourceEdit, expectedSourceEditRevision)))
         ) {
           return { status: 'rejected', reason: 'stale-source-edit', type: envelope.type };
         }

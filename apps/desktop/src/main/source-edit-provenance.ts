@@ -205,11 +205,39 @@ function label(current: AstNode): string {
  * Pass nodes from this same AST; spans include the literal's quote delimiters.
  * Container escape/mutation checks are whole-tree and intentionally conservative.
  */
-export function createTextResolver(
-  ast: unknown,
-): (expression: unknown) => TextProvenance | undefined {
+export interface StaticMapFieldResolution {
+  key: string;
+  property?: string;
+  values: string[];
+  valueSpans: Array<{ start: number; end: number }>;
+}
+
+export interface StaticMapCallProvenance {
+  callNode: AstNode;
+  arrayNode: AstNode;
+  arrayName: string;
+  arrayElements: AstNode[];
+  callback: AstNode;
+  firstParam: AstNode;
+  secondParam?: AstNode;
+  wrapParens: boolean;
+  resolveItemExpression: (expression: unknown) => StaticMapFieldResolution | undefined;
+}
+
+interface ProvenanceContext {
+  resolve: (current: AstNode | undefined) => Resolved | undefined;
+  unsafe: Set<StaticValue>;
+  all: AstNode[];
+  parents: Map<AstNode, Parent>;
+  declarations: Set<AstNode>;
+  bindingOf: (identifier: AstNode) => Binding | undefined;
+  standardArrayPrototype: boolean;
+  safeMap: (member: AstNode, arrays: StaticValue[]) => boolean;
+}
+
+function buildProvenanceContext(ast: unknown): ProvenanceContext | undefined {
   const root = node(ast);
-  if (!root) return () => undefined;
+  if (!root) return undefined;
   const scopes = new Map<AstNode, Scope>();
   const parents = new Map<AstNode, Parent>();
   const declarations = new Set<AstNode>();
@@ -549,11 +577,16 @@ export function createTextResolver(
     if (!parent) return false;
     const owner = parent.node;
     if (owner.type === 'MemberExpression' && parent.key === 'object') {
-      if (staticKey(owner, true) === 'map') {
+      const prop = staticKey(owner, true);
+      if (prop === 'map') {
         const receiver = resolve(current);
         if (receiver && safeMap(owner, [receiver.value])) return true;
       }
-      return staticKey(owner, true) !== undefined && !isWriteTarget(owner) && !!resolve(owner);
+      if (prop === 'length' && !isWriteTarget(owner)) {
+        const receiver = resolve(current);
+        if (receiver?.value.source.type === 'ArrayExpression') return true;
+      }
+      return prop !== undefined && !isWriteTarget(owner) && !!resolve(owner);
     }
     if (owner.type === 'VariableDeclarator' && parent.key === 'init') {
       const id = node(owner.id);
@@ -591,14 +624,37 @@ export function createTextResolver(
     if (result?.value.fields && !safeContainerUse(current)) invalidate(result.value);
   }
 
+  return {
+    resolve,
+    unsafe,
+    all,
+    parents,
+    declarations,
+    bindingOf,
+    standardArrayPrototype,
+    safeMap,
+  };
+}
+
+/**
+ * Resolve only strings whose complete lexical provenance is statically known.
+ * Pass nodes from this same AST; spans include the literal's quote delimiters.
+ * Container escape/mutation checks are whole-tree and intentionally conservative.
+ */
+export function createTextResolver(
+  ast: unknown,
+): (expression: unknown) => TextProvenance | undefined {
+  const ctx = buildProvenanceContext(ast);
+  if (!ctx) return () => undefined;
+
   return (expression) => {
     const current = node(expression);
-    const result = resolve(current);
+    const result = ctx.resolve(current);
     if (
       !result ||
       result.value.source.type !== 'StringLiteral' ||
       typeof result.value.source.value !== 'string' ||
-      [...result.owners].some((owner) => unsafe.has(owner))
+      [...result.owners].some((owner) => ctx.unsafe.has(owner))
     )
       return undefined;
     const literal = result.value.source;
@@ -609,4 +665,182 @@ export function createTextResolver(
       origin: [...result.trace, 'string literal'].join(' → '),
     };
   };
+}
+
+function objectPropertyLiteral(
+  obj: AstNode,
+  propChain: readonly string[],
+): { value: string; start: number; end: number } | undefined {
+  let cursor: AstNode = obj;
+  for (let i = 0; i < propChain.length; i += 1) {
+    const keyName = propChain[i];
+    if (!keyName || cursor.type !== 'ObjectExpression') return undefined;
+    let matched: AstNode | undefined;
+    for (const prop of children(cursor.properties)) {
+      if (
+        prop.type === 'ObjectProperty' &&
+        !prop.computed &&
+        !prop.method &&
+        (prop.kind === undefined || prop.kind === 'init') &&
+        staticKey(prop, false) === keyName
+      ) {
+        matched = node(prop.value);
+        break;
+      }
+    }
+    if (!matched) return undefined;
+    if (i === propChain.length - 1) {
+      if (matched.type === 'StringLiteral' && typeof matched.value === 'string') {
+        return { value: matched.value, start: matched.start, end: matched.end };
+      }
+      return undefined;
+    }
+    cursor = matched;
+  }
+  return undefined;
+}
+
+export function createMapResolver(ast: unknown, source?: string): StaticMapCallProvenance[] {
+  const ctx = buildProvenanceContext(ast);
+  if (!ctx?.standardArrayPrototype) return [];
+  return resolveMapsFromContext(ctx, source);
+}
+
+export function createProvenanceResolvers(
+  ast: unknown,
+  source?: string,
+): {
+  resolveText: (expression: unknown) => TextProvenance | undefined;
+  maps: StaticMapCallProvenance[];
+} {
+  const ctx = buildProvenanceContext(ast);
+  if (!ctx) return { resolveText: () => undefined, maps: [] };
+  const resolveText = (expression: unknown): TextProvenance | undefined => {
+    const current = node(expression);
+    const result = ctx.resolve(current);
+    if (
+      !result ||
+      result.value.source.type !== 'StringLiteral' ||
+      typeof result.value.source.value !== 'string' ||
+      [...result.owners].some((owner) => ctx.unsafe.has(owner))
+    )
+      return undefined;
+    const literal = result.value.source;
+    return {
+      start: literal.start,
+      end: literal.end,
+      value: String(literal.value),
+      origin: [...result.trace, 'string literal'].join(' → '),
+    };
+  };
+  const maps = ctx.standardArrayPrototype ? resolveMapsFromContext(ctx, source) : [];
+  return { resolveText, maps };
+}
+
+function resolveMapsFromContext(
+  ctx: ProvenanceContext,
+  source?: string,
+): StaticMapCallProvenance[] {
+  const results: StaticMapCallProvenance[] = [];
+  for (const current of ctx.all) {
+    if (current.type !== 'CallExpression' || current.optional) continue;
+    const callee = node(current.callee);
+    if (!callee || callee.type !== 'MemberExpression' || callee.optional) continue;
+    if (staticKey(callee, true) !== 'map') continue;
+
+    const receiverExpr = node(callee.object);
+    if (!receiverExpr) continue;
+    const receiver = ctx.resolve(receiverExpr);
+    if (
+      !receiver ||
+      receiver.value.source.type !== 'ArrayExpression' ||
+      ctx.unsafe.has(receiver.value) ||
+      [...receiver.owners].some((owner) => ctx.unsafe.has(owner))
+    )
+      continue;
+    if (!ctx.safeMap(callee, [receiver.value])) continue;
+
+    const args = children(current.arguments);
+    const callback = args[0];
+    if (!callback) continue;
+    const params = children(callback.params);
+    const firstParam = params[0];
+    if (!firstParam || firstParam.type !== 'Identifier') continue;
+    const secondParam = params[1]?.type === 'Identifier' ? params[1] : undefined;
+    const firstBinding = ctx.bindingOf(firstParam);
+    if (!firstBinding) continue;
+
+    const arrayNode = receiver.value.source;
+    const arrayElements = children(arrayNode.elements);
+    if (
+      arrayElements.length !== (Array.isArray(arrayNode.elements) ? arrayNode.elements.length : 0)
+    )
+      continue;
+
+    const wrapParens =
+      callback.type === 'ArrowFunctionExpression' &&
+      params.length === 1 &&
+      (source ? !source.slice(callback.start, firstParam.start).includes('(') : true);
+
+    const arrayName =
+      receiverExpr.type === 'Identifier'
+        ? (nameOf(receiverExpr) ?? 'items')
+        : receiverExpr.type === 'MemberExpression'
+          ? label(receiverExpr)
+          : 'items';
+
+    const resolveItemExpression = (expression: unknown): StaticMapFieldResolution | undefined => {
+      const expr = node(expression);
+      if (!expr) return undefined;
+      const propChain: string[] = [];
+      let cursor: AstNode = expr;
+      while (cursor.type === 'MemberExpression' && !cursor.optional) {
+        const key = staticKey(cursor, true);
+        const obj = node(cursor.object);
+        if (key === undefined || !obj) return undefined;
+        propChain.unshift(key);
+        cursor = obj;
+      }
+      if (cursor.type !== 'Identifier' || ctx.bindingOf(cursor) !== firstBinding) return undefined;
+      if (propChain.some((part) => part.length === 0) || propChain.join('.').length > 128)
+        return undefined;
+
+      if (propChain.length === 0) {
+        const values: string[] = [];
+        const valueSpans: Array<{ start: number; end: number }> = [];
+        for (const el of arrayElements) {
+          if (el.type !== 'StringLiteral' || typeof el.value !== 'string') return undefined;
+          values.push(el.value);
+          valueSpans.push({ start: el.start, end: el.end });
+        }
+        const paramKey = nameOf(firstParam) ?? 'item';
+        return { key: paramKey, values, valueSpans };
+      }
+
+      const values: string[] = [];
+      const valueSpans: Array<{ start: number; end: number }> = [];
+      for (const el of arrayElements) {
+        const resolved = objectPropertyLiteral(el, propChain);
+        if (!resolved) return undefined;
+        values.push(resolved.value);
+        valueSpans.push({ start: resolved.start, end: resolved.end });
+      }
+      const key = propChain.join('.');
+      return { key, property: key, values, valueSpans };
+    };
+
+    results.push({
+      callNode: current,
+      arrayNode,
+      arrayName,
+      arrayElements,
+      callback,
+      firstParam,
+      ...(secondParam ? { secondParam } : {}),
+      wrapParens,
+      resolveItemExpression,
+    });
+  }
+
+  return results;
 }

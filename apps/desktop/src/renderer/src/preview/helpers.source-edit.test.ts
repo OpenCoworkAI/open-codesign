@@ -4,8 +4,10 @@ import {
   handlePreviewMessage,
   type PreviewMessageHandlers,
   postSourceEditAncestorToPreviewWindow,
+  postSourceEditHudStateToPreviewWindow,
   postSourceEditPreviewToPreviewWindow,
   postSourceEditRestoreToPreviewWindow,
+  requestSourceEditHotSwap,
   requestSourceEditValidation,
 } from './helpers';
 
@@ -137,6 +139,116 @@ describe('preview-only commit validation', () => {
       '*',
     );
   });
+  it('posts HUD state and extended draft fields without extra undefined keys', () => {
+    const postMessage = vi.fn();
+    const error = vi.fn();
+    const win = { postMessage } as unknown as Window;
+    expect(
+      postSourceEditHudStateToPreviewWindow(null, { highlightBoxModel: true }, current, error),
+    ).toBe(false);
+    expect(
+      postSourceEditHudStateToPreviewWindow(win, { highlightBoxModel: true }, current, error),
+    ).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { __codesign: true, type: 'SOURCE_EDIT_HUD_STATE', highlightBoxModel: true, ...current },
+      '*',
+    );
+    expect(
+      postSourceEditPreviewToPreviewWindow(
+        win,
+        {
+          styles: { color: '#111111' },
+          removedStyles: ['opacity'],
+          attributes: {},
+          texts: { 'text:only': 'Live' },
+          className: 'btn',
+          hidden: true,
+        },
+        current,
+      ),
+    ).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      {
+        __codesign: true,
+        type: 'SOURCE_EDIT_PREVIEW',
+        styles: { color: '#111111' },
+        removedStyles: ['opacity'],
+        attributes: {},
+        texts: { 'text:only': 'Live' },
+        className: 'btn',
+        hidden: true,
+        ...current,
+      },
+      '*',
+    );
+  });
+  it('handles hot-swap request/response lifecycle, sender checks, timeout and abort', async () => {
+    vi.useFakeTimers();
+    const post = vi.fn<(data: unknown, origin: string) => void>();
+    const win = { postMessage: post } as unknown as Window;
+    const controller = new AbortController();
+    const pending = requestSourceEditHotSwap(
+      win,
+      {
+        instrumentedSource: 'export default function App() { return <p>New</p>; }',
+        sourceEditContext: { ...current, targets: {} },
+        kind: 'jsx',
+        restoreSelector: '/p[1]',
+      },
+      { signal: controller.signal, timeoutMs: 100 },
+    );
+    const req = post.mock.calls[0]?.[0] as { requestId: string; type: string };
+    expect(req.type).toBe('SOURCE_EDIT_HOT_SWAP');
+    // Reject wrong source / requestId
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: {} as Window,
+        data: {
+          __codesign: true,
+          type: 'SOURCE_EDIT_HOT_SWAPPED',
+          requestId: req.requestId,
+          ok: true,
+        },
+      }),
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: win,
+        data: { __codesign: true, type: 'SOURCE_EDIT_HOT_SWAPPED', requestId: 'other', ok: true },
+      }),
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: win,
+        data: {
+          __codesign: true,
+          type: 'SOURCE_EDIT_HOT_SWAPPED',
+          requestId: req.requestId,
+          ok: true,
+        },
+      }),
+    );
+    expect(await pending).toBe(true);
+
+    const timedOut = requestSourceEditHotSwap(
+      win,
+      {
+        instrumentedSource: 'const x = 1;',
+        sourceEditContext: { ...current, targets: {} },
+        kind: 'tsx',
+      },
+      { signal: new AbortController().signal, timeoutMs: 40 },
+    );
+    await vi.advanceTimersByTimeAsync(41);
+    expect(await timedOut).toBe(false);
+    expect(
+      await requestSourceEditHotSwap(
+        null,
+        { instrumentedSource: '', sourceEditContext: { ...current, targets: {} }, kind: 'jsx' },
+        { signal: new AbortController().signal },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('source-edit preview message revisions', () => {
@@ -209,5 +321,55 @@ describe('source-edit preview message revisions', () => {
       reason: 'shape',
     });
     expect(callbacks.onElementSelected).not.toHaveBeenCalled();
+  });
+  it('validates SOURCE_EDIT_INLINE_EDIT_REQUEST, SOURCE_EDIT_HOT_SWAPPED, and multi-revision arrays', () => {
+    const onInlineEditRequest = vi.fn();
+    const callbacks = { ...handlers(), onInlineEditRequest };
+    const inlineMsg = {
+      __codesign: true as const,
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST' as const,
+      selector: '/p[1]',
+      targetId: '10:50',
+      textKey: 'text:only',
+      text: 'Hello',
+      rect: { top: 10, left: 20, width: 100, height: 24 },
+      typography: { fontSize: '16px', color: '#111111' },
+      ...current,
+    };
+    const nextRev = { sourceHash: 'c'.repeat(64), previewRevision: 'preview-3' };
+    expect(handlePreviewMessage(inlineMsg, callbacks, [current, nextRev])).toEqual({
+      status: 'handled',
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+    });
+    expect(onInlineEditRequest).toHaveBeenCalledExactlyOnceWith(inlineMsg);
+    expect(
+      handlePreviewMessage({ ...inlineMsg, previewRevision: 'stale' }, callbacks, [
+        current,
+        nextRev,
+      ]),
+    ).toEqual({
+      status: 'rejected',
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+      reason: 'stale-source-edit',
+    });
+    expect(
+      handlePreviewMessage({ ...inlineMsg, typography: { badKey: '1' } }, callbacks, current),
+    ).toEqual({
+      status: 'rejected',
+      type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+      reason: 'shape',
+    });
+    expect(
+      handlePreviewMessage(
+        { __codesign: true, type: 'SOURCE_EDIT_HOT_SWAPPED', requestId: 'req-1', ok: true },
+        callbacks,
+      ),
+    ).toEqual({ status: 'handled', type: 'SOURCE_EDIT_HOT_SWAPPED' });
+    expect(
+      handlePreviewMessage(
+        { __codesign: true, type: 'SOURCE_EDIT_HOT_SWAPPED', requestId: 'req-1', ok: 'yes' },
+        callbacks,
+      ),
+    ).toEqual({ status: 'rejected', type: 'SOURCE_EDIT_HOT_SWAPPED', reason: 'shape' });
   });
 });

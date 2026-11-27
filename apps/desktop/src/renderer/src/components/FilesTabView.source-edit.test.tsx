@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignFileEntry } from '../hooks/useDesignFiles';
 import {
   postSourceEditRestoreToPreviewWindow,
+  requestSourceEditHotSwap,
   requestSourceEditValidation,
 } from '../preview/helpers';
 import type { WorkspacePreviewReadResult } from '../preview/workspace-source';
@@ -29,12 +30,23 @@ vi.mock('@open-codesign/runtime', async (original) => ({
     (source: string, options: { sourceEdit?: { previewRevision: string } }) =>
       `<html><body>${source}${options.sourceEdit?.previewRevision ?? ''}</body></html>`,
   ),
+  prepareInteractivePreviewHotSwap: vi.fn(
+    (source: string, sourceEdit: { sourceHash: string; previewRevision: string }) => ({
+      instrumentedSource: source,
+      context: {
+        sourceHash: sourceEdit.sourceHash,
+        previewRevision: sourceEdit.previewRevision,
+        targets: {},
+      },
+    }),
+  ),
 }));
 vi.mock('../preview/helpers', async (original) => {
   const actual = await original<typeof import('../preview/helpers')>();
   return {
     ...actual,
     requestSourceEditValidation: vi.fn(),
+    requestSourceEditHotSwap: vi.fn(async () => false),
     postSourceEditRestoreToPreviewWindow: vi.fn(actual.postSourceEditRestoreToPreviewWindow),
   };
 });
@@ -52,7 +64,10 @@ const target: SourceEditTarget = {
 };
 const inspect = vi.fn();
 const apply = vi.fn();
+const undo = vi.fn();
+const redo = vi.fn();
 const read = vi.fn();
+const write = vi.fn();
 const changeListeners = new Set<(event: { schemaVersion: 1; designId: string }) => void>();
 const onChanged = vi.fn((listener: (event: { schemaVersion: 1; designId: string }) => void) => {
   changeListeners.add(listener);
@@ -165,6 +180,31 @@ beforeEach(() => {
     patch: { start: 3, end: 6, expectedText: 'Old', replacement: 'New' },
   }));
   read.mockReset().mockResolvedValue({ path: 'App.jsx', content: '<p>Old</p>' });
+  write.mockReset().mockResolvedValue({ path: 'DESIGN.md' });
+  undo.mockReset().mockImplementation(async (request: { previewRevision: string }) => ({
+    schemaVersion: 1 as const,
+    status: 'applied' as const,
+    previewRevision: request.previewRevision,
+    path: 'App.jsx',
+    content: '<p>Old</p>',
+    sourceHash: hash,
+    scope: 'source-definition' as const,
+    canUndo: false,
+    canRedo: true,
+    patch: { start: 3, end: 6, expectedText: 'New', replacement: 'Old' },
+  }));
+  redo.mockReset().mockImplementation(async (request: { previewRevision: string }) => ({
+    schemaVersion: 1 as const,
+    status: 'applied' as const,
+    previewRevision: request.previewRevision,
+    path: 'App.jsx',
+    content: '<p>New</p>',
+    sourceHash: 'b'.repeat(64),
+    scope: 'source-definition' as const,
+    canUndo: true,
+    canRedo: false,
+    patch: { start: 3, end: 6, expectedText: 'Old', replacement: 'New' },
+  }));
   changeListeners.clear();
   onChanged.mockClear();
   subscribe.mockReset();
@@ -173,6 +213,7 @@ beforeEach(() => {
   selectCanvasElement.mockReset();
   vi.mocked(buildInteractivePreviewDocument).mockClear();
   vi.mocked(postSourceEditRestoreToPreviewWindow).mockClear();
+  vi.mocked(requestSourceEditHotSwap).mockReset().mockResolvedValue(false);
   vi.mocked(requestSourceEditValidation)
     .mockReset()
     .mockImplementation(async (_win, request) => ({
@@ -184,8 +225,8 @@ beforeEach(() => {
   Object.defineProperty(window, 'codesign', {
     configurable: true,
     value: {
-      files: { read, onChanged, subscribe, unsubscribe },
-      sourceEdits: { inspect, apply },
+      files: { read, write, onChanged, subscribe, unsubscribe },
+      sourceEdits: { inspect, apply, undo, redo },
       snapshots: {},
     },
   });
@@ -355,14 +396,14 @@ describe('FilesTab source edit integration', () => {
     changed = true;
     await changeFiles('a');
     expect(read).toHaveBeenCalledTimes(readsBeforeChange + 2);
-    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.querySelector('textarea')?.disabled).toBe(true);
     expect(tab('element')?.disabled).toBe(true);
     await emit({
       targetId: target.id,
       sourceHash: hash,
       previewRevision: oldRevision.previewRevision,
     });
-    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.querySelector('textarea')?.disabled).toBe(true);
     inspect.mockResolvedValueOnce({
       schemaVersion: 1,
       status: 'ready',
@@ -654,5 +695,291 @@ describe('FilesTab source edit integration', () => {
     });
     expect(openCommentBubble).not.toHaveBeenCalled();
     expect(selectCanvasElement).not.toHaveBeenCalled();
+  });
+
+  it('preserves the iframe DOM node and srcDoc across a successful hot-swap save', async () => {
+    vi.mocked(requestSourceEditHotSwap).mockResolvedValue(true);
+    await mount();
+    await toggle();
+    const frameBefore = container.querySelector('iframe');
+    const srcDocBefore = frameBefore?.srcdoc;
+    const revision = lastRevision();
+    await emit({
+      targetId: target.id,
+      sourceHash: hash,
+      previewRevision: revision.previewRevision,
+    });
+    const field = container.querySelector('textarea');
+    if (!field) throw new Error('Missing text field');
+    await typeInto(field, 'New');
+    inspect.mockResolvedValueOnce({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'App.jsx',
+      sourceHash: 'b'.repeat(64),
+      targets: [{ ...target, editableFields: [{ kind: 'set-text', value: 'New' }] }],
+    });
+    const callsBeforeSave = vi.mocked(buildInteractivePreviewDocument).mock.calls.length;
+    await clickApply();
+    expect(requestSourceEditHotSwap).toHaveBeenCalledOnce();
+    const frameAfter = container.querySelector('iframe');
+    expect(frameAfter).toBe(frameBefore);
+    expect(frameAfter?.srcdoc).toBe(srcDocBefore);
+    expect(vi.mocked(buildInteractivePreviewDocument)).toHaveBeenCalledTimes(callsBeforeSave);
+    expect(postSourceEditRestoreToPreviewWindow).not.toHaveBeenCalled();
+  });
+
+  it('supports editing standalone .html files cleanly', async () => {
+    read.mockResolvedValue({ path: 'landing.html', content: '<p>Old</p>' });
+    inspect.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'landing.html',
+      sourceHash: hash,
+      targets: [target],
+    });
+    await mount('landing.html');
+    await toggle();
+    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ path: 'landing.html' }));
+    await emit({
+      targetId: target.id,
+      sourceHash: hash,
+      previewRevision: lastRevision().previewRevision,
+    });
+    expect(container.querySelector('textarea')?.value).toBe('Old');
+  });
+
+  it('renders CanvasFloatingToolbar & InlineTextOverlay and commits quick actions / inline text', async () => {
+    const richTarget: SourceEditTarget = {
+      ...target,
+      capabilities: {
+        canUpsertStyle: true,
+        canUpsertAttribute: true,
+        canEditClassName: true,
+        canReorderUp: true,
+        canReorderDown: true,
+        canDuplicate: true,
+        canDelete: true,
+        sharedDefinition: false,
+        styleMode: 'inline',
+      },
+    };
+    inspect.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'App.jsx',
+      sourceHash: hash,
+      targets: [richTarget],
+    });
+    await mount();
+    await toggle();
+    const revision = lastRevision();
+    await emit({
+      targetId: richTarget.id,
+      sourceHash: hash,
+      previewRevision: revision.previewRevision,
+    });
+    const duplicateBtn = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="inspector.element.duplicate"]',
+    );
+    expect(duplicateBtn).not.toBeNull();
+    await act(async () => duplicateBtn?.click());
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: { kind: 'duplicate-element' } }),
+    );
+    const frame = container.querySelector('iframe');
+    if (!frame) throw new Error('No iframe');
+    const nextRev = lastRevision();
+    await emit({
+      targetId: richTarget.id,
+      sourceHash: nextRev.sourceHash,
+      previewRevision: nextRev.previewRevision,
+    });
+    await act(async () =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            __codesign: true,
+            type: 'SOURCE_EDIT_INLINE_EDIT_REQUEST',
+            selector: 'p',
+            targetId: richTarget.id,
+            textKey: 'text:only',
+            text: 'Old',
+            rect: { top: 10, left: 20, width: 80, height: 24 },
+            typography: { fontSize: '16px' },
+            sourceHash: nextRev.sourceHash,
+            previewRevision: nextRev.previewRevision,
+          },
+        }),
+      ),
+    );
+    const inlineInput = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="inspector.element.inlineEditorLabel"]',
+    );
+    expect(inlineInput).not.toBeNull();
+    if (!inlineInput) return;
+    await typeInto(inlineInput, 'InlineUpdated');
+    await act(async () => {
+      inlineInput.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({ operation: { kind: 'set-text', value: 'InlineUpdated' } }),
+    );
+  });
+
+  it('triggers undo and redo on Cmd/Ctrl+Z shortcuts while ignoring form inputs', async () => {
+    inspect.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'App.jsx',
+      sourceHash: hash,
+      canUndo: true,
+      canRedo: true,
+      targets: [target],
+    });
+    await mount();
+    await toggle();
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    await act(async () => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(undo).not.toHaveBeenCalled();
+    input.remove();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(undo).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'z',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(redo).toHaveBeenCalledOnce();
+  });
+
+  it('syncs the page color palette into DESIGN.md when requested from PageColorsSection', async () => {
+    read.mockImplementation(async (_designId: string, path: string) => {
+      if (path === 'DESIGN.md') {
+        return {
+          path: 'DESIGN.md',
+          content:
+            '---\nname: Brand\ncolors:\n  primary: "#112233"\n---\n\n## Overview\n\nKeep me.\n',
+        };
+      }
+      return { path, content: '<div style={{ color: "#abcdef" }}>Hello</div>' };
+    });
+    await mount();
+    const syncButton = container.querySelector<HTMLButtonElement>(
+      'button[title="inspector.page.syncDesignMd"]',
+    );
+    expect(syncButton).not.toBeNull();
+    await act(async () => syncButton?.click());
+    expect(write).toHaveBeenCalledWith(
+      'a',
+      'DESIGN.md',
+      expect.stringContaining('#abcdef'),
+      expect.objectContaining({ expectedContent: expect.stringContaining('Keep me.') }),
+    );
+    expect(write.mock.calls[0]?.[2]).toContain('#112233');
+    expect(write.mock.calls[0]?.[2]).toContain('Keep me.');
+  });
+
+  it('builds structured AST handoff context before exiting on Ask AI', async () => {
+    const richContent =
+      'export function Hero() {\n  return <p style={{ color: "#111" }}>Old</p>;\n}';
+    const startOffset = richContent.indexOf('<p');
+    const endOffset = richContent.indexOf('</p>') + '</p>'.length;
+    read.mockResolvedValue({ path: 'App.jsx', content: richContent });
+    const astTarget: SourceEditTarget = {
+      ...target,
+      start: startOffset,
+      end: endOffset,
+      sourceLocation: { startLine: 2, startCol: 10, endLine: 2, endCol: 49 },
+      textLayout: [{ kind: 'text', value: 'Old' }],
+      capabilities: {
+        canUpsertStyle: true,
+        canUpsertAttribute: true,
+        canEditClassName: true,
+        canReorderUp: false,
+        canReorderDown: false,
+        canDuplicate: false,
+        canDelete: false,
+        sharedDefinition: false,
+        enclosingComponent: 'Hero',
+        styleMode: 'inline',
+      },
+    };
+    inspect.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'App.jsx',
+      sourceHash: hash,
+      targets: [astTarget],
+    });
+    await mount();
+    await toggle();
+    const frame = container.querySelector('iframe');
+    if (!frame) throw new Error('No iframe');
+    const revision = lastRevision();
+    await act(async () =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            ...selection({
+              targetId: astTarget.id,
+              sourceHash: hash,
+              previewRevision: revision.previewRevision,
+            }),
+            parentOuterHTML: '<section><p>Old</p></section>',
+            elementSnapshot: {
+              computedStyle: { color: 'rgb(17, 17, 17)', padding: '8px' },
+              boxModel: {
+                width: 100,
+                height: 20,
+                padding: { top: 0, right: 0, bottom: 0, left: 0 },
+                margin: { top: 0, right: 0, bottom: 0, left: 0 },
+                border: { top: 0, right: 0, bottom: 0, left: 0 },
+              },
+              instanceCount: 1,
+            },
+          },
+        }),
+      ),
+    );
+    const askAiBtn = buttonByText('inspector.element.askAi');
+    expect(askAiBtn).not.toBeNull();
+    await act(async () => askAiBtn?.click());
+    expect(elementModeOn()).toBe(false);
+    expect(openCommentBubble).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePath: 'App.jsx',
+        parentOuterHTML: '<section><p>Old</p></section>',
+        astContext: expect.objectContaining({
+          startLine: 2,
+          startCol: 10,
+          enclosingComponent: 'Hero',
+          sourceExcerpt: '<p style={{ color: "#111" }}>Old</p>',
+          computedStyles: { color: 'rgb(17, 17, 17)', padding: '8px' },
+        }),
+      }),
+    );
   });
 });

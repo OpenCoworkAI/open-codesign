@@ -51,6 +51,7 @@ describe('localized source edit explanations', () => {
     const sources = await Promise.all(
       [
         '../../../main/source-edit-engine.ts',
+        '../../../main/source-edit-html.ts',
         '../../../main/source-edits-ipc.ts',
         '../../../main/source-edit-atomic.ts',
       ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
@@ -58,7 +59,7 @@ describe('localized source edit explanations', () => {
     const codes = new Set<string>();
     for (const source of sources) {
       for (const match of source.matchAll(
-        /(?:reject(?:ed)?|new SourceEditCommitError)\(\s*'([^']+)'/g,
+        /(?:reject(?:Edit|ed)?|new SourceEditCommitError)\(\s*'([^']+)'/g,
       ))
         if (match[1]) codes.add(match[1]);
       for (const match of source.matchAll(

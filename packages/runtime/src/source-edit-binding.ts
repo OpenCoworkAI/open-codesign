@@ -1,4 +1,8 @@
-import type { SourceEditOperation, SourceEditTextLayout } from '@open-codesign/shared';
+import type {
+  SourceEditMapSource,
+  SourceEditOperation,
+  SourceEditTextLayout,
+} from '@open-codesign/shared';
 
 export interface SourceEditFieldState {
   key: string;
@@ -8,6 +12,7 @@ export interface SourceEditFieldState {
 export interface SourceEditBindingPlan {
   textLayout: SourceEditTextLayout;
   editableFields: SourceEditOperation[];
+  mapSource?: SourceEditMapSource;
 }
 interface BindingStyle {
   getPropertyValue(name: string): string;
@@ -36,8 +41,34 @@ export function bindSourceEditFields(
   bindNode?: (key: string, node: BindingNode | null) => void,
 ): SourceEditFieldState[] {
   function fieldKey(field: SourceEditOperation): string {
-    if (field.kind === 'set-text') return `text:${field.textId ?? 'only'}`;
-    return field.kind === 'set-attribute' ? `attribute:${field.name}` : `style:${field.property}`;
+    switch (field.kind) {
+      case 'set-text':
+        return `text:${field.textId ?? 'only'}`;
+      case 'set-attribute':
+      case 'remove-attribute':
+        return `attribute:${field.name}`;
+      case 'set-style':
+      case 'remove-style':
+        return `style:${field.property}`;
+      case 'set-class-name':
+        return 'className';
+      case 'toggle-visibility':
+        return 'visibility';
+      case 'reorder-sibling':
+        return field.itemIndex === undefined
+          ? 'structure:reorder'
+          : `structure:reorder:${field.itemIndex}`;
+      case 'duplicate-element':
+        return field.itemIndex === undefined
+          ? 'structure:duplicate'
+          : `structure:duplicate:${field.itemIndex}`;
+      case 'delete-element':
+        return field.itemIndex === undefined
+          ? 'structure:delete'
+          : `structure:delete:${field.itemIndex}`;
+      case 'set-map-item-text':
+        return `map-text:${field.itemIndex}:${field.fieldKey}`;
+    }
   }
   const fields = plan.editableFields.slice(0, 512);
   const states: SourceEditFieldState[] = fields.map((field) => ({
@@ -158,20 +189,53 @@ export function bindSourceEditFields(
     if (!field || !state) continue;
     if (field.kind === 'set-attribute') {
       state.status = host.getAttribute(field.name) === field.value ? 'ready' : 'changed';
+    } else if (field.kind === 'remove-attribute') {
+      state.status = host.getAttribute(field.name) !== null ? 'ready' : 'changed';
     } else if (field.kind === 'set-style') {
       const cssName = field.property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
       const scratch = host.ownerDocument.createElement('div');
       let value = field.value;
       if (
         field.property !== 'color' &&
+        field.property !== 'background' &&
         field.property !== 'backgroundColor' &&
+        field.property !== 'borderColor' &&
+        field.property !== 'opacity' &&
+        field.property !== 'fontWeight' &&
+        field.property !== 'lineHeight' &&
         /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)
       )
         value += 'px';
       scratch.style.setProperty(cssName, value);
       const expected = scratch.style.getPropertyValue(cssName);
-      const actual = host.style?.getPropertyValue(cssName);
+      const actual =
+        typeof host.style?.getPropertyValue === 'function'
+          ? host.style.getPropertyValue(cssName)
+          : '';
       state.status = expected && actual === expected ? 'ready' : 'changed';
+    } else if (field.kind === 'remove-style') {
+      const cssName = field.property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+      const actual =
+        typeof host.style?.getPropertyValue === 'function'
+          ? host.style.getPropertyValue(cssName)
+          : '';
+      state.status = actual ? 'ready' : 'changed';
+    } else if (field.kind === 'set-class-name') {
+      state.status = (host.getAttribute('class') ?? '') === field.value ? 'ready' : 'changed';
+    } else if (field.kind === 'toggle-visibility') {
+      const display =
+        typeof host.style?.getPropertyValue === 'function'
+          ? host.style.getPropertyValue('display')
+          : '';
+      const hiddenNow = display === 'none' || host.getAttribute('hidden') !== null;
+      state.status = hiddenNow === field.hidden ? 'ready' : 'changed';
+    } else if (
+      field.kind === 'reorder-sibling' ||
+      field.kind === 'duplicate-element' ||
+      field.kind === 'delete-element' ||
+      field.kind === 'set-map-item-text'
+    ) {
+      state.status = 'ready';
     }
     if (state.status === 'ready' && field.kind === 'set-text' && bindings.has(state.key))
       bindNode?.(state.key, bindings.get(state.key) ?? null);

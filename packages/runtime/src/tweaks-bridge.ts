@@ -183,6 +183,13 @@ export const TWEAKS_BRIDGE_SETUP = `(function() {
     applyInitial: function(source) {
       replaceTokens(parseInitialTokens(source));
     },
+    resetForSwap: function() {
+      state.replayReason = null;
+      state.warned = false;
+      state.element = null;
+      state.module = null;
+      state.renderPending = false;
+    },
     runModule: function(run) {
       state.module = run;
       state.moduleRunning = true;

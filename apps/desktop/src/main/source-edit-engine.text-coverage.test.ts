@@ -46,8 +46,14 @@ describe('generated page text-definition coverage', () => {
     expect(result.content).toBe(generated.replace("name:'Alex'", 'name:"Morgan"'));
     const after = inspect(result.content);
     for (const tag of ['h1', 'footer'])
-      expect(after.targets.find((t) => t.tagName === tag)?.editableFields[0]?.value).toBe('Morgan');
-    expect(after.targets.find((t) => t.tagName === 'span')?.editableFields[0]?.value).toBe('Alex');
+      expect(after.targets.find((t) => t.tagName === tag)?.editableFields[0]).toMatchObject({
+        kind: 'set-text',
+        value: 'Morgan',
+      });
+    expect(after.targets.find((t) => t.tagName === 'span')?.editableFields[0]).toMatchObject({
+      kind: 'set-text',
+      value: 'Alex',
+    });
     expect(after.targets.find((t) => t.tagName === 'h1')?.textSources?.[0]?.origin).toContain(
       'resume',
     );

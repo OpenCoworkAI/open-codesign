@@ -4,6 +4,8 @@ import {
   SourceEditApplyBatchRequestV1,
   SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
+  SourceEditElementSnapshot,
+  SourceEditHistoryRequestV1,
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
   SourceEditOperation,
@@ -60,19 +62,47 @@ describe('source edit wire contracts', () => {
       SourceEditApplyRequestV1.safeParse({ ...request, expectedSourceHash: 'stale' }).success,
     ).toBe(false);
   });
-  it('describes current editable literals and unsupported reasons', () => {
+  it('describes current editable literals, unsupported reasons, and optional v2 metadata', () => {
     expect(SourceEditTarget.parse(target).editableFields).toEqual([
       { kind: 'set-text', value: 'Hello' },
     ]);
-    expect(
-      SourceEditInspectResultV1.parse({
-        schemaVersion: 1,
-        status: 'ready',
-        path: 'App.jsx',
-        sourceHash: hash,
-        targets: [target],
-      }).status,
-    ).toBe('ready');
+    const richTarget = {
+      ...target,
+      capabilities: {
+        canUpsertStyle: true,
+        canUpsertAttribute: true,
+        canEditClassName: true,
+        canReorderUp: false,
+        canReorderDown: true,
+        canDuplicate: true,
+        canDelete: true,
+        sharedDefinition: false,
+        enclosingComponent: 'Header',
+        styleMode: 'inline' as const,
+      },
+      styleBindings: [
+        {
+          property: 'color' as const,
+          expression: 't.accent',
+          tokenName: 'accent',
+          editable: false,
+        },
+      ],
+      className: 'px-4 py-2',
+      sourceLocation: { startLine: 2, startCol: 10, endLine: 2, endCol: 30 },
+    };
+    expect(SourceEditTarget.parse(richTarget).capabilities?.styleMode).toBe('inline');
+    const parsedInspect = SourceEditInspectResultV1.parse({
+      schemaVersion: 1,
+      status: 'ready',
+      path: 'App.jsx',
+      sourceHash: hash,
+      targets: [richTarget],
+      canUndo: true,
+      canRedo: false,
+    });
+    expect(parsedInspect.status).toBe('ready');
+    if (parsedInspect.status === 'ready') expect(parsedInspect.canUndo).toBe(true);
   });
   it('carries ordered field layout while rejecting executable or oversized descriptors', () => {
     const textLayout = [
@@ -91,7 +121,7 @@ describe('source edit wire contracts', () => {
       expect(SourceEditTarget.safeParse({ ...target, textLayout: invalid }).success).toBe(false);
     expect(SourceEditApplyRequestV1.safeParse({ ...request, textLayout }).success).toBe(false);
   });
-  it('uses field identities independent from current displayed values', () => {
+  it('uses field identities independent from current displayed values across all operations', () => {
     expect(sourceEditFieldKey({ kind: 'set-text', value: 'Hello' })).toBe('text:only');
     expect(sourceEditFieldKey({ kind: 'set-text', textId: '38:43', value: 'Changed' })).toBe(
       'text:38:43',
@@ -99,9 +129,28 @@ describe('source edit wire contracts', () => {
     expect(sourceEditFieldKey({ kind: 'set-attribute', name: 'title', value: 'Tip' })).toBe(
       'attribute:title',
     );
+    expect(sourceEditFieldKey({ kind: 'remove-attribute', name: 'title' })).toBe('attribute:title');
     expect(sourceEditFieldKey({ kind: 'set-style', property: 'gap', value: '12' })).toBe(
       'style:gap',
     );
+    expect(sourceEditFieldKey({ kind: 'remove-style', property: 'gap' })).toBe('style:gap');
+    expect(sourceEditFieldKey({ kind: 'set-class-name', value: 'p-4' })).toBe('className');
+    expect(sourceEditFieldKey({ kind: 'toggle-visibility', hidden: true })).toBe('visibility');
+    expect(sourceEditFieldKey({ kind: 'reorder-sibling', direction: 'up' })).toBe(
+      'structure:reorder',
+    );
+    expect(sourceEditFieldKey({ kind: 'duplicate-element', itemIndex: 1 })).toBe(
+      'structure:duplicate:1',
+    );
+    expect(sourceEditFieldKey({ kind: 'delete-element', itemIndex: 0 })).toBe('structure:delete:0');
+    expect(
+      sourceEditFieldKey({
+        kind: 'set-map-item-text',
+        itemIndex: 2,
+        fieldKey: 'title',
+        value: 'Card',
+      }),
+    ).toBe('map-text:2:title');
   });
   it('adds bounded text segment identities without accepting caller write ranges', () => {
     const operation = { kind: 'set-text', value: 'New', textId: '38:43' };
@@ -128,8 +177,8 @@ describe('source edit wire contracts', () => {
   it.each([
     'onClick',
     'style',
-    'src',
-    'href',
+    'dangerouslySetInnerHTML',
+    'innerHTML',
     'data-codesign-source-id',
   ])('rejects forbidden attribute %s', (name) => {
     expect(SourceEditOperation.safeParse({ kind: 'set-attribute', name, value: 'x' }).success).toBe(
@@ -137,14 +186,49 @@ describe('source edit wire contracts', () => {
     );
   });
   it.each([
-    'background',
     'backgroundImage',
     'position',
+    'content',
     '--custom',
   ])('rejects forbidden style %s', (property) => {
     expect(SourceEditOperation.safeParse({ kind: 'set-style', property, value: 'x' }).success).toBe(
       false,
     );
+  });
+  it('accepts expanded safe attributes, styles, and history requests', () => {
+    expect(
+      SourceEditOperation.parse({ kind: 'set-style', property: 'background', value: '#112233' })
+        .kind,
+    ).toBe('set-style');
+    expect(
+      SourceEditOperation.parse({
+        kind: 'set-attribute',
+        name: 'href',
+        value: 'https://example.com',
+      }).kind,
+    ).toBe('set-attribute');
+    expect(
+      SourceEditHistoryRequestV1.parse({
+        schemaVersion: 1,
+        designId: 'design',
+        path: 'App.jsx',
+        expectedSourceHash: hash,
+        previewRevision: 'preview-1',
+      }).designId,
+    ).toBe('design');
+    expect(
+      SourceEditElementSnapshot.parse({
+        computedStyle: { color: 'rgb(0, 0, 0)', fontSize: '16px' },
+        boxModel: {
+          width: 120,
+          height: 40,
+          padding: { top: 8, right: 16, bottom: 8, left: 16 },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          border: { top: 0, right: 0, bottom: 0, left: 0 },
+        },
+        instanceCount: 3,
+      }).instanceCount,
+    ).toBe(3);
   });
   it('rejects extra executable fields, non-source scope and obsolete versions', () => {
     expect(
@@ -173,6 +257,8 @@ describe('source edit wire contracts', () => {
       ...result,
       previewRevision: 'preview-1',
       warnings: ['Saved; refresh notification failed.'],
+      canUndo: true,
+      canRedo: false,
     };
     expect(SourceEditApplyResultV1.parse(ack)).toEqual(ack);
     expect(SourceEditApplyResultV1.safeParse({ ...ack, previewRevision: '' }).success).toBe(false);

@@ -10,6 +10,7 @@ import {
   isSourceEditSelection,
   MAX_SOURCE_EDIT_TARGETS,
   SOURCE_EDIT_ATTRIBUTE,
+  SOURCE_EDIT_ITEM_INDEX_ATTRIBUTE,
   type SourceEditPreviewOptions,
 } from './source-edit-instrumentation';
 
@@ -312,5 +313,245 @@ describe('source edit selection shape', () => {
     ]) {
       expect(isSourceEditSelection(value)).toBe(false);
     }
+  });
+
+  it('accepts expanded field keys (all styles, attributes, className, visibility, map-text, structure)', () => {
+    expect(
+      isSourceEditSelection({
+        ...valid,
+        fieldStates: [
+          { key: 'text:only', status: 'ready' },
+          { key: 'attribute:aria-label', status: 'ready' },
+          { key: 'attribute:href', status: 'ready' },
+          { key: 'attribute:src', status: 'ready' },
+          { key: 'style:fontFamily', status: 'ready' },
+          { key: 'style:gridTemplateColumns', status: 'ready' },
+          { key: 'style:objectFit', status: 'ready' },
+          { key: 'className', status: 'ready' },
+          { key: 'visibility', status: 'ready' },
+          { key: 'map-text:0:title', status: 'ready' },
+          { key: 'structure:reorder:0', status: 'ready' },
+          { key: 'structure:duplicate', status: 'ready' },
+          { key: 'structure:delete:2', status: 'ready' },
+        ],
+      }),
+    ).toBe(true);
+    for (const badKey of [
+      'style:position',
+      'attribute:onclick',
+      'map-text:1001:title',
+      'structure:delete:1001',
+      'unknown:key',
+    ]) {
+      expect(
+        isSourceEditSelection({
+          ...valid,
+          fieldStates: [{ key: badKey, status: 'ready' }],
+        }),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('map item bindings and HTML instrumentation', () => {
+  it('instruments .map() callbacks with parens wrapping and groups edits at rootInsertionOffset', () => {
+    const source =
+      'function App(){const items=[{name:"A"},{name:"B"}];return <ul>{items.map(item => <li>{item.name}</li>)}</ul>}';
+    const liStart = source.indexOf('<li');
+    const liEnd = source.indexOf('</li>') + 5;
+    const liInsert = source.indexOf('>{item.name}');
+    const paramsStart = source.indexOf('item =>');
+    const paramsEnd = paramsStart + 'item'.length;
+    const plan: SourceEditPreviewOptions = {
+      source,
+      sourceHash,
+      previewRevision: 'preview-map',
+      targets: [
+        {
+          id: `${liStart}:${liEnd}`,
+          tagName: 'li',
+          start: liStart,
+          end: liEnd,
+          insertionOffset: liInsert,
+          mapSource: {
+            arrayName: 'items',
+            itemCount: 2,
+            fields: [{ key: 'name', values: ['A', 'B'] }],
+          },
+        },
+      ],
+      mapItemBindings: [
+        {
+          targetId: `${liStart}:${liEnd}`,
+          paramsStart,
+          paramsEnd,
+          wrapParens: true,
+          rootInsertionOffset: liInsert,
+        },
+      ],
+    };
+    const result = instrumentSourceForEditing(source, plan);
+    expect(result.source).toContain('items.map((item, __csIdx) =>');
+    expect(result.source).toContain(
+      ` ${SOURCE_EDIT_ATTRIBUTE}="preview-map:${liStart}:${liEnd}" ${SOURCE_EDIT_ITEM_INDEX_ATTRIBUTE}={__csIdx}>`,
+    );
+    expect(result.context.mapSources?.[`${liStart}:${liEnd}`]).toEqual({
+      arrayName: 'items',
+      itemCount: 2,
+      fields: [{ key: 'name', values: ['A', 'B'] }],
+    });
+    const compiled = babel.transform(result.source, { presets: ['react'] });
+    const rendered = new Function('React', `${compiled.code}\nreturn App();`)({
+      createElement: (type: string, props: Record<string, unknown>, ...children: unknown[]) => ({
+        type,
+        props,
+        children,
+      }),
+    }) as { children: Array<Array<{ props: Record<string, unknown> }>> };
+    expect(rendered.children[0]?.map((el) => el.props[SOURCE_EDIT_ITEM_INDEX_ATTRIBUTE])).toEqual([
+      0, 1,
+    ]);
+  });
+
+  it('supports parenthesized params and existingIndexName in mapItemBindings', () => {
+    const source =
+      'function App(){return <ul>{a.map((x) => <li/>)}{b.map((y, idx) => <span/>)}</ul>}';
+    const liInsert = source.indexOf('/>');
+    const spanInsert = source.indexOf('/>', liInsert + 2);
+    const xStart = source.indexOf('(x') + 1;
+    const xEnd = xStart + 1;
+    const yStart = source.indexOf('(y') + 1;
+    const yEnd = yStart + 'y, idx'.length;
+    const result = instrumentSourceForEditing(source, {
+      source,
+      sourceHash,
+      previewRevision: 'preview-map2',
+      targets: [],
+      mapItemBindings: [
+        {
+          targetId: '1:2',
+          paramsStart: xStart,
+          paramsEnd: xEnd,
+          wrapParens: false,
+          rootInsertionOffset: liInsert,
+        },
+        {
+          targetId: '3:4',
+          paramsStart: yStart,
+          paramsEnd: yEnd,
+          wrapParens: false,
+          existingIndexName: 'idx',
+          rootInsertionOffset: spanInsert,
+        },
+      ],
+    });
+    expect(result.source).toContain(
+      'a.map((x, __csIdx) => <li data-codesign-item-index={__csIdx}/>)',
+    );
+    expect(result.source).toContain('b.map((y, idx) => <span data-codesign-item-index={idx}/>)');
+    expect(() => babel.transform(result.source, { presets: ['react'] })).not.toThrow();
+  });
+
+  it('rejects malformed or unsafe mapItemBindings and rejects mapItemBindings in HTML mode', () => {
+    const source = 'function App(){return <ul>{a.map(x => <li>{x}</li>)}</ul>}';
+    const liInsert = source.indexOf('>{x}');
+    const base: SourceEditPreviewOptions = {
+      source,
+      sourceHash,
+      previewRevision: 'preview-bad',
+      targets: [],
+    };
+    expect(() =>
+      instrumentSourceForEditing(source, {
+        ...base,
+        mapItemBindings: [
+          {
+            targetId: '1:2',
+            paramsStart: 36,
+            paramsEnd: 35,
+            wrapParens: true,
+            rootInsertionOffset: liInsert,
+          },
+        ],
+      }),
+    ).toThrow('Invalid source edit target plan');
+    expect(() =>
+      instrumentSourceForEditing(source, {
+        ...base,
+        mapItemBindings: [
+          {
+            targetId: '1:2',
+            paramsStart: 35,
+            paramsEnd: 36,
+            wrapParens: true,
+            existingIndexName: 'i} onClick={evil',
+            rootInsertionOffset: liInsert,
+          },
+        ],
+      }),
+    ).toThrow('Invalid source edit target plan');
+    expect(() =>
+      instrumentSourceForEditing(
+        source,
+        {
+          ...base,
+          mapItemBindings: [
+            {
+              targetId: '1:2',
+              paramsStart: 35,
+              paramsEnd: 36,
+              wrapParens: true,
+              rootInsertionOffset: liInsert,
+            },
+          ],
+        },
+        { html: true },
+      ),
+    ).toThrow('Invalid source edit target plan');
+  });
+
+  it('instruments pure HTML documents and injects sourceEditContext without Babel compilation', () => {
+    const html =
+      '<!doctype html><html><body><DIV class="card"><button>Save</button><img src="a.png"></DIV></body></html>';
+    const divStart = html.indexOf('<DIV');
+    const divEnd = html.indexOf('</DIV>') + 6;
+    const btnStart = html.indexOf('<button');
+    const btnEnd = html.indexOf('</button>') + 9;
+    const imgStart = html.indexOf('<img');
+    const imgEnd = html.indexOf('>', imgStart) + 1;
+    const plan: SourceEditPreviewOptions = {
+      source: html,
+      sourceHash,
+      previewRevision: 'preview-html',
+      targets: [
+        {
+          id: `${divStart}:${divEnd}`,
+          tagName: 'div',
+          start: divStart,
+          end: divEnd,
+          insertionOffset: html.indexOf('><button'),
+        },
+        {
+          id: `${btnStart}:${btnEnd}`,
+          tagName: 'button',
+          start: btnStart,
+          end: btnEnd,
+          insertionOffset: html.indexOf('>Save'),
+        },
+        {
+          id: `${imgStart}:${imgEnd}`,
+          tagName: 'img',
+          start: imgStart,
+          end: imgEnd,
+          insertionOffset: imgEnd - 1,
+        },
+      ],
+    };
+    const doc = buildInteractivePreviewDocument(html, { path: 'index.html', sourceEdit: plan });
+    expect(doc).not.toContain('AGENT_BODY_BEGIN');
+    expect(doc).not.toContain('window.Babel.transform');
+    expect(doc).toContain(`${SOURCE_EDIT_ATTRIBUTE}="preview-html:${btnStart}:${btnEnd}"`);
+    expect(doc).toContain(`${SOURCE_EDIT_ATTRIBUTE}="preview-html:${imgStart}:${imgEnd}"`);
+    expect(doc).toContain('"previewRevision":"preview-html"');
   });
 });

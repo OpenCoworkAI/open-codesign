@@ -37,6 +37,7 @@ import type {
   SourceEditApplyBatchRequestV1,
   SourceEditApplyRequestV1,
   SourceEditApplyResultV1,
+  SourceEditHistoryRequestV1,
   SourceEditInspectRequestV1,
   SourceEditInspectResultV1,
   SupportedOnboardingProvider,
@@ -472,6 +473,14 @@ export interface UsageBudgetResult {
   week: UsageBudgetTotals;
 }
 
+export interface SourceEditsApi {
+  inspect: (input: SourceEditInspectRequestV1) => Promise<SourceEditInspectResultV1>;
+  apply: (input: SourceEditApplyRequestV1) => Promise<SourceEditApplyResultV1>;
+  applyBatch: (input: SourceEditApplyBatchRequestV1) => Promise<SourceEditApplyResultV1>;
+  undo?: (input: SourceEditHistoryRequestV1) => Promise<SourceEditApplyResultV1>;
+  redo?: (input: SourceEditHistoryRequestV1) => Promise<SourceEditApplyResultV1>;
+}
+
 const api = {
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
@@ -767,7 +776,17 @@ const api = {
         'codesign:source-edits:v1:apply-batch',
         input,
       ) as Promise<SourceEditApplyResultV1>,
-  },
+    undo: (input: SourceEditHistoryRequestV1) =>
+      ipcRenderer.invoke(
+        'codesign:source-edits:v1:undo',
+        input,
+      ) as Promise<SourceEditApplyResultV1>,
+    redo: (input: SourceEditHistoryRequestV1) =>
+      ipcRenderer.invoke(
+        'codesign:source-edits:v1:redo',
+        input,
+      ) as Promise<SourceEditApplyResultV1>,
+  } as SourceEditsApi,
   files: {
     list: (designId: string) =>
       ipcRenderer.invoke('codesign:files:v1:list', {

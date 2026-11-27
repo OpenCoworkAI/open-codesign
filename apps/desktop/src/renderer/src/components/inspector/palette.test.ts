@@ -4,8 +4,12 @@ import {
   colorKey,
   designMdColors,
   paletteMatch,
+  paletteSwatchSelected,
+  parseTweakCssVar,
   sourceColorCounts,
+  toTweakCssVarKey,
   tweakColorTokens,
+  tweakCssVarForToken,
 } from './palette';
 
 describe('inspector color palette helpers', () => {
@@ -89,5 +93,25 @@ colors:
     expect(paletteMatch(palette, '#F97316')).toEqual(palette[0]);
     expect(paletteMatch(palette, '#10b981')).toBeNull();
     expect(paletteMatch(palette, 'invalid')).toBeNull();
+  });
+
+  it('matches and formats var(--ocd-tweak-<k>) CSS custom property tokens', () => {
+    expect(toTweakCssVarKey('accentColor')).toBe('accent-color');
+    expect(tweakCssVarForToken('accentColor')).toBe('var(--ocd-tweak-accent-color)');
+    expect(parseTweakCssVar('var(--ocd-tweak-accent-color)')).toBe('accent-color');
+    expect(parseTweakCssVar('var(--ocd-tweak-accent-color, #fff)')).toBe('accent-color');
+    expect(parseTweakCssVar('var(--other-var)')).toBeNull();
+
+    const palette = buildPalette({
+      tokens: { accentColor: '#f97316' },
+      designColors: { neutral: '#334155' },
+    });
+    const first = palette[0];
+    const second = palette[1];
+    if (!first || !second) throw new Error('Missing palette swatches');
+    expect(paletteMatch(palette, 'var(--ocd-tweak-accent-color)')).toEqual(first);
+    expect(paletteMatch(palette, 'var(--ocd-tweak-missing)')).toBeNull();
+    expect(paletteSwatchSelected(first, 'var(--ocd-tweak-accent-color)')).toBe(true);
+    expect(paletteSwatchSelected(second, 'var(--ocd-tweak-accent-color)')).toBe(false);
   });
 });

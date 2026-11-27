@@ -4,6 +4,8 @@ import {
   inspectWorkspaceSourceEdit,
   persistWorkspaceSourceEdit,
   persistWorkspaceSourceEditBatch,
+  redoWorkspaceSourceEdit,
+  undoWorkspaceSourceEdit,
 } from './source-edit-persistence';
 
 const inspectRequest = {
@@ -136,6 +138,71 @@ describe('source edit IPC persistence boundary', () => {
         batchRequest,
         vi.fn(async () => ({ status: 'ok' })) as unknown as Parameters<
           typeof persistWorkspaceSourceEditBatch
+        >[1],
+      ),
+    ).rejects.toThrow();
+  });
+  it('validates undo and redo requests and acknowledgements fail-closed', async () => {
+    const historyRequest = {
+      schemaVersion: 1 as const,
+      designId: 'a',
+      path: 'App.jsx',
+      expectedSourceHash: 'a'.repeat(64),
+      previewRevision: 'revision',
+    };
+    const applied = {
+      schemaVersion: 1 as const,
+      status: 'applied' as const,
+      path: 'App.jsx',
+      content: '<p>Undo</p>',
+      sourceHash: 'c'.repeat(64),
+      scope: 'source-definition' as const,
+      previewRevision: 'revision',
+      canUndo: false,
+      canRedo: true,
+      patch: { start: 0, end: 10, expectedText: 'New', replacement: 'Old' },
+    };
+    expect(
+      await undoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => applied),
+      ),
+    ).toEqual(applied);
+    expect(
+      await redoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => ({ ...applied, canUndo: true, canRedo: false })),
+      ),
+    ).toMatchObject({ status: 'applied', canUndo: true, canRedo: false });
+    const rejected = {
+      schemaVersion: 1 as const,
+      status: 'rejected' as const,
+      reason: 'stale-source',
+      message: 'Changed',
+    };
+    expect(
+      await undoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => rejected),
+      ),
+    ).toEqual(rejected);
+    await expect(
+      redoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => ({ ...applied, path: 'Other.jsx' })),
+      ),
+    ).rejects.toThrow('different source path');
+    await expect(
+      undoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => ({ ...applied, previewRevision: 'stale' })),
+      ),
+    ).rejects.toThrow('preview revision');
+    await expect(
+      redoWorkspaceSourceEdit(
+        historyRequest,
+        vi.fn(async () => ({ status: 'bad' })) as unknown as Parameters<
+          typeof redoWorkspaceSourceEdit
         >[1],
       ),
     ).rejects.toThrow();

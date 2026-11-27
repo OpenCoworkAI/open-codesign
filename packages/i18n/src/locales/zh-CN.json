@@ -114,6 +114,8 @@
         "unsafePath": "该文件路径或链接状态不符合安全写入要求，不能保存修改。",
         "invalidInput": "编辑请求无效，请重新打开编辑面板后再试。",
         "stageChanged": "保存时检测到临时文件发生变化，已停止写入，请检查文件后重试。",
+        "nothingToUndo": "当前文件没有可撤销的源码修改记录。",
+        "nothingToRedo": "当前文件没有可重做的源码修改记录。",
         "unknown": "暂时无法确认此内容可安全修改，请刷新预览后重新选择；若仍不可编辑，请检查源码。"
       },
       "ancestors": "上层元素",
@@ -337,23 +339,144 @@
     },
     "groups": {
       "content": "内容",
+      "media": "媒体",
+      "appearance": "外观",
+      "typography": "排版",
+      "spacing": "间距",
       "color": "颜色",
-      "layout": "排版与间距",
+      "layout": "布局",
+      "classes": "类名",
       "accessibility": "辅助信息"
     },
     "fields": {
       "text": "文案",
       "textN": "文案 {{n}}",
       "color": "文字",
+      "background": "背景填充",
       "backgroundColor": "背景",
+      "fontFamily": "字体",
       "fontSize": "字号",
+      "fontWeight": "字重",
+      "lineHeight": "行高",
+      "letterSpacing": "字距",
+      "textAlign": "对齐",
+      "textTransform": "大小写",
       "gap": "间距",
       "padding": "内边距",
-      "borderRadius": "圆角",
+      "margin": "外边距",
+      "width": "宽度",
+      "height": "高度",
       "maxWidth": "最大宽度",
+      "minHeight": "最小高度",
+      "border": "边框",
+      "borderColor": "边框颜色",
+      "borderWidth": "边框宽度",
+      "borderRadius": "圆角",
+      "boxShadow": "阴影",
+      "opacity": "不透明度",
+      "overflow": "溢出",
+      "display": "显示模式",
+      "flexDirection": "排列方向",
+      "justifyContent": "主轴对齐",
+      "alignItems": "交叉轴对齐",
+      "flexWrap": "换行",
+      "gridTemplateColumns": "网格列",
+      "objectFit": "填充方式",
       "title": "提示文字",
       "placeholder": "占位文字",
-      "alt": "替代文字"
+      "alt": "替代文字",
+      "aria-label": "无障碍标签",
+      "href": "链接地址",
+      "src": "资源地址",
+      "className": "类名"
+    },
+    "provenance": {
+      "authored": "源码直接定义",
+      "token": "已关联设计令牌",
+      "tokenNamed": "令牌：{{name}}",
+      "computed": "计算样式（修改后将写入内联样式）",
+      "locked": "由代码动态控制"
+    },
+    "options": {
+      "display": {
+        "block": "块级",
+        "flex": "弹性",
+        "grid": "网格",
+        "inline": "行内",
+        "inlineBlock": "行内块",
+        "hidden": "隐藏"
+      },
+      "flexDirection": {
+        "row": "横向",
+        "column": "纵向",
+        "rowReverse": "反向横向",
+        "columnReverse": "反向纵向"
+      },
+      "justifyContent": {
+        "flexStart": "起点",
+        "center": "居中",
+        "flexEnd": "终点",
+        "spaceBetween": "两端对齐",
+        "spaceAround": "环绕分布",
+        "spaceEvenly": "均匀分布"
+      },
+      "alignItems": {
+        "stretch": "拉伸",
+        "flexStart": "起点",
+        "center": "居中",
+        "flexEnd": "终点",
+        "baseline": "基线"
+      },
+      "flexWrap": {
+        "nowrap": "不换行",
+        "wrap": "自动换行"
+      },
+      "textAlign": {
+        "left": "左对齐",
+        "center": "居中",
+        "right": "右对齐",
+        "justify": "两端对齐"
+      },
+      "textTransform": {
+        "none": "默认",
+        "uppercase": "全大写",
+        "lowercase": "全小写",
+        "capitalize": "首字母大写"
+      },
+      "fontWeight": {
+        "light": "细体 (300)",
+        "regular": "常规 (400)",
+        "medium": "中等 (500)",
+        "semibold": "半粗 (600)",
+        "bold": "粗体 (700)",
+        "extrabold": "特粗 (800)"
+      },
+      "boxShadow": {
+        "none": "无",
+        "subtle": "微弱",
+        "card": "卡片",
+        "elevated": "浮层"
+      },
+      "objectFit": {
+        "cover": "裁切填充",
+        "contain": "完整适应",
+        "fill": "拉伸铺满",
+        "none": "原始大小",
+        "scaleDown": "缩小适应"
+      },
+      "overflow": {
+        "visible": "可见",
+        "hidden": "裁剪隐藏",
+        "auto": "自动滚动",
+        "scroll": "始终滚动"
+      },
+      "fontFamily": {
+        "system": "系统默认",
+        "sans": "无衬线 (Inter)",
+        "serif": "衬线 (Georgia)",
+        "mono": "等宽字体",
+        "display": "展示体 (Fraunces)"
+      }
     },
     "box": {
       "all": "四边",
@@ -369,13 +492,45 @@
       "parent": "上一层：{{name}}",
       "selectParent": "选择上一层元素",
       "ancestors": "上层元素",
+      "children": "子元素",
+      "selectChild": "选择子元素：{{name}}",
       "shared": "来自共享定义，修改会同步到所有引用处。",
+      "sharedBadge": "共享 · {{count}}",
+      "itemBadge": "第 {{index}} 项",
       "locked_one": "{{count}} 项由代码控制",
       "locked_other": "{{count}} 项由代码控制",
       "noDirectEdits": "这个元素没有可以直接修改的属性。",
       "askAi": "交给 AI 修改",
+      "undo": "撤销",
+      "redo": "重做",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "moveLeft": "左移",
+      "moveRight": "右移",
+      "duplicate": "复制",
+      "delete": "删除",
+      "hide": "隐藏元素",
+      "show": "显示元素",
+      "resetStyle": "清除属性",
+      "restoreStyle": "保留属性",
+      "bindToken": "绑定为微调令牌",
+      "reloadNote": "应用后会刷新预览",
+      "inlineTextHint": "双击画布中的文字可直接原地编辑。",
+      "boxLink": "同步四边",
+      "boxUnlink": "分别编辑各边",
+      "boxPadding": "内边距",
+      "boxMargin": "外边距",
+      "toolbarLabel": "选中元素快捷操作",
+      "inlineEditorLabel": "原地编辑元素文字",
+      "dimensions": "{{width}} × {{height}}",
+      "emptyValue": "默认",
+      "customValue": "自定义",
       "pending_one": "{{count}} 处修改 · 预览中实时显示",
       "pending_other": "{{count}} 处修改 · 预览中实时显示",
+      "pendingText_one": "{{count}} 处文案修改 · 预览实时显示",
+      "pendingText_other": "{{count}} 处文案修改 · 预览实时显示",
+      "pendingStyle_one": "{{count}} 处样式修改 · 预览实时显示",
+      "pendingStyle_other": "{{count}} 处样式修改 · 预览实时显示",
       "noPending": "修改数值后点击“应用”写入源码。",
       "applying": "正在写入源码…",
       "discard": "撤销",
@@ -388,7 +543,9 @@
       "designColors": "DESIGN.md 色板",
       "usedColors": "本页已用颜色",
       "usedCount_one": "{{count}} 处",
-      "usedCount_other": "{{count}} 处"
+      "usedCount_other": "{{count}} 处",
+      "syncDesignMd": "保存到 DESIGN.md",
+      "syncingDesignMd": "保存中…"
     },
     "kinds": {
       "heading": "标题",

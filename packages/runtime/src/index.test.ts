@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import BABEL_STANDALONE from '../vendor/babel.standalone.js?raw';
 import {
   buildInteractivePreviewDocument,
   buildPreviewDocument,
@@ -8,7 +9,9 @@ import {
   extractAndUpgradeArtifact,
   findArtifactSourceReference,
   INTERACTIVE_PREVIEW_SANDBOX,
+  prepareInteractivePreviewHotSwap,
   resolveArtifactSourceReferencePath,
+  SOURCE_EDIT_ATTRIBUTE,
 } from './index';
 
 function compiledArtifactSource(document: string): string {
@@ -427,5 +430,103 @@ describe('artifact source references', () => {
     expect(resolveArtifactSourceReferencePath('screens/index.html', 'App.tsx')).toBe(
       'screens/App.tsx',
     );
+  });
+});
+
+describe('hot-swap preparation and runtime helper', () => {
+  const babel = new Function('exports', 'module', `${BABEL_STANDALONE}\nreturn exports;`)(
+    {},
+    {},
+  ) as {
+    transform(source: string, options: object): { code: string };
+  };
+
+  it('computes instrumented hot-swap payloads and rejects non-JSX/TSX documents', () => {
+    const source = 'function App(){return <button>Save</button>}';
+    const start = source.indexOf('<button');
+    const end = source.indexOf('</button>') + 9;
+    const insertionOffset = source.indexOf('>Save');
+    const hash = 'a'.repeat(64);
+    const prepared = prepareInteractivePreviewHotSwap(source, {
+      source,
+      sourceHash: hash,
+      previewRevision: 'rev-swap-1',
+      targets: [{ id: `${start}:${end}`, tagName: 'button', start, end, insertionOffset }],
+    });
+    expect(prepared.instrumentedSource).toContain(
+      `${SOURCE_EDIT_ATTRIBUTE}="rev-swap-1:${start}:${end}"`,
+    );
+    expect(prepared.context.targets[`${start}:${end}`]).toBe('button');
+    expect(() =>
+      prepareInteractivePreviewHotSwap('<!doctype html><html><body></body></html>', {
+        source: '<!doctype html><html><body></body></html>',
+        sourceHash: hash,
+        previewRevision: 'rev-swap-1',
+        targets: [],
+      }),
+    ).toThrow('original JSX or TSX');
+  });
+
+  it('executes window.__codesign_hot_swap__ for bare App and TSX with flushSync', () => {
+    const initial = 'function App(){return <button>One</button>}';
+    const doc = buildInteractivePreviewDocument(initial, { path: 'App.jsx' });
+    const markerIdx = doc.indexOf('window.__codesign_hot_swap__');
+    expect(markerIdx).toBeGreaterThan(-1);
+    const openTag = '<script>';
+    const scriptStart = doc.lastIndexOf(openTag, markerIdx);
+    const scriptEnd = doc.indexOf('</script>', markerIdx);
+    expect(scriptStart).toBeGreaterThan(-1);
+    expect(scriptEnd).toBeGreaterThan(scriptStart);
+    const hotSwapScript = doc.slice(scriptStart + openTag.length, scriptEnd);
+
+    const renders: unknown[] = [];
+    const flushSync = vi.fn((fn: () => void) => fn());
+    const resetForSwap = vi.fn();
+    const applyInitial = vi.fn();
+    const runModule = vi.fn((fn: () => void) => fn());
+    const fakeWindow: Record<string, unknown> = {
+      Babel: babel,
+      React: {
+        createElement: (type: unknown, props: unknown, ...children: unknown[]) =>
+          typeof type === 'function' ? type(props) : { type, props, children },
+      },
+      ReactDOM: {
+        createRoot: () => ({ render: (el: unknown) => renders.push(el) }),
+        flushSync,
+      },
+      __codesign_tweaks__: {
+        tokens: { accent: '#0ea5e9' },
+        resetForSwap,
+        applyInitial,
+        runModule,
+      },
+    };
+    const fakeDocument = { getElementById: () => ({ id: 'root' }) };
+    vi.stubGlobal('window', fakeWindow);
+    vi.stubGlobal('document', fakeDocument);
+    try {
+      new Function('window', 'document', hotSwapScript)(fakeWindow, fakeDocument);
+
+      const swap = fakeWindow['__codesign_hot_swap__'] as (src: string, kind: string) => boolean;
+      const swappedJsx =
+        'const TWEAKS = /*EDITMODE-BEGIN*/{"accent":"#123456"}/*EDITMODE-END*/;\nfunction App(){return <button data-codesign-source-id="r2:1:2">{TWEAKS.accent}</button>}';
+      expect(swap(swappedJsx, 'jsx')).toBe(true);
+      expect(flushSync).toHaveBeenCalledOnce();
+      expect(resetForSwap).toHaveBeenCalledOnce();
+      expect(applyInitial).toHaveBeenCalledWith(swappedJsx);
+      expect(renders.at(-1)).toMatchObject({
+        type: 'button',
+        props: { 'data-codesign-source-id': 'r2:1:2' },
+        children: ['#0ea5e9'],
+      });
+
+      const swappedTsx =
+        'const label: string = "Typed";\nfunction App(): JSX.Element { return <span>{label}</span>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App />);';
+      expect(swap(swappedTsx, 'tsx')).toBe(true);
+      expect(renders.at(-1)).toMatchObject({ type: 'span', children: ['Typed'] });
+      expect(swap('<div/>', 'html')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

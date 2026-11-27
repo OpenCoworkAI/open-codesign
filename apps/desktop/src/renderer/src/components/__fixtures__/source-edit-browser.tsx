@@ -26,6 +26,8 @@ Object.defineProperty(window, 'codesign', {
       inspect: (...args) => rpc('inspect', args),
       apply: (...args) => rpc('apply', args),
       applyBatch: (...args) => rpc('applyBatch', args),
+      undo: (...args) => rpc('undo', args),
+      redo: (...args) => rpc('redo', args),
     } satisfies CodesignApi['sourceEdits'],
   },
 });
