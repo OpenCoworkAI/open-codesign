@@ -470,11 +470,14 @@ describe('hot-swap preparation and runtime helper', () => {
   it('executes window.__codesign_hot_swap__ for bare App and TSX with flushSync', () => {
     const initial = 'function App(){return <button>One</button>}';
     const doc = buildInteractivePreviewDocument(initial, { path: 'App.jsx' });
-    const match =
-      /<script>\s*\(function\(\) \{\s*'use strict';\s*window\.__codesign_hot_swap__[\s\S]*?\}\)\(\);\s*<\/script>/.exec(
-        doc,
-      );
-    expect(match).not.toBeNull();
+    const markerIdx = doc.indexOf('window.__codesign_hot_swap__');
+    expect(markerIdx).toBeGreaterThan(-1);
+    const openTag = '<script>';
+    const scriptStart = doc.lastIndexOf(openTag, markerIdx);
+    const scriptEnd = doc.indexOf('</script>', markerIdx);
+    expect(scriptStart).toBeGreaterThan(-1);
+    expect(scriptEnd).toBeGreaterThan(scriptStart);
+    const hotSwapScript = doc.slice(scriptStart + openTag.length, scriptEnd);
 
     const renders: unknown[] = [];
     const flushSync = vi.fn((fn: () => void) => fn());
@@ -502,10 +505,7 @@ describe('hot-swap preparation and runtime helper', () => {
     vi.stubGlobal('window', fakeWindow);
     vi.stubGlobal('document', fakeDocument);
     try {
-      new Function('window', 'document', match?.[0].replace(/<\/?script>/g, '') ?? '')(
-        fakeWindow,
-        fakeDocument,
-      );
+      new Function('window', 'document', hotSwapScript)(fakeWindow, fakeDocument);
 
       const swap = fakeWindow['__codesign_hot_swap__'] as (src: string, kind: string) => boolean;
       const swappedJsx =
