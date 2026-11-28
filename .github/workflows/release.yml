@@ -446,6 +446,7 @@ jobs:
   # release, rewrites version strings + checksums + URLs across all four
   # channels, and opens a checked PR so the packaging/ tree
   # stays in sync without a manual step.
+  # Skipped until RELEASE_BOT_TOKEN is set (see packaging/README.md).
   # ------------------------------------------------------------------
   bump-manifests:
     name: Sync packaging manifests to release
@@ -456,16 +457,20 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Require manifest PR token
+      - name: Guard on secret
+        id: guard
         env:
           RELEASE_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
         run: |
           if [ -z "$RELEASE_BOT_TOKEN" ]; then
-            echo "::error::Set RELEASE_BOT_TOKEN with Contents and Pull requests write permissions. GITHUB_TOKEN cannot trigger the required PR checks. See packaging/README.md."
-            exit 1
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_BOT_TOKEN not set — skipping packaging manifest sync PR. See packaging/README.md."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.guard.outputs.skip == 'false'
         with:
           # Generate the PR from main; never push directly to the protected branch.
           ref: main
@@ -473,6 +478,7 @@ jobs:
           token: ${{ secrets.RELEASE_BOT_TOKEN }}
 
       - name: Derive version from tag
+        if: steps.guard.outputs.skip == 'false'
         id: ver
         run: |
           release_ref="${{ github.event_name == 'push' && github.ref_name || inputs.tag }}"
@@ -481,9 +487,11 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Run update-shas.sh
+        if: steps.guard.outputs.skip == 'false'
         run: ./packaging/update-shas.sh "${{ steps.ver.outputs.version }}"
 
       - name: Open manifest sync PR
+        if: steps.guard.outputs.skip == 'false'
         run: bash .github/scripts/sync-release-manifests.sh
         env:
           GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
