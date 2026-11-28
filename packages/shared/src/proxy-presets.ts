@@ -53,6 +53,13 @@ export const PROXY_PRESETS = [
     notes: 'Multi-model relay, EU-hosted',
   },
   {
+    id: 'martllm',
+    label: 'MartLLM',
+    provider: 'openai',
+    baseUrl: 'https://api.martllm.com/v1',
+    notes: 'Multi-model relay, prepaid',
+  },
+  {
     id: 'siliconflow',
     label: 'SiliconFlow',
     provider: 'openai',
