@@ -39,8 +39,7 @@ PAT restricted to this repository, with **Contents: read/write** and
 automation account. This token creates the branch and PR so normal PR checks run;
 the built-in `GITHUB_TOKEN` is deliberately not a fallback, because its events do
 not start those checks. Do not grant branch-protection bypass or weaken required CI.
-Repository auto-merge must be enabled. Missing credentials, failed PR creation,
-and failed auto-merge setup fail the sync job visibly, after release publication.
+Repository auto-merge must be enabled. When `RELEASE_BOT_TOKEN` is not set, the sync job emits a notice and skips without failing the release; when configured, failed PR creation and failed auto-merge setup still fail the sync job visibly after release publication.
 This does not change the separate Homebrew tap credential (`HOMEBREW_TAP_TOKEN`).
 
 Existing manifest PRs whose commits contain `[skip ci]` need a new commit without
