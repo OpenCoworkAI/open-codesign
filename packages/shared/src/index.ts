@@ -45,6 +45,7 @@ export const ProviderId = z.enum([
   'openai',
   'atlascloud',
   'llmtr',
+  'worldrouter',
   'google',
   'openrouter',
   'groq',

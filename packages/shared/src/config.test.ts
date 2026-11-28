@@ -177,6 +177,29 @@ describe('config v3 schema', () => {
     expect(PROVIDER_SHORTLIST.llmtr.primary).toContain('llmtr/qwen3-8-27b');
   });
 
+  it('includes WorldRouter as an OpenAI-compatible builtin provider', () => {
+    expect(SUPPORTED_ONBOARDING_PROVIDERS).toContain('worldrouter');
+    expect(BUILTIN_PROVIDERS.worldrouter).toMatchObject({
+      id: 'worldrouter',
+      name: 'WorldRouter',
+      wire: 'openai-chat',
+      baseUrl: 'https://inference-api.worldrouter.ai/v1',
+      envKey: 'WORLDROUTER_API_KEY',
+      defaultModel: 'claude-sonnet-5-5',
+      capabilities: {
+        supportsKeyless: false,
+        supportsModelsEndpoint: true,
+        modelDiscoveryMode: 'models',
+      },
+    });
+    expect(PROVIDER_SHORTLIST.worldrouter).toMatchObject({
+      provider: 'worldrouter',
+      label: 'WorldRouter',
+      defaultPrimary: 'claude-sonnet-5-5',
+    });
+    expect(PROVIDER_SHORTLIST.worldrouter.primary).toContain('gemini-4-neon');
+  });
+
   it('rejects unknown wire values', () => {
     const bad = {
       version: 3,

@@ -32,6 +32,11 @@ describe('detectProviderFromKey', () => {
   it('recognizes LLMTR API keys', () => {
     expect(detectProviderFromKey(' llmtr-test ')).toBe('llmtr');
   });
+
+  it('recognizes WorldRouter API keys before the generic sk- prefix', () => {
+    expect(detectProviderFromKey(' sk-worldrouter-test ')).toBe('worldrouter');
+    expect(detectProviderFromKey('sk-test')).toBe('openai');
+  });
 });
 
 describe('complete', () => {
